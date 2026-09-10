@@ -11,14 +11,20 @@ const SAVE_VERSION: int = 1
 @onready var camera_controller: Node = $CameraController
 @onready var debug_overlay: CanvasLayer = $DebugOverlay
 @onready var seed_input: Node = $SeedInput
+@onready var item_database: Node = $ItemDatabase
+@onready var inventory_panel: Control = $HUD/InventoryPanel
+@onready var crafting_panel: Control = $HUD/CraftingPanel
 
 var _world_seed: int = 0
 var _is_editing_seed: bool = false
 var _resource_nodes: Array = []
+var _inventory: Dictionary = {}
+var _show_ui: bool = false
 
 func _ready() -> void:
 	# Initialize game systems
 	_world_seed = _generate_seed()
+	_item_database.initialize()
 	_initialize_game()
 
 	# Connect event bus signals
@@ -34,6 +40,9 @@ func _ready() -> void:
 
 	# Generate initial world
 	_generate_world(_world_seed)
+	
+	# Set up inventory UI
+	_refresh_ui()
 
 func _generate_seed() -> int:
 	return randi() % 999999
@@ -49,7 +58,7 @@ func _generate_world(seed: int) -> void:
 	_generate_initial_chunks(seed)
 
 	# Spawn resources
-	resource_spawner.initialize(seed)
+	_resource_spawner.initialize(seed)
 	_generate_initial_resources(seed)
 
 ## Generate initial chunks around the player.
@@ -66,7 +75,7 @@ func _generate_initial_resources(seed: int) -> void:
 	for x in range(-3, 4):
 		for y in range(-3, 4):
 			var chunk_coords: String = "%d,%d" % [x, y]
-			var resources: Array[Dictionary] = resource_spawner.generate_chunk_resources(chunk_coords, seed)
+			var resources: Array[Dictionary] = _resource_spawner.generate_chunk_resources(chunk_coords, seed)
 			for res_data in resources:
 				var coords: String = res_data["coords"]
 				var parts: PackedStringArray = coords.split(",")
@@ -108,7 +117,14 @@ func _process(delta: float) -> void:
 
 	# Handle seed input
 	_handle_seed_input()
+	
+	# Handle UI toggle
+	if Input.is_action_just_pressed("toggle_inventory"):
+		_show_ui = not _show_ui
+		inventory_panel.visible = _show_ui
+		crafting_panel.visible = _show_ui
 
+## Handle seed input.
 func _handle_seed_input() -> void:
 	if Input.is_key_pressed(KEY_T):
 		if not _is_editing_seed:
@@ -122,9 +138,10 @@ func _handle_seed_input() -> void:
 			seed_input.cancel_editing()
 			_is_editing_seed = false
 
+## Update debug overlay.
 func _update_debug_overlay() -> void:
-	var tile_pos: String = "%d,%d" % [int(player.global_position.x), int(player.global_position.y)]
-	var chunk_pos: Vector2i = chunk_system.world_to_chunk_coords(Vector2i(int(tile_pos.split(",")[0]), int(tile_pos.split(",")[1])))
+	var tile_pos: Vector2i = Vector2i(player.global_position)
+	var chunk_pos: Vector2i = chunk_system.world_to_chunk_coords(tile_pos)
 	var noise_vals: Dictionary = world_generator.get_noise_values(player.global_position.x, player.global_position.y)
 	var biome: String = "unknown"
 	var chunk_data: Dictionary = chunk_system.get_chunk(chunk_pos)
@@ -141,6 +158,30 @@ func _update_debug_overlay() -> void:
 		Engine.get_frames_per_second()
 	)
 
+## Refresh UI displays.
+func _refresh_ui() -> void:
+	# Refresh inventory panel
+	if inventory_panel:
+		inventory_panel.refresh(_inventory)
+	
+	# Refresh crafting panel with recipes
+	if crafting_panel:
+		var recipes: Array[Dictionary] = []
+		var item_db: Node = $ItemDatabase
+		if item_db:
+			var all_recipes: Dictionary = item_db.call("recipes")
+			for recipe_id in all_recipes:
+				var recipe: Dictionary = all_recipes[recipe_id]
+				recipes.append({
+					"recipe_id": recipe_id,
+					"result_item_id": recipe.result_item_id,
+					"result_quantity": recipe.result_quantity,
+					"crafting_station": recipe.crafting_station,
+					"required_items": recipe.required_items
+				})
+		crafting_panel.refresh(recipes, _inventory)
+
+## Toggle debug overlay.
 func _on_toggle_debug() -> void:
 	debug_overlay.toggle()
 
@@ -148,7 +189,7 @@ func _on_world_seed_set(seed: int) -> void:
 	_world_seed = seed
 	_generate_world(seed)
 	terrain_renderer.clear_all()
-	resource_spawner.initialize(seed)
+	_resource_spawner.initialize(seed)
 	_generate_initial_chunks(seed)
 	_generate_initial_resources(seed)
 
@@ -156,7 +197,7 @@ func _on_seed_changed(seed: int) -> void:
 	_world_seed = seed
 	_generate_world(seed)
 	terrain_renderer.clear_all()
-	resource_spawner.initialize(seed)
+	_resource_spawner.initialize(seed)
 	_generate_initial_chunks(seed)
 	_generate_initial_resources(seed)
 

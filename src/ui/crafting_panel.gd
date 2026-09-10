@@ -1,102 +1,124 @@
-## UI panel for crafting items from recipes.
+## Crafting panel showing available recipes.
 class_name CraftingPanel
 extends Control
 
-@onready var recipe_list: VBoxContainer = $Panel/VBoxContainer/RecipeList
-@onready var selected_recipe_label: Label = $Panel/VBoxContainer/SelectedRecipe
-@onready var ingredients_label: Label = $Panel/VBoxContainer/Ingredients
-@onready var craft_button: Button = $Panel/VBoxContainer/CraftButton
-@onready var close_button: Button = $Panel/VBoxContainer/CloseButton
+const MAX_RECIPES: int = 20
 
-var _crafting: "CraftingComponent" = null
-var _inventory: "InventoryComponent" = null
-var _selected_recipe: String = ""
+@onready var recipe_list: VBoxContainer = $MarginContainer/RecipeList
+@onready var recipe_template: Control = $MarginContainer/RecipeList/RecipeItem
+@onready var result_label: Label = $MarginContainer/ResultPanel/ResultLabel
+@onready var station_label: Label = $MarginContainer/StationLabel
 
-signal closed
+var recipes: Array[Dictionary] = []
+var inventory: Dictionary = {}
+var selected_recipe: int = -1
+var current_station: String = ""
+
+# Signals
+signal recipe_selected(recipe_index: int)
+signal recipe_crafted(result_item_id: String, quantity: int)
+signal craft_failed(reason: String)
 
 func _ready() -> void:
-	visible = false
-	$Panel.self_modulate.a = 0.9
-	craft_button.disabled = true
-	close_button.pressed.connect(_on_close_pressed)
+	_setup_ui()
 
-## Set the crafting component and inventory.
-func set_crafting(crafting: "CraftingComponent", inventory: "InventoryComponent") -> void:
-	_crafting = crafting
-	_inventory = inventory
-	_crafting.recipe_crafted.connect(_on_recipe_crafted)
-	_crafting.recipe_failed.connect(_on_recipe_failed)
-	_refresh_recipes()
+## Setup the UI.
+func _setup_ui() -> void:
+	recipe_template.visible = false
 
-## Show the panel.
-func show_panel() -> void:
-	visible = true
-	_refresh_recipes()
+## Refresh the crafting panel.
+func refresh(recipe_data: Array[Dictionary], inv: Dictionary, station: String = "") -> void:
+	recipes = recipe_data
+	inventory = inv
+	current_station = station
+	_refresh()
 
-## Hide the panel.
-func hide_panel() -> void:
-	visible = false
-	closed.emit()
-
-## Refresh the recipe list.
-func _refresh_recipes() -> void:
-	if not _crafting:
-		return
-
+## Refresh the display.
+func _refresh() -> void:
 	# Clear existing recipes
 	for child in recipe_list.get_children():
-		if child != selected_recipe_label and child != ingredients_label and child != craft_button and child != close_button:
+		if child != recipe_template:
 			child.queue_free()
+	
+	# Add recipe items
+	for i in range(min(recipes.size(), MAX_RECIPES)):
+		var recipe: Dictionary = recipes[i]
+		var can_craft: bool = _can_craft(recipe)
+		var recipe_item: Control = recipe_template.duplicate()
+		recipe_item.visible = true
+		recipe_item.name = "Recipe%d" % i
+		recipe_item.index = i
+		recipe_item.set_data(recipe, can_craft)
+		recipe_list.add_child(recipe_item)
+	
+	# Update station label
+	if station_label:
+		if current_station == "":
+			station_label.text = "Crafting: Anywhere"
+		else:
+			station_label.text = "Crafting: " + current_station.capitalize()
 
-	# Add recipes
-	var recipes: Dictionary = _crafting.get_recipes()
-	for recipe_id in recipes:
-		var recipe: RecipeDefinition = recipes[recipe_id]
-		var btn := Button.new()
-		btn.text = recipe.display_name
-		btn.custom_minimum_size = Vector2(200, 30)
-		btn.pressed.connect(_on_recipe_selected.bind(recipe_id))
-		recipe_list.add_child(btn)
+## Check if recipe can be crafted.
+func _can_craft(recipe: Dictionary) -> bool:
+	var required: Dictionary = recipe.get("required_items", {})
+	for item_id in required:
+		var needed: int = required[item_id]
+		var available: int = inventory.get(item_id, 0)
+		if available < needed:
+			return false
+	return true
 
 ## Select a recipe.
-func _on_recipe_selected(recipe_id: String) -> void:
-	_selected_recipe = recipe_id
-	var recipe: RecipeDefinition = _crafting.get_recipe(recipe_id)
-	if recipe:
-		selected_recipe_label.text = recipe.display_name
-		# Show ingredients
-		var ing_text: String = "Ingredients:\n"
-		for ing in recipe.ingredients:
-			var has: int = _inventory.get_item_quantity(ing["item_id"]) if _inventory else 0
-			var color: String = "[color=#90EE90]" if has >= ing["quantity"] else "[color=#FF6B6B]"
-			ing_text += "%s%s%s: %d/%d\n" % [color, ing["item_id"], "[/color]", has, ing["quantity"]]
-		ingredients_label.text = ing_text
-
-		# Enable/disable craft button
-		craft_button.disabled = not _crafting.can_craft(recipe_id, _inventory) if _inventory else true
+func select_recipe(recipe_index: int) -> void:
+	selected_recipe = recipe_index
+	if recipe_index < 0 or recipe_index >= recipes.size():
+		result_label.text = "No recipe selected"
+		return
+	
+	var recipe: Dictionary = recipes[recipe_index]
+	var can_craft: bool = _can_craft(recipe)
+	var result_item_id: String = recipe.get("result_item_id", "")
+	var result_qty: int = recipe.get("result_quantity", 1)
+	
+	if can_craft:
+		result_label.text = "✓ Can craft %dx %s" % [result_qty, result_item_id]
+		result_label.modulate = Color(0.3, 0.8, 0.3)
+	else:
+		result_label.text = "✗ Missing materials"
+		result_label.modulate = Color(0.8, 0.3, 0.3)
+	
+	recipe_selected.emit(recipe_index)
 
 ## Craft the selected recipe.
-func _on_craft_pressed() -> void:
-	if _selected_recipe and _inventory:
-		_crafting.craft_recipe(_selected_recipe, _inventory)
+func craft_recipe() -> bool:
+	if selected_recipe < 0 or selected_recipe >= recipes.size():
+		craft_failed.emit("No recipe selected")
+		return false
+	
+	var recipe: Dictionary = recipes[selected_recipe]
+	if not _can_craft(recipe):
+		craft_failed.emit("Missing materials")
+		return false
+	
+	# Remove materials
+	var required: Dictionary = recipe.get("required_items", {})
+	for item_id in required:
+		var needed: int = required[item_id]
+		inventory[item_id] = inventory.get(item_id, 0) - needed
+		if inventory[item_id] <= 0:
+			inventory.erase(item_id)
+	
+	# Add result
+	var result_item_id: String = recipe.get("result_item_id", "")
+	var result_qty: int = recipe.get("result_quantity", 1)
+	inventory[result_item_id] = inventory.get(result_item_id, 0) + result_qty
+	
+	result_crafted.emit(result_item_id, result_qty)
+	_refresh()
+	return true
 
-## Handle successful craft.
-func _on_recipe_crafted(recipe_id: String) -> void:
-	selected_recipe_label.text = "Crafted: %s" % recipe_id
-	_refresh_recipes()
-
-## Handle craft failure.
-func _on_recipe_failed(recipe_id: String, reason: String) -> void:
-	selected_recipe_label.text = "Failed: %s" % reason
-	_refresh_recipes()
-
-## Handle close button.
-func _on_close_pressed() -> void:
-	hide_panel()
-
-## Called when game event bus signals to toggle crafting.
-func _on_toggle_crafting() -> void:
-	if visible:
-		hide_panel()
-	else:
-		show_panel()
+## Get recipe at index.
+func get_recipe(index: int) -> Dictionary:
+	if 0 <= index < recipes.size():
+		return recipes[index]
+	return {}

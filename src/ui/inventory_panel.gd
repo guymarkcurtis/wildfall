@@ -1,146 +1,111 @@
-## UI panel for displaying and managing inventory.
+## Inventory panel showing player items.
 class_name InventoryPanel
 extends Control
 
-@onready var slot_container: GridContainer = $SlotContainer
-@onready var item_count_label: Label = $Panel/VBoxContainer/ItemCount
-@onready var item_description_label: Label = $Panel/VBoxContainer/ItemDescription
-@onready var close_button: Button = $Panel/VBoxContainer/CloseButton
+const SLOT_SIZE: int = 48
+const SLOTS_PER_ROW: int = 9
+const MAX_SLOTS: int = 36
 
-var _inventory: "InventoryComponent" = null
-var _selected_slot: int = -1
+@onready var grid_container: GridContainer = $MarginContainer/GridContainer
+@onready var slot_template: Control = $MarginContainer/GridContainer/Slot
 
-# Signal to close this panel
-signal closed
+var inventory: Dictionary = {}  # {slot_index: {item_id: String, quantity: int}}
+var selected_slot: int = -1
+
+# Signals
+signal item_clicked(item_id: String, quantity: int, slot_index: int)
+signal item_removed(item_id: String, quantity: int, slot_index: int)
+signal slot_selected(slot_index: int)
 
 func _ready() -> void:
-	visible = false
-	$Panel.self_modulate.a = 0.9
-	close_button.pressed.connect(_on_close_pressed)
+	_setup_grid()
 
-## Set the inventory to display.
-func set_inventory(inventory: "InventoryComponent") -> void:
-	_inventory = inventory
-	_inventory.inventory_changed.connect(_refresh)
-	_refresh()
-
-## Show the panel.
-func show_panel() -> void:
-	visible = true
-	_refresh()
-
-## Hide the panel.
-func hide_panel() -> void:
-	visible = false
-	closed.emit()
-
-## Refresh the display.
-func _refresh() -> void:
-	if not _inventory:
-		return
-
-	# Clear existing slots
-	for child in slot_container.get_children():
-		child.queue_free()
-
+## Setup the inventory grid.
+func _setup_grid() -> void:
+	# Hide template
+	slot_template.visible = false
+	
 	# Create slots
-	var slots: Dictionary = _inventory.get_slots()
-	var slot_index: int = 0
-	for item_id in slots:
-		var quantity: int = slots[item_id]["quantity"]
-		var slot := _create_slot(item_id, quantity, slot_index)
-		slot_container.add_child(slot)
-		slot_index += 1
+	for i in range(MAX_SLOTS):
+		var slot := slot_template.duplicate()
+		slot.visible = true
+		slot.name = "Slot%d" % i
+		slot.index = i
+		grid_container.add_child(slot)
+	
+	_refresh()
 
-	# Fill empty slots up to max
-	var max_slots: int = 50
-	for i in range(slot_index, max_slots):
-		var empty_slot := _create_empty_slot(i)
-		slot_container.add_child(empty_slot)
+## Refresh the inventory display.
+func refresh(inventory_data: Dictionary) -> void:
+	inventory = inventory_data
+	_refresh()
 
-	# Update labels
-	item_count_label.text = "Items: %d/%d" % [_inventory.slot_count, _inventory._max_slots]
-	item_description_label.text = ""
+## Refresh the inventory display.
+func _refresh() -> void:
+	for i in range(MAX_SLOTS):
+		var slot_node: Control = grid_container.get_child(i)
+		if slot_node.has_method("update"):
+			var item_id: String = inventory.get(i, {}).get("item_id", "")
+			var quantity: int = inventory.get(i, {}).get("quantity", 0)
+			slot_node.update(item_id, quantity)
 
-## Create a slot for an item.
-func _create_slot(item_id: String, quantity: int, index: int) -> Control:
-	var slot := PanelContainer.new()
-	slot.size_flags_horizontal = Control.SIZE_FILL
-	slot.size_flags_vertical = Control.SIZE_FILL
-	slot.min_size = Vector2(40, 40)
+## Set slot as selected.
+func select_slot(slot_index: int) -> void:
+	selected_slot = slot_index
+	for i in range(MAX_SLOTS):
+		var slot_node: Control = grid_container.get_child(i)
+		if slot_node.has_method("set_selected"):
+			slot_node.set_selected(i == slot_index)
+	slot_selected.emit(slot_index)
 
-	var layout := BoxContainer.new()
-	layout.layout_mode = BoxContainer.BOX_HORIZONTAL
-	layout.alignment = BoxContainer.ALIGNMENT_CENTER
-	slot.add_child(layout)
+## Get item in slot.
+func get_slot_item(slot_index: int) -> Dictionary:
+	return inventory.get(slot_index, {"item_id": "", "quantity": 0})
 
-	var icon := TextureRect.new()
-	icon.size_mode = TextureRect.SIZE_FILL
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.custom_theme_exceptions = "Font"
-	# Placeholder: use a colored rect instead of texture
-	var color_rect := ColorRect.new()
-	color_rect.color = _get_item_color(item_id)
-	color_rect.size = Vector2(32, 32)
-	icon.add_child(color_rect)
-	layout.add_child(icon)
+## Add item to inventory.
+func add_item(item_id: String, quantity: int) -> bool:
+	# Try to stack first
+	for i in range(MAX_SLOTS):
+		var slot_data: Dictionary = inventory.get(i, {})
+		if slot_data.get("item_id") == item_id and slot_data.get("quantity", 0) < 64:
+			var current_qty: int = slot_data.get("quantity", 0)
+			var new_qty: int = current_qty + quantity
+			if new_qty > 64:
+				new_qty = 64
+			inventory[i] = {"item_id": item_id, "quantity": new_qty}
+			_refresh()
+			return true
+	
+	# Find empty slot
+	for i in range(MAX_SLOTS):
+		var slot_data: Dictionary = inventory.get(i, {})
+		if slot_data.is_empty():
+			inventory[i] = {"item_id": item_id, "quantity": quantity}
+			_refresh()
+			return true
+	
+	return false
 
-	var count_label := Label.new()
-	count_label.text = str(quantity)
-	count_label.horizontal_alignment = HorizontalAlignment.HORIZONTAL_ALIGNMENT_RIGHT
-	count_label.vertical_alignment = VerticalAlignment.VERTICAL_ALIGNMENT_BOTTOM
-	count_label.add_theme_color_override("font_color", Color.WHITE)
-	count_label.add_theme_font_size_override("font_size", 12)
-	layout.add_child(count_label)
+## Remove item from inventory.
+func remove_item(item_id: String, quantity: int) -> bool:
+	var remaining: int = quantity
+	for i in range(MAX_SLOTS):
+		if remaining <= 0:
+			break
+		var slot_data: Dictionary = inventory.get(i, {})
+		if slot_data.get("item_id") == item_id:
+			var current_qty: int = slot_data.get("quantity", 0)
+			var remove_qty: int = min(current_qty, remaining)
+			var new_qty: int = current_qty - remove_qty
+			if new_qty <= 0:
+				inventory.erase(i)
+			else:
+				inventory[i] = {"item_id": item_id, "quantity": new_qty}
+			remaining -= remove_qty
+	_refresh()
+	return remaining <= 0
 
-	slot.mouse_filter = Control.MOUSE_FILTER_PASS
-	slot.gui_input.connect(func(event: InputEvent): _on_slot_input(event, item_id, index))
-
-	return slot
-
-## Create an empty slot.
-func _create_empty_slot(index: int) -> Control:
-	var slot := PanelContainer.new()
-	slot.size_flags_horizontal = Control.SIZE_FILL
-	slot.size_flags_vertical = Control.SIZE_FILL
-	slot.min_size = Vector2(40, 40)
-	slot.modulate.a = 0.3
-	return slot
-
-## Get a placeholder color for an item ID.
-func _get_item_color(item_id: String) -> Color:
-	match item_id:
-		"wood", "log":
-			return Color(0.6, 0.4, 0.2)
-		"stone", "rock":
-			return Color(0.5, 0.5, 0.5)
-		"iron_ore":
-			return Color(0.7, 0.5, 0.3)
-		"food", "berry":
-			return Color(0.8, 0.3, 0.3)
-		_:
-			return Color(0.4, 0.4, 0.6)
-
-## Handle slot input.
-func _on_slot_input(event: InputEvent, item_id: String, index: int) -> void:
-	if event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			_selected_slot = index
-			# Show item description
-			if _inventory:
-				item_description_label.text = "Selected: %s" % item_id
-		elif event.button_index == MOUSE_BUTTON_RIGHT:
-			# Attempt to drop item
-			if _inventory:
-				_inventory.remove_item(item_id, 1)
-
-## Handle close button.
-func _on_close_pressed() -> void:
-	hide_panel()
-
-## Called when the game event bus signals to toggle inventory.
-func _on_toggle_inventory() -> void:
-	if visible:
-		hide_panel()
-	else:
-		show_panel()
+## Clear inventory.
+func clear() -> void:
+	inventory.clear()
+	_refresh()
