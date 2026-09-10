@@ -40,10 +40,18 @@ func _setup_visuals() -> void:
 	var texture: ImageTexture = _get_resource_texture()
 	if texture:
 		_sprite.texture = texture
-		_sprite.position = Vector2(TILE_SIZE / 2, TILE_SIZE / 2)
+		_sprite.position = Vector2(16, 16)
 	else:
-		# Fallback to colored circle
-		_sprite = _create_fallback_sprite()
+		# Fallback to colored circle using CanvasItem
+		var canvas := CanvasItem.new()
+		add_child(canvas)
+		var color := _get_resource_color()
+		var shape := Polygon2D.new()
+		shape.position = Vector2(16, 16)
+		shape.color = color
+		shape.polygon = _get_circle_polygon(16, 16)
+		canvas.add_child(shape)
+		_sprite = canvas as Sprite2D
 	
 	add_child(_sprite)
 	

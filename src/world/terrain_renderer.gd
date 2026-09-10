@@ -24,7 +24,9 @@ func _ready() -> void:
 
 ## Create the tile set with proper sprites.
 func _create_tile_set() -> void:
-	var generator := TileSetGenerator.new()
+	# Load and use TileSetGenerator
+	var generator_script := load("res://src/world/tile_set_generator.gd")
+	var generator := generator_script.new()
 	add_child(generator)
 	_tile_set = generator.generate_tile_set()
 	tile_set = _tile_set
@@ -52,7 +54,7 @@ func _render_chunk(chunk_coords: Vector2i, data: Dictionary) -> void:
 	for y in range(CHUNK_SIZE):
 		for x in range(CHUNK_SIZE):
 			var world_x: int = world_start.x + x
-			var world_y: world_start.y + y
+			var world_y: int = world_start.y + y
 			var tile_index: int = y * CHUNK_SIZE + x
 			var elev: float = elevation.get(tile_index) if tile_index < elevation.size() else 0.5
 			var moist: float = moisture.get(tile_index) if tile_index < moisture.size() else 0.5
