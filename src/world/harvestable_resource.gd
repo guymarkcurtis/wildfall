@@ -15,7 +15,7 @@ var is_destroyed: bool = false
 var is_highlighted: bool = false
 
 # Visual
-var _sprite: Node = null
+var _sprite: Sprite2D = null
 
 # Signals
 signal health_changed(current: float, max: float)
@@ -42,16 +42,8 @@ func _setup_visuals() -> void:
 		_sprite.texture = texture
 		_sprite.position = Vector2(16, 16)
 	else:
-		# Fallback: just use a colored circle via CanvasItem
-		var canvas: CanvasItem = CanvasItem.new()
-		add_child(canvas)
-		var color: Color = _get_resource_color()
-		var shape: Polygon2D = Polygon2D.new()
-		shape.position = Vector2(16, 16)
-		shape.color = color
-		shape.polygon = _get_circle_polygon(16, 16)
-		canvas.add_child(shape)
-		_sprite = canvas
+		# Fallback: create a simple colored circle texture
+		_sprite = _create_fallback_sprite()
 	
 	add_child(_sprite)
 	
@@ -90,6 +82,20 @@ func _get_resource_texture() -> ImageTexture:
 	generator.queue_free()
 	return texture
 
+## Create a fallback colored sprite.
+func _create_fallback_sprite() -> Sprite2D:
+	var image := Image.new()
+	image.create(32, 32, false, Image.FORMAT_RGBA8)
+	var color: Color = _get_resource_color()
+	for y in range(32):
+		for x in range(32):
+			image.set_pixel(x, y, color)
+	var texture := ImageTexture.create_from_image(image)
+	var sprite := Sprite2D.new()
+	sprite.texture = texture
+	sprite.position = Vector2(16, 16)
+	return sprite
+
 ## Get color for resource type.
 func _get_resource_color() -> Color:
 	match resource_type:
@@ -101,16 +107,6 @@ func _get_resource_color() -> Color:
 		"coal": return Color(0.2, 0.2, 0.2)
 		"gold_ore": return Color(0.9, 0.7, 0.2)
 		_: return Color(0.5, 0.5, 0.5)
-
-## Get circle polygon points.
-func _get_circle_polygon(center_x: int, center_y: int, radius: int = 16) -> PackedVector2Array:
-	var points: PackedVector2Array = PackedVector2Array()
-	for i in range(0, 360, 15):
-		var angle: float = deg_to_rad(i)
-		var x: float = float(center_x) + cos(angle) * float(radius)
-		var y: float = float(center_y) + sin(angle) * float(radius)
-		points.append(Vector2(x, y))
-	return points
 
 ## Set up collision detection.
 func _setup_collision() -> void:
