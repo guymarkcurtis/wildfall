@@ -1,4 +1,4 @@
-## Main game scene controller.
+## Main game scene controller for Wildfall.
 extends Node
 
 const SAVE_VERSION: int = 1
@@ -6,12 +6,14 @@ const SAVE_VERSION: int = 1
 @onready var player: CharacterBody2D = $Player
 @onready var world_generator: Node = $WorldGenerator
 @onready var chunk_system: Node = $ChunkSystem
-@onready var hud: CanvasLayer = $HUD
-@onready var inventory_panel: Control = $InventoryPanel
-@onready var crafting_panel: Control = $CraftingPanel
-@onready var save_system: Node = $SaveSystem
+@onready var terrain_renderer: TileMapLayer = $TerrainRenderer
+@onready var resource_spawner: Node = $ResourceSpawner
+@onready var camera_controller: Node = $CameraController
+@onready var debug_overlay: CanvasLayer = $DebugOverlay
+@onready var seed_input: Node = $SeedInput
 
 var _world_seed: int = 0
+var _is_editing_seed: bool = false
 
 func _ready() -> void:
 	# Initialize game systems
@@ -19,20 +21,15 @@ func _ready() -> void:
 	_initialize_game()
 
 	# Connect event bus signals
-	GameEventBus.toggle_inventory_ui.connect(_on_toggle_inventory)
-	GameEventBus.toggle_crafting_ui.connect(_on_toggle_crafting)
-	GameEventBus.debug_mode_toggled.connect(_on_debug_toggled)
 	GameEventBus.world_seed_set.connect(_on_world_seed_set)
+	GameEventBus.toggle_debug.connect(_on_toggle_debug)
+	SeedInput.seed_changed.connect(_on_seed_changed)
 
-	# Set up HUD
-	hud.set_player(player)
-	hud.set_seed(_world_seed)
+	# Set up camera target
+	camera_controller.set_target(player.global_position)
 
-	# Set up inventory panel
-	inventory_panel.set_inventory(player.inventory)
-
-	# Set up crafting panel
-	crafting_panel.set_crafting($CraftingComponent, player.inventory)
+	# Set up debug overlay
+	debug_overlay.set_enabled(false)
 
 	# Generate initial world
 	_generate_world(_world_seed)
@@ -41,94 +38,107 @@ func _generate_seed() -> int:
 	return randi() % 999999
 
 func _initialize_game() -> void:
-	# Initialize world generator with default biomes
-	_add_default_biomes()
-
-	# Register default recipes
-	_add_default_recipes()
-
-func _add_default_biomes() -> void:
-	var grassland := BiomeDefinition.new()
-	grassland.id = "grassland"
-	grassland.display_name = "Grassland"
-	grassland.elevation_range = Vector2(0.3, 0.7)
-	grassland.moisture_range = Vector2(0.3, 0.7)
-	grassland.temperature_range = Vector2(0.3, 0.7)
-	grassland.ground_color = Color(0.2, 0.6, 0.2)
-	world_generator.register_biome(grassland)
-
-	var desert := BiomeDefinition.new()
-	desert.id = "desert"
-	desert.display_name = "Desert"
-	desert.elevation_range = Vector2(0.2, 0.5)
-	desert.moisture_range = Vector2(0.0, 0.2)
-	desert.temperature_range = Vector2(0.6, 1.0)
-	desert.ground_color = Color(0.8, 0.7, 0.4)
-	world_generator.register_biome(desert)
-
-	var tundra := BiomeDefinition.new()
-	tundra.id = "tundra"
-	tundra.display_name = "Tundra"
-	tundra.elevation_range = Vector2(0.5, 0.9)
-	tundra.moisture_range = Vector2(0.2, 0.5)
-	tundra.temperature_range = Vector2(0.0, 0.3)
-	tundra.ground_color = Color(0.8, 0.8, 0.9)
-	world_generator.register_biome(tundra)
-
-	var forest := BiomeDefinition.new()
-	forest.id = "forest"
-	forest.display_name = "Forest"
-	forest.elevation_range = Vector2(0.3, 0.6)
-	forest.moisture_range = Vector2(0.5, 0.8)
-	forest.temperature_range = Vector2(0.3, 0.6)
-	forest.ground_color = Color(0.15, 0.45, 0.15)
-	world_generator.register_biome(forest)
-
-func _add_default_recipes() -> void:
-	var recipes := $RecipeRegistry as Node
-	if recipes:
-		# Add default recipes through the registry
-		pass
+	# World generator is already set up in scene tree
+	pass
 
 func _generate_world(seed: int) -> void:
 	chunk_system.initialize(seed)
-	world_generator.generate_world(seed)
+	world_generator.initialize(seed)
+
+	# Generate and render chunks around origin
+	_generate_initial_chunks(seed)
+
+	# Spawn resources
+	_resource_spawner.initialize(seed)
+	_generate_initial_resources(seed)
+
+## Generate initial chunks around the player.
+func _generate_initial_chunks(seed: int) -> void:
+	for x in range(-3, 4):
+		for y in range(-3, 4):
+			var chunk_coords: Vector2i = Vector2i(x, y)
+			var chunk_data: Dictionary = world_generator.call("generate_chunk", chunk_coords, seed)
+			terrain_renderer.update_chunk(chunk_coords, chunk_data)
+
+## Generate initial resources around the player.
+func _generate_initial_resources(seed: int) -> void:
+	for x in range(-3, 4):
+		for y in range(-3, 4):
+			var chunk_coords: Vector2i = Vector2i(x, y)
+			_resource_spawner.generate_chunk_resources(chunk_coords, seed)
 
 func _process(delta: float) -> void:
+	# Update camera to follow player
+	camera_controller.set_target(player.global_position)
+
 	# Update chunk system based on player position
 	chunk_system.update_player_position(player.global_position)
 
-func _on_toggle_inventory() -> void:
-	inventory_panel.visible = not inventory_panel.visible
-	if inventory_panel.visible:
-		inventory_panel.show_panel()
-	else:
-		inventory_panel.hide_panel()
+	# Update terrain for newly generated chunks
+	var loaded_chunks: Array[Vector2i] = chunk_system.get_loaded_chunks()
+	for chunk_coords in loaded_chunks:
+		var chunk_data: Dictionary = chunk_system.get_chunk(chunk_coords)
+		if not chunk_data.is_empty():
+			terrain_renderer.update_chunk(chunk_coords, chunk_data)
 
-func _on_toggle_crafting() -> void:
-	crafting_panel.visible = not crafting_panel.visible
-	if crafting_panel.visible:
-		crafting_panel.show_panel()
-	else:
-		crafting_panel.hide_panel()
+	# Update debug overlay
+	_update_debug_overlay()
 
-func _on_debug_toggled(enabled: bool) -> void:
-	hud.toggle_debug(enabled)
+	# Handle seed input
+	_handle_seed_input()
 
-func _on_world_seed_set(seed: int) -> void:
+func _handle_seed_input() -> void:
+	if Input.is_key_pressed(KEY_T):  # T to toggle seed editing
+		if not _is_editing_seed:
+			_is_editing_seed = true
+			seed_input.start_editing()
+	elif _is_editing_seed:
+		if Input.is_key_pressed(KEY_ENTER):
+			seed_input.finish_editing()
+			_is_editing_seed = false
+		elif Input.is_key_pressed(KEY_ESCAPE):
+			seed_input.cancel_editing()
+			_is_editing_seed = false
+
+func _update_debug_overlay() -> void:
+	var tile_pos: Vector2i = Vector2i(player.global_position)
+	var chunk_pos: Vector2i = ChunkSystem.world_to_chunk_coords(tile_pos)
+	var noise_vals: Dictionary = world_generator.get_noise_values(player.global_position.x, player.global_position.y)
+	var biome: String = "unknown"
+	var chunk_data: Dictionary = chunk_system.get_chunk(chunk_pos)
+	if not chunk_data.is_empty():
+		biome = chunk_data.get("biome", "unknown")
+
+	debug_overlay.update_debug(
+		player.global_position,
+		tile_pos,
+		chunk_pos,
+		_world_seed,
+		biome,
+		noise_vals,
+		Engine.get_frames_per_second()
+	)
+
+func _on_toggle_debug() -> void:
+	debug_overlay.toggle()
+
+func _on_seed_changed(seed: int) -> void:
 	_world_seed = seed
-	hud.set_seed(seed)
+	_generate_world(seed)
+	# Re-render terrain and resources
+	terrain_renderer.clear_all()
+	_resource_spawner.initialize(seed)
+	_generate_initial_chunks(seed)
+	_generate_initial_resources(seed)
 
 ## Save game.
 func save_game(path: String = "user://savegame.json") -> void:
-	save_system.save_game(path)
+	var save_system := get_node_or_null("SaveSystem") as Node
+	if save_system:
+		save_system.save_game(path)
 
 ## Load game.
 func load_game(path: String = "user://savegame.json") -> void:
-	save_system.load_game(path)
-
-## Restart game with new seed.
-func restart_game() -> void:
-	_world_seed = _generate_seed()
-	_generate_world(_world_seed)
-	player._spawn_at(Vector2(0, 0))
+	var save_system := get_node_or_null("SaveSystem") as Node
+	if save_system:
+		save_system.load_game(path)

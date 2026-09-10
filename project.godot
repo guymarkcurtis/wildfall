@@ -5,7 +5,7 @@
 
 [application]
 
-config/name="2D Icarus"
+config/name="Wildfall"
 config/version="0.1.0"
 run/main_scene="res://scenes/main.tscn"
 config/features="4.6"
@@ -34,6 +34,10 @@ move_down={
 move_left={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"resource_localized","Left","Press",false,false,false,false,264,false,false,0,0) , Object(InputEventKey,"resource_localized","A","Press",false,false,false,false,65,false,false,0,0) , Object(InputEventKey,"resource_localized","A","Press",false,true,false,false,65,false,false,0,0)]
+}
+sprint={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_localized","Shift","Press",false,false,false,false,340,false,false,0,0) , Object(InputEventKey,"resource_localized","Shift", "Press",false,false,false,false,341,false,false,0,0)]
 }
 move_right={
 "deadzone": 0.5,

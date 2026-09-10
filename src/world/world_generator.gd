@@ -1,68 +1,44 @@
-## Handles deterministic procedural world generation using noise layers.
-## Generates: elevation, moisture, temperature → biome selection → terrain.
+## Handles deterministic procedural world generation using FastNoiseLite.
 class_name WorldGenerator
 extends Node
 
 const CHUNK_SIZE: int = 16
-const ELEVATION_OCTAVES: int = 4
-const MOISTURE_OCTAVES: int = 3
-const TEMPERATURE_OCTAVES: int = 2
-const ELEVATION_LACUNARITY: float = 2.0
-const MOISTURE_LACUNARITY: float = 2.0
-const TEMPERATURE_LACUNARITY: float = 1.5
-const ELEVATION_PERSISTENCE: float = 0.5
-const MOISTURE_PERSISTENCE: float = 0.5
-const TEMPERATURE_PERSISTENCE: float = 0.5
+const GENERATOR_VERSION: int = 1
 
-# Biome definitions (populated from resources)
+# Noise layers
+var noise_layers: NoiseLayers = null
+
+# Biome definitions
 var _biomes: Dictionary = {}
-
-# Registered chunk generators
-var _chunk_generators: Array[Callable] = []
 
 # Signals
 signal chunk_generated(chunk_coords: Vector2i, data: Dictionary)
 signal world_regenerated
 
-## Register a biome definition.
-func register_biome(biome: "BiomeDefinition") -> void:
-	_biomes[biome.id] = biome
+## Initialize the world generator.
+func initialize(seed: int) -> void:
+	noise_layers = NoiseLayers.new()
+	noise_layers.initialize(seed)
+	add_child(noise_layers)
+	_load_default_biomes()
 
-## Get all registered biomes.
+## Get a biome definition by ID.
+func get_biome(biome_id: String) -> BiomeDefinition:
+	return _biomes.get(biome_id)
+
+## Get all biomes.
 func get_biomes() -> Dictionary:
 	return _biomes
 
-## Get a biome by ID.
-func get_biome(biome_id: String) -> "BiomeDefinition":
-	return _biomes.get(biome_id)
-
-## Generate a complete world with the given seed.
-func generate_world(seed: int) -> Dictionary:
-	var world_data: Dictionary = {
-		"seed": seed,
-		"chunks": {},
-		"version": CHUNK_SYSTEM_GENERATOR_VERSION
-	}
-
-	# Generate chunks around origin (placeholder: generate a 5x5 grid)
-	for x in range(-2, 3):
-		for y in range(-2, 3):
-			var chunk_coords: Vector2i = Vector2i(x, y)
-			var chunk_data: Dictionary = _generate_chunk(chunk_coords, seed)
-			world_data["chunks"][str(chunk_coords)] = chunk_data
-			chunk_generated.emit(chunk_coords, chunk_data)
-
-	world_regenerated.emit()
-	return world_data
-
-## Regenerate world with same seed (for updates).
-func regenerate_world(seed: int) -> Dictionary:
-	return generate_world(seed)
+## Register a biome.
+func register_biome(biome: BiomeDefinition) -> void:
+	biomes[biome.id] = biome
 
 ## Generate a single chunk deterministically.
-func _generate_chunk(chunk_coords: Vector2i, world_seed: int) -> Dictionary:
-	var chunk_random: RandomNumberGenerator = RandomNumberGenerator.new()
-	chunk_random.seed = _get_chunk_seed(chunk_coords, world_seed)
+func generate_chunk(chunk_coords: Vector2i, seed: int) -> Dictionary:
+	if not noise_layers:
+		noise_layers = NoiseLayers.new()
+		noise_layers.initialize(seed)
 
 	var size: int = CHUNK_SIZE
 	var elevation: PackedFloat32Array = PackedFloat32Array()
@@ -72,16 +48,16 @@ func _generate_chunk(chunk_coords: Vector2i, world_seed: int) -> Dictionary:
 	# Generate noise layers
 	for y in range(CHUNK_SIZE):
 		for x in range(CHUNK_SIZE):
-			var world_x: int = chunk_coords.x * CHUNK_SIZE + x
-			var world_y: int = chunk_coords.y * CHUNK_SIZE + y
+			var world_x: float = float(chunk_coords.x * CHUNK_SIZE + x)
+			var world_y: float = float(chunk_coords.y * CHUNK_SIZE + y)
 
-			var elev: float = _generate_noise(world_x, world_y, 0, ELEVATION_OCTAVES, ELEVATION_PERSISTENCE, ELEVATION_LACUNARITY, world_seed)
-			var moist: float = _generate_noise(world_x, world_y, 1, MOISTURE_OCTAVES, MOISTURE_PERSISTENCE, MOISTURE_LACUNARITY, world_seed)
-			var temp: float = _generate_noise(world_x, world_y, 2, TEMPERATURE_OCTAVES, TEMPERATURE_PERSISTENCE, TEMPERATURE_LACUNARITY, world_seed)
+			var elev: float = noise_layers.get_elevation(world_x, world_y)
+			var moist: float = noise_layers.get_moisture(world_x, world_y)
+			var temp: float = noise_layers.get_temperature(world_x, world_y)
 
-			elevation.append(clamp(elev, 0.0, 1.0))
-			moisture.append(clamp(moist, 0.0, 1.0))
-			temperature.append(clamp(temp, 0.0, 1.0))
+			elevation.append(clamp((elev + 1.0) / 2.0, 0.0, 1.0))
+			moisture.append(clamp((moist + 1.0) / 2.0, 0.0, 1.0))
+			temperature.append(clamp((temp + 1.0) / 2.0, 0.0, 1.0))
 
 	# Select biome based on noise values
 	var biome_id: String = _select_biome(elevation, moisture, temperature)
@@ -92,12 +68,106 @@ func _generate_chunk(chunk_coords: Vector2i, world_seed: int) -> Dictionary:
 		"moisture": moisture,
 		"temperature": temperature,
 		"biome": biome_id,
-		"terrain": [],
-		"vegetation": [],
-		"resources": [],
-		"entities": [],
-		"seed": world_seed
+		"seed": seed,
+		"version": GENERATOR_VERSION
 	}
+
+## Regenerate the world with a new seed.
+func regenerate_world(seed: int) -> Dictionary:
+	if noise_layers:
+		noise_layers.reinitialize(seed)
+
+	# Clear and regenerate all chunks
+	var world_data: Dictionary = {
+		"seed": seed,
+		"chunks": {},
+		"version": GENERATOR_VERSION
+	}
+
+	# Generate a 5x5 grid around origin (placeholder)
+	for x in range(-2, 3):
+		for y in range(-2, 3):
+			var chunk_coords: Vector2i = Vector2i(x, y)
+			var chunk_data: Dictionary = generate_chunk(chunk_coords, seed)
+			world_data["chunks"][str(chunk_coords)] = chunk_data
+			chunk_generated.emit(chunk_coords, chunk_data)
+
+	world_regenerated.emit()
+	return world_data
+
+## Get the current seed.
+func get_seed() -> int:
+	if noise_layers:
+		return noise_layers.get_seed()
+	return 0
+
+## Get noise values at a world position.
+func get_noise_values(x: float, y: float) -> Dictionary:
+	if noise_layers:
+		return noise_layers.get_noise_values(x, y)
+	return {"elevation": 0.0, "moisture": 0.0, "temperature": 0.0}
+
+## Load default biomes.
+func _load_default_biomes() -> void:
+	# Temperate Forest
+	var forest := BiomeDefinition.new()
+	forest.id = "temperate_forest"
+	forest.display_name = "Temperate Forest"
+	forest.elevation_range = Vector2(0.3, 0.6)
+	forest.moisture_range = Vector2(0.4, 0.7)
+	forest.temperature_range = Vector2(0.3, 0.6)
+	forest.ground_color = Color(0.15, 0.45, 0.15)
+	register_biome(forest)
+
+	# Grassland
+	var grassland := BiomeDefinition.new()
+	grassland.id = "grassland"
+	grassland.display_name = "Grassland"
+	grassland.elevation_range = Vector2(0.3, 0.5)
+	grassland.moisture_range = Vector2(0.3, 0.5)
+	grassland.temperature_range = Vector2(0.3, 0.6)
+	grassland.ground_color = Color(0.3, 0.65, 0.2)
+	register_biome(grassland)
+
+	# Mountain
+	var mountain := BiomeDefinition.new()
+	mountain.id = "mountain"
+	mountain.display_name = "Mountain"
+	mountain.elevation_range = Vector2(0.6, 0.9)
+	mountain.moisture_range = Vector2(0.2, 0.5)
+	mountain.temperature_range = Vector2(0.2, 0.5)
+	mountain.ground_color = Color(0.5, 0.5, 0.5)
+	register_biome(mountain)
+
+	# Desert
+	var desert := BiomeDefinition.new()
+	desert.id = "desert"
+	desert.display_name = "Desert"
+	desert.elevation_range = Vector2(0.2, 0.4)
+	desert.moisture_range = Vector2(0.0, 0.2)
+	desert.temperature_range = Vector2(0.6, 1.0)
+	desert.ground_color = Color(0.8, 0.7, 0.4)
+	register_biome(desert)
+
+	# Arctic
+	var arctic := BiomeDefinition.new()
+	arctic.id = "arctic"
+	arctic.display_name = "Arctic"
+	arctic.elevation_range = Vector2(0.4, 0.8)
+	arctic.moisture_range = Vector2(0.3, 0.6)
+	arctic.temperature_range = Vector2(0.0, 0.2)
+	arctic.ground_color = Color(0.85, 0.9, 0.95)
+	register_biome(arctic)
+
+	# Swamp
+	var swamp := BiomeDefinition.new()
+	swamp.id = "swamp"
+	swamp.display_name = "Swamp"
+	swamp.elevation_range = Vector2(0.2, 0.4)
+	swamp.moisture_range = Vector2(0.7, 1.0)
+	swamp.temperature_range = Vector2(0.4, 0.7)
+	swamp.ground_color = Color(0.3, 0.4, 0.2)
+	register_biome(swamp)
 
 ## Select biome based on elevation, moisture, and temperature.
 func _select_biome(elevation: PackedFloat32Array, moisture: PackedFloat32Array, temperature: PackedFloat32Array) -> String:
@@ -106,63 +176,51 @@ func _select_biome(elevation: PackedFloat32Array, moisture: PackedFloat32Array, 
 	var avg_moisture: float = _array_average(moisture)
 	var avg_temperature: float = _array_average(temperature)
 
-	# Default to grassland
-	var default_biome: String = "grassland"
+	# Find best matching biome
+	var best_biome: String = "grassland"
+	var best_score: float = -1.0
 
-	# Find matching biome
 	for biome_id in _biomes:
 		var biome: BiomeDefinition = _biomes[biome_id]
-		if _biome_matches(biome, avg_elevation, avg_moisture, avg_temperature):
-			return biome_id
+		var score: float = _biome_match_score(biome, avg_elevation, avg_moisture, avg_temperature)
+		if score > best_score:
+			best_score = score
+			best_biome = biome_id
 
-	return default_biome
+	return best_biome
 
-## Check if a biome matches given parameters.
-func _biome_matches(biome: BiomeDefinition, elevation: float, moisture: float, temperature: float) -> bool:
-	return (
-		elevation >= biome.elevation_range.x and elevation <= biome.elevation_range.y and
-		moisture >= biome.moisture_range.x and moisture <= biome.moisture_range.y and
-		temperature >= biome.temperature_range.x and temperature <= biome.temperature_range.y
-	)
+## Calculate how well a biome matches given parameters.
+func _biome_match_score(biome: BiomeDefinition, elevation: float, moisture: float, temperature: float) -> float:
+	var score: float = 0.0
 
-## Generate deterministic Perlin-like noise.
-func _generate_noise(x: int, y: int, layer: int, octaves: int, persistence: float, lacunarity: float, seed: int) -> float:
-	var total: float = 0.0
-	var frequency: float = 1.0
-	var amplitude: float = 1.0
-	var max_value: float = 0.0
+	# Check elevation match
+	if elevation >= biome.elevation_range.x and elevation <= biome.elevation_range.y:
+		score += 3.0
+	else:
+		var dist: float = min(abs(elevation - biome.elevation_range.x), abs(elevation - biome.elevation_range.y))
+		score += max(0.0, 3.0 - dist * 3.0)
 
-	for i in range(octaves):
-		var noise_val: float = _simple_noise(float(x) * frequency, float(y) * frequency, seed + layer * 1000 + i)
-		total += noise_val * amplitude
-		max_value += amplitude
-		amplitude *= persistence
-		frequency *= lacunarity
+	# Check moisture match
+	if moisture >= biome.moisture_range.x and moisture <= biome.moisture_range.y:
+		score += 2.0
+	else:
+		var dist: float = min(abs(moisture - biome.moisture_range.x), abs(moisture - biome.moisture_range.y))
+		score += max(0.0, 2.0 - dist * 3.0)
 
-	return total / max_value if max_value != 0 else 0.0
+	# Check temperature match
+	if temperature >= biome.temperature_range.x and temperature <= biome.temperature_range.y:
+		score += 2.0
+	else:
+		var dist: float = min(abs(temperature - biome.temperature_range.x), abs(temperature - biome.temperature_range.y))
+		score += max(0.0, 2.0 - dist * 3.0)
 
-## Simple deterministic noise function.
-func _simple_noise(x: float, y: float, seed: int) -> float:
-	var n: int = sin(x * 12.9898 + y * 78.233 + float(seed)) * 43758.5453
-	n = n - floor(n)
-	return n
+	return score
 
 ## Calculate average of an array.
 func _array_average(arr: PackedFloat32Array) -> float:
 	if arr.is_empty():
-		return 0.0
+		return 0.5
 	var sum: float = 0.0
 	for v in arr:
 		sum += v
 	return sum / arr.size()
-
-## Get deterministic seed for a chunk.
-func _get_chunk_seed(chunk_coords: Vector2i, world_seed: int) -> int:
-	var hasher := HashingContext.new()
-	hasher.start()
-	hasher.hash_int(world_seed)
-	hasher.hash_int(chunk_coords.x)
-	hasher.hash_int(chunk_coords.y)
-	hasher.hash_int(CHUNK_SYSTEM_GENERATOR_VERSION)
-	var bytes := hasher.finish()
-	return bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24)

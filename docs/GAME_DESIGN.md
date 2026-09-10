@@ -1,56 +1,79 @@
-# Game Design Document
+# Game Design Document - Wildfall
 
 ## Overview
 
-2D Icarus is a 2D survival game inspired by games like Minecraft and Icarus. Players gather resources, craft tools, build structures, and survive in a procedurally generated world.
+Wildfall is an original persistent open-world 2D/2.5D survival crafting action RPG. The player begins with almost nothing and gradually transforms a dangerous wilderness into a network of camps, settlements, workshops, roads, and advanced facilities.
+
+## Core Vision
+
+The entire game takes place in one persistent procedural world. There are no disposable mission maps. Everything the player builds, gathers, and discovers remains in the world forever. The player's world IS the campaign.
 
 ## Core Gameplay Loop
 
-1. **Gather**: Collect resources from the environment (trees, rocks, ores)
-2. **Craft**: Use resources to create tools, weapons, and building materials
-3. **Build**: Construct shelters and structures for protection
-4. **Survive**: Manage health and hunger, fend off predators
-5. **Progress**: Unlock new technologies and explore biomes
+```
+EXPLORE → DISCOVER → GATHER → CRAFT → FIGHT → SURVIVE → BUILD → ADVANCE
+```
+
+Constant tension between:
+- **Safety at home** vs **Rewards in the unknown**
+
+## Primary Game Mode
+
+**Persistent Open World** — The player creates or selects a procedural world that remains persistent across the entire playthrough. All exploration, crafting, building, combat, missions, and progression occur within this same world.
+
+## World Philosophy
+
+The player's world should gradually develop a history:
+- Early: A camp beside a river
+- Later: That camp becomes a cabin
+- Later: The cabin becomes a stone settlement
+- Later: A road connects that settlement to a mining outpost
+- Later: A bridge crosses the river
+- Later: The mining outpost becomes an industrial facility
 
 ## Key Systems
 
 ### World Generation
 - Deterministic chunk-based world (16x16 tile chunks)
-- Noise-based elevation, moisture, temperature layers
-- Biome selection from parameter ranges
-- 4 starting biomes: Grassland, Desert, Tundra, Forest
+- FastNoiseLite for elevation, moisture, temperature
+- 6 biomes: Temperate Forest, Grassland, Mountain, Desert, Arctic, Swamp
+- Resource placement (trees, rocks, ores, berries)
+- Rivers, lakes, and varied terrain
 
 ### Survival
-- Health (100 max) — reduced by damage, starvation
-- Hunger (100 max) — depletes over time, restored by food
-- Starvation deals damage when hunger reaches 0
+- Health, Stamina, Hunger, Thirst, Oxygen, Temperature
+- Slower depletion rates for better gameplay flow
+- Progression reduces early-game pressure
 
-### Inventory
-- Slot-based with stacking (max 64 per stack)
-- Weight limit (100 units default)
-- Categories: tool, food, material, resource, consumable, building, component, seed, weapon, armor
-
-### Crafting
-- Recipe-based system
+### Inventory & Crafting
+- Slot-based inventory with stacking
 - Hand crafting and station crafting
-- Timed crafting for complex items
+- Data-driven recipes
 - Technology unlocks new recipes
 
 ### Building
-- Place buildings on valid terrain
-- Buildings have HP and can be destroyed
-- Some buildings require crafting stations
+- Persistent structures (foundations, walls, roofs, doors)
+- Multiple building tiers (primitive → wood → stone → metal)
+- Buildings remain after missions
 
-### Technology
-- Research tree with prerequisites
-- Unlocks new crafting recipes
-- Costs resources to research
+### Combat
+- Action RPG feel with responsive attacks
+- Melee and ranged weapons
+- Enemy variety with state-based AI
+- Boss encounters in persistent world
 
-### Creatures
-- Passive, neutral, predator, boss types
-- Spawn based on biome
-- Have loot tables
-- Some are hostile
+### Missions
+- Objectives occur in the persistent world
+- Built structures remain after completion
+- Procedural mission generation possible
+
+## Progression Eras
+
+1. **Survival** — Primitive tools, campfire, basic shelter
+2. **Settlement** — Workbench, farming, metalworking
+3. **Industrial** — Machining, electricity, advanced tools
+4. **Electrical** — Generators, powered machinery
+5. **Frontier Tech** — Advanced composites, vehicles
 
 ## Controls
 
@@ -60,26 +83,51 @@
 | S/Down | Move down |
 | A/Left | Move left |
 | D/Right | Move right |
+| Shift | Sprint |
 | E | Interact |
 | I | Toggle inventory |
 | F3 | Toggle debug |
+| T | Change world seed |
 
-## Visual Style
+## Development Phases
 
-- 2D top-down perspective
-- Tile-based terrain rendering
-- Colored placeholders during development
-- Simple, readable sprites
+### Phase 0: Foundation
+- Godot 4.6 project
+- Player movement and camera
+- Basic test scene
+- Documentation
 
-## Progression
+### Phase 1: World Generation
+- Deterministic seed
+- Chunk system
+- FastNoiseLite terrain
+- Biomes and resources
+- Debug overlay
 
-1. Start with bare hands
-2. Gather wood and stone
-3. Craft basic tools (axe, pickaxe)
-4. Build a shelter
-5. Unlock crafting stations
-6. Research technologies
-7. Explore different biomes
-8. Hunt creatures for loot
-9. Build advanced structures
-10. Survive as long as possible
+### Phase 2: Interaction
+- Resource pickup/harvesting
+- Tree chopping, rock mining
+
+### Phase 3: Inventory
+- Item definitions
+- Stack-based inventory
+- Hotbar UI
+
+### Phase 4: Basic Crafting
+- Hand crafting
+- Basic tools and weapons
+
+### Phase 5: Survival
+- Full survival stats
+- Death and respawn
+- HUD polish
+
+### Phase 6-21: ... (see ROADMAP.md)
+
+## Visual Target
+
+- 2D/2.5D isometric perspective
+- High-quality sprites (eventually)
+- Dynamic lighting and weather
+- Particle effects
+- Polished UI

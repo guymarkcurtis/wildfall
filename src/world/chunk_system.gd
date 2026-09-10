@@ -4,7 +4,7 @@ extends Node
 
 const CHUNK_SIZE: int = 16
 const GENERATOR_VERSION: int = 1
-const DEFAULT_VIEWPORT_RADIUS: int = 3  ## chunks to load around player
+const DEFAULT_VIEWPORT_RADIUS: int = 3
 
 # Chunk data storage
 var _chunks: Dictionary = {}  # str(Vector2i) -> Dictionary
@@ -39,9 +39,9 @@ func update_player_position(world_position: Vector2) -> void:
 		_update_chunks()
 		player_chunk_changed.emit(old_chunk, new_chunk)
 
-## Set the viewport radius (how many chunks to load around player).
+## Set the viewport radius.
 func set_viewport_radius(radius: int) -> void:
-	_viewport_radius = max(1, radius)
+	viewport_radius = max(1, radius)
 	_update_chunks()
 
 ## Get the current viewport radius.
@@ -74,7 +74,7 @@ func unload_chunk(chunk_coords: Vector2i) -> void:
 	if _chunks.has(key):
 		_chunks.erase(key)
 		if _chunk_nodes.has(key):
-			_chunk_nodes.erase(key)
+			chunk_nodes.erase(key)
 		chunk_unloaded.emit(chunk_coords)
 		chunks_changed.emit()
 
@@ -100,16 +100,16 @@ func get_chunk(chunk_coords: Vector2i) -> Dictionary:
 func get_seed() -> int:
 	return _seed
 
-## Update chunks around the player based on viewport radius.
+## Update chunks around the player.
 func _update_chunks() -> void:
 	# Generate chunks in viewport
-	for dx in range(-_viewport_radius, _viewport_radius + 1):
-		for dy in range(-_viewport_radius, _viewport_radius + 1):
+	for dx in range(-viewport_radius, viewport_radius + 1):
+		for dy in range(-viewport_radius, viewport_radius + 1):
 			var chunk_coords: Vector2i = _player_position + Vector2i(dx, dy)
 			generate_chunk(chunk_coords)
 
 	# Unload chunks outside viewport
-	var keys := _chunks.keys().duplicate()
+	var keys: PackedStringArray = _chunks.keys()
 	for key in keys:
 		var coords: Vector2i = _str_to_vec2i(key)
 		if abs(coords.x - _player_position.x) > _viewport_radius or abs(coords.y - _player_position.y) > _viewport_radius:
