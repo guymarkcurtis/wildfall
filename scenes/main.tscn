@@ -8,7 +8,9 @@
 [ext_resource type="Script" path="res://src/world/chunk_system.gd" id="6_chunk"]
 [ext_resource type="Script" path="res://src/world/terrain_renderer.gd" id="7_terrain"]
 [ext_resource type="Script" path="res://src/world/resource_spawner.gd" id="8_resource"]
-[ext_resource type="Script" path="res://src/ui/debug_overlay.gd" id="9_debug"]
+[ext_resource type="Script" path="res://src/world/harvestable_resource.gd" id="9_harvest"]
+[ext_resource type="Script" path="res://src/world/harvest_system.gd" id="10_harvestsys"]
+[ext_resource type="Script" path="res://src/ui/debug_overlay.gd" id="11_debug"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -41,7 +43,7 @@ script = ExtResource("4_seed")
 
 [node name="DebugOverlay" type="CanvasLayer" parent="."]
 layer = 10
-script = ExtResource("9_debug")
+script = ExtResource("11_debug")
 
 [node name="DebugPanel" type="PanelContainer" parent="DebugOverlay"]
 layout_mode = 3

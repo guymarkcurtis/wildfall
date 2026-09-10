@@ -1,0 +1,147 @@
+## Interactive resource node that can be harvested.
+## Represents trees, rocks, mineral deposits, etc.
+class_name HarvestableResource
+extends Area2D
+
+const DEFAULT_HITBOX_RADIUS: float = 16.0
+
+# Resource data
+var resource_type: String = ""
+var display_name: String = ""
+var max_health: float = 10.0
+var current_health: float = 10.0
+var yield_items: Array[Dictionary] = []  # [{item_id, min_qty, max_qty, chance}]
+
+# State
+var is_destroyed: bool = false
+var is_highlighted: bool = false
+
+# Signals
+signal health_changed(current: float, max: float)
+signal resource_destroyed(item_id: String, quantity: int)
+signal resource_hurt(amount: float)
+
+## Initialize the resource.
+func setup(resource_type: String, health: float, yields: Array[Dictionary]) -> void:
+	self.resource_type = resource_type
+	self.max_health = health
+	self.current_health = health
+	self.yield_items = yields.duplicate()
+	display_name = _get_display_name(resource_type)
+	_setup_visuals()
+	_setup_collision()
+
+## Get display name for resource type.
+func _get_display_name(resource_type: String) -> String:
+	match resource_type:
+		"tree": return "Tree"
+		"rock": return "Rock"
+		"fibre": return "Fibre Bundle"
+		"berry_bush": return "Berry Bush"
+		"iron_ore": return "Iron Ore Deposit"
+		"coal": return "Coal Deposit"
+		"gold_ore": return "Gold Ore Deposit"
+		_: return resource_type.capitalize()
+
+## Set up visual representation.
+func _setup_visuals() -> void:
+	# Create a simple colored circle as placeholder
+	var visual := CollisionShape2D.new()
+	var shape := CircleShape2D.new()
+	shape.radius = DEFAULT_HITBOX_RADIUS
+	visual.shape = shape
+	add_child(visual)
+	collision_layer = 1
+	collision_mask = 0
+
+	# Create a visible marker
+	var marker := Sprite2D.new()
+	var texture := _get_placeholder_texture()
+	if texture:
+		marker.texture = texture
+	marker.position = Vector2(0, -DEFAULT_HITBOX_RADIUS)
+	add_child(marker)
+
+## Get placeholder texture for resource type.
+func _get_placeholder_texture() -> Texture2D:
+	# Return null for now - would use actual sprites in production
+	return null
+
+## Set up collision detection.
+func _setup_collision() -> void:
+	body_entered.connect(_on_body_entered)
+	body_exited.connect(_on_body_exited)
+
+## Check if a body is the player.
+func _is_player(body: Node) -> bool:
+	return body is CharacterBody2D and body.has_method("get_world_position")
+
+## Handle body entering area.
+func _on_body_entered(body: Node) -> void:
+	if _is_player(body) and not is_destroyed:
+		_highlight()
+
+## Handle body leaving area.
+func _on_body_exited(body: Node) -> void:
+	if _is_player(body):
+		_unhighlight()
+
+## Highlight the resource.
+func _highlight() -> void:
+	is_highlighted = true
+	modulate = Color(1.0, 1.0, 0.8, 1.0)
+
+## Unhighlight the resource.
+func _unhighlight() -> void:
+	is_highlighted = false
+	modulate = Color(1.0, 1.0, 1.0, 1.0)
+
+## Damage the resource. Returns true if destroyed.
+func damage(amount: float, tool: String = "") -> bool:
+	if is_destroyed or amount <= 0:
+		return false
+
+	current_health = max(0.0, current_health - amount)
+	resource_hurt.emit(amount)
+	health_changed.emit(current_health, max_health)
+
+	if current_health <= 0:
+		return destroy()
+	return false
+
+## Destroy the resource and yield items.
+func destroy() -> bool:
+	if is_destroyed:
+		return false
+
+	is_destroyed = true
+	queue_free()
+
+	# Generate yields
+	for yield_entry in yield_items:
+		var item_id: String = yield_entry["item_id"]
+		var min_qty: int = yield_entry.get("min_qty", 1)
+		var max_qty: int = yield_entry.get("max_qty", 1)
+		var chance: float = yield_entry.get("chance", 1.0)
+
+		if randf() < chance:
+			var qty: int = randi() % (max_qty - min_qty + 1) + min_qty
+			resource_destroyed.emit(item_id, qty)
+
+	return true
+
+## Get remaining health ratio.
+func get_health_ratio() -> float:
+	return clamp(current_health / max_health, 0.0, 1.0)
+
+## Get the resource type.
+func get_resource_type() -> String:
+	return resource_type
+
+## Get the yield items.
+func get_yields() -> Array[Dictionary]:
+	return yield_items.duplicate()
+
+## Check if resource is destroyed.
+func is_destroyed_check() -> bool:
+	return is_destroyed

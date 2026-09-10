@@ -52,8 +52,9 @@ func serialize() -> Dictionary:
 func deserialize(data: Dictionary) -> void:
 	_resources = data
 
-## Generate resources for a chunk.
-func generate_chunk_resources(chunk_coords: Vector2i, seed: int) -> void:
+## Generate resources for a chunk and return them as harvestable nodes.
+func generate_chunk_resources(chunk_coords: Vector2i, seed: int) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
 	var random := RandomNumberGenerator.new()
 	random.seed = _get_chunk_seed(chunk_coords, seed)
 
@@ -65,25 +66,75 @@ func generate_chunk_resources(chunk_coords: Vector2i, seed: int) -> void:
 		var coords: Vector2i = Vector2i(x, y)
 		if not _resources.has(_str_to_vec2i(coords)):
 			var resource_type: String = RESOURCE_TYPES[int(random.randf_range(0, RESOURCE_TYPES.size()))]
+			var health: float = _get_resource_health(resource_type)
+			var yields: Array[Dictionary] = _get_resource_yields(resource_type)
 			_resources[_str_to_vec2i(coords)] = {
 				"coords": coords,
 				"type": resource_type,
-				"health": _get_resource_health(resource_type),
-				"max_health": _get_resource_health(resource_type)
+				"health": health,
+				"yields": yields
 			}
 			resource_placed.emit(coords, resource_type)
+			results.append({
+				"coords": coords,
+				"type": resource_type,
+				"health": health,
+				"yields": yields
+			})
+
+	return results
 
 ## Get the health of a resource type.
-func _get_resource_health(resource_type: String) -> int:
+func _get_resource_health(resource_type: String) -> float:
 	match resource_type:
-		"tree": return 5
-		"rock": return 8
-		"fibre": return 3
-		"berry_bush": return 2
-		"iron_ore": return 10
-		"coal": return 6
-		"gold_ore": return 12
-		_: return 5
+		"tree": return 5.0
+		"rock": return 8.0
+		"fibre": return 3.0
+		"berry_bush": return 2.0
+		"iron_ore": return 10.0
+		"coal": return 6.0
+		"gold_ore": return 12.0
+		_: return 5.0
+
+## Get yields for a resource type.
+func _get_resource_yields(resource_type: String) -> Array[Dictionary]:
+	match resource_type:
+		"tree":
+			return [
+				{"item_id": "wood", "min_qty": 2, "max_qty": 5, "chance": 1.0},
+				{"item_id": "fibre", "min_qty": 1, "max_qty": 3, "chance": 0.5}
+			]
+		"rock":
+			return [
+				{"item_id": "stone", "min_qty": 2, "max_qty": 4, "chance": 1.0},
+				{"item_id": "clay", "min_qty": 1, "max_qty": 2, "chance": 0.3}
+			]
+		"fibre":
+			return [
+				{"item_id": "fibre", "min_qty": 3, "max_qty": 6, "chance": 1.0}
+			]
+		"berry_bush":
+			return [
+				{"item_id": "berry", "min_qty": 2, "max_qty": 5, "chance": 1.0}
+			]
+		"iron_ore":
+			return [
+				{"item_id": "iron_ore", "min_qty": 1, "max_qty": 3, "chance": 1.0},
+				{"item_id": "stone", "min_qty": 1, "max_qty": 2, "chance": 0.5}
+			]
+		"coal":
+			return [
+				{"item_id": "coal", "min_qty": 1, "max_qty": 3, "chance": 1.0}
+			]
+		"gold_ore":
+			return [
+				{"item_id": "gold_ore", "min_qty": 1, "max_qty": 2, "chance": 1.0},
+				{"item_id": "stone", "min_qty": 1, "max_qty": 2, "chance": 0.5}
+			]
+		_:
+			return [
+				{"item_id": resource_type, "min_qty": 1, "max_qty": 2, "chance": 1.0}
+			]
 
 ## Get deterministic seed for a chunk.
 func _get_chunk_seed(chunk_coords: Vector2i, world_seed: int) -> int:
@@ -98,8 +149,3 @@ func _get_chunk_seed(chunk_coords: Vector2i, world_seed: int) -> int:
 ## Convert Vector2i to string key.
 func _str_to_vec2i(key: Vector2i) -> String:
 	return "%d,%d" % [key.x, key.y]
-
-## Parse string key back to Vector2i.
-func _vec2i_from_str(key: String) -> Vector2i:
-	var parts: PackedStringArray = key.split(",")
-	return Vector2i(int(parts[0]), int(parts[1]))

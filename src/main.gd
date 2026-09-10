@@ -14,6 +14,7 @@ const SAVE_VERSION: int = 1
 
 var _world_seed: int = 0
 var _is_editing_seed: bool = false
+var _resource_nodes: Array[HarvestableResource] = []
 
 func _ready() -> void:
 	# Initialize game systems
@@ -62,16 +63,25 @@ func _generate_initial_chunks(seed: int) -> void:
 
 ## Generate initial resources around the player.
 func _generate_initial_resources(seed: int) -> void:
+	_resource_nodes.clear()
 	for x in range(-3, 4):
 		for y in range(-3, 4):
 			var chunk_coords: Vector2i = Vector2i(x, y)
-			_resource_spawner.generate_chunk_resources(chunk_coords, seed)
+			var resources: Array[Dictionary] = _resource_spawner.generate_chunk_resources(chunk_coords, seed)
+			for res_data in resources:
+				var coords: Vector2i = res_data["coords"]
+				var type: String = res_data["type"]
+				var health: float = res_data["health"]
+				var yields: Array[Dictionary] = res_data["yields"]
 
-func _process(delta: float) -> void:
-	# Update camera to follow player
-	camera_controller.set_target(player.global_position)
+				var resource := HarvestableResource.new()
+				resource.setup(type, health, yields)
+				resource.position = Vector2(coords)
+				add_child(resource)
+				_resource_nodes.append(resource)
 
-	# Update chunk system based on player position
+## Update player position and manage chunk loading/unloading.
+func _update_chunks() -> void:
 	chunk_system.update_player_position(player.global_position)
 
 	# Update terrain for newly generated chunks
@@ -81,6 +91,13 @@ func _process(delta: float) -> void:
 		if not chunk_data.is_empty():
 			terrain_renderer.update_chunk(chunk_coords, chunk_data)
 
+func _process(delta: float) -> void:
+	# Update camera to follow player
+	camera_controller.set_target(player.global_position)
+
+	# Update chunks
+	_update_chunks()
+
 	# Update debug overlay
 	_update_debug_overlay()
 
@@ -88,7 +105,7 @@ func _process(delta: float) -> void:
 	_handle_seed_input()
 
 func _handle_seed_input() -> void:
-	if Input.is_key_pressed(KEY_T):  # T to toggle seed editing
+	if Input.is_key_pressed(KEY_T):
 		if not _is_editing_seed:
 			_is_editing_seed = true
 			seed_input.start_editing()
