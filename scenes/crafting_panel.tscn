@@ -1,0 +1,45 @@
+[gd_scene load_steps=1 format=3 uid="uid://crf001"]
+
+[node name="CraftingPanel" type="Control"]
+layout_mode = 3
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 0
+size_flags_vertical = 0
+
+[node name="Panel" type="PanelContainer"]
+layout_mode = 1
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Panel"]
+layout_mode = 1
+spacing = 10
+
+[node name="Title" type="Label" parent="Panel/VBoxContainer"]
+text = "Crafting"
+horizontal_alignment = 1
+font_size = 18
+
+[node name="SelectedRecipe" type="Label" parent="Panel/VBoxContainer"]
+text = "Select a recipe"
+horizontal_alignment = 1
+
+[node name="Ingredients" type="Label" parent="Panel/VBoxContainer"]
+text = ""
+autowrap_mode = 2
+
+[node name="RecipeList" type="VBoxContainer" parent="Panel/VBoxContainer"]
+custom_minimum_size = Vector2(300, 150)
+
+[node name="CraftButton" type="Button" parent="Panel/VBoxContainer"]
+text = "Craft"
+disabled = true
+
+[node name="CloseButton" type="Button" parent="Panel/VBoxContainer"]
+text = "Close"

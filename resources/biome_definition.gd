@@ -1,0 +1,46 @@
+## Data-driven biome configuration.
+@icon("res://assets/icons/biome_icon.svg")
+class_name BiomeDefinition
+extends Resource
+
+## Unique stable ID.
+@export var id: String = ""
+
+## Display name.
+@export var display_name: String = "Unnamed Biome"
+
+## Elevation range (min, max) where this biome appears.
+@export var elevation_range: Vector2 = Vector2(0.0, 1.0)
+
+## Moisture range (min, max) where this biome appears.
+@export var moisture_range: Vector2 = Vector2(0.0, 1.0)
+
+## Temperature range (min, max) where this biome appears.
+@export var temperature_range: Vector2 = Vector2(0.0, 1.0)
+
+## Base terrain tile ID for this biome.
+@export var terrain_tile_id: String = "grass"
+
+## Primary ground color (for placeholder rendering).
+@export var ground_color: Color = Color(0.2, 0.6, 0.2)
+
+## Whether rain is common in this biome.
+@export var rain_chance: float = 0.0
+
+## Whether snow is common in this biome.
+@export var snow_chance: float = 0.0
+
+## List of resource node types that can spawn here.
+@export var resource_types: PackedStringArray = []
+
+## List of creature types that can spawn here.
+@export var creature_types: PackedStringArray = []
+
+## List of vegetation types that can spawn here.
+@export var vegetation_types: PackedStringArray = []
+
+## Custom data.
+@export var custom_data: Dictionary = {}
+
+func is_valid() -> bool:
+	return id != ""

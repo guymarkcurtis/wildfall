@@ -1,0 +1,92 @@
+[gd_scene load_steps=2 format=3 uid="uid://main001"]
+
+[ext_resource type="Script" path="res://src/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://src/core/game_event_bus.gd" id="2_eventbus"]
+[ext_resource type="Script" path="res://src/core/recipe_registry.gd" id="3_recipe"]
+[ext_resource type="Script" path="res://src/world/terrain_renderer.gd" id="4_terrain"]
+
+[node name="Main" type="Node"]
+script = ExtResource("1_main")
+
+[node name="GameEventBus" parent="." instance=ExtResource("2_eventbus")]
+
+[node name="WorldGenerator" type="Node" parent="."]
+script = ExtResource("res://src/world/world_generator.gd")
+
+[node name="ChunkSystem" type="Node" parent="."]
+script = ExtResource("res://src/world/chunk_system.gd")
+
+[node name="TerrainRenderer" type="TileMapLayer" parent="."]
+layer = 1
+script = ExtResource("4_terrain")
+
+[node name="Player" type="CharacterBody2D" parent="."]
+position = Vector2(0, 0)
+script = ExtResource("res://src/entities/player.gd")
+
+[node name="CraftingComponent" type="Node" parent="."]
+script = ExtResource("res://src/components/crafting_component.gd")
+
+[node name="RecipeRegistry" type="Node" parent="."]
+script = ExtResource("3_recipe")
+
+[node name="SaveSystem" type="Node" parent="."]
+script = ExtResource("res://src/systems/save_system.gd")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+layer = 10
+script = ExtResource("res://src/ui/hud.gd")
+
+[node name="Overlay" type="CanvasLayer" parent="HUD"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="HUD/Overlay"]
+layout_mode = 3
+anchors_preset = 0
+offset_left = 10.0
+offset_top = 10.0
+grow_horizontal = 0
+grow_vertical = 0
+
+[node name="HealthBar" type="ProgressBar" parent="HUD/Overlay/HBoxContainer"]
+max_value = 100.0
+value = 100.0
+custom_minimum_size = Vector2(200, 20)
+layout_mode = 0
+
+[node name="HungerBar" type="ProgressBar" parent="HUD/Overlay/HBoxContainer"]
+max_value = 100.0
+value = 100.0
+custom_minimum_size = Vector2(200, 20)
+layout_mode = 0
+
+[node name="DebugLabel" type="Label" parent="HUD/Overlay"]
+visible = false
+autowrap_mode = 2
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 0.0
+anchor_top = 0.5
+offset_left = 10.0
+grow_horizontal = 0
+grow_vertical = 1
+
+[node name="SeedLabel" type="Label" parent="HUD/Overlay"]
+text = "Seed: 0"
+layout_mode = 3
+anchors_preset = 7
+anchor_right = 1.0
+offset_right = -10.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="InventoryPanel" type="Control" parent="." instance=load("res://scenes/inventory_panel.tscn")]
+visible = false
+
+[node name="CraftingPanel" type="Control" parent="." instance=load("res://scenes/crafting_panel.tscn")]
+visible = false

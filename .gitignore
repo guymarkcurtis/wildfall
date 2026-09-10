@@ -1,0 +1,44 @@
+# Godot
+.godot/
+.vscode/
+*.pid
+*.pid.lock
+*.tmp
+*.tmp.lock
+.user
+
+# Generated
+user://
+*.import/
+*.remap
+
+# OS
+.DS_Store
+Thumbs.db
+*.DS_Store
+
+# Secrets
+*.key
+*.pem
+*.p12
+*.pfx
+*.keystore
+
+# Logs
+*.log
+*.txt
+
+# Temporary files
+*.bak
+*.backup
+~*
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# Build output
+bin/
+exported/

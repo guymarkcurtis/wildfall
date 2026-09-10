@@ -1,0 +1,53 @@
+; Engine configuration file.
+; It's best edited using the editor UI or the command line,
+; as not all keys are supported by the editor.
+; For the complete set of supported keys, see the documentation.
+
+[application]
+
+config/name="2D Icarus"
+config/version="0.1.0"
+run/main_scene="res://scenes/main.tscn"
+config/features="4.6"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+
+[rendering]
+
+renderer/rendering_method="glsl4"
+textures/canvas_textures/default_texture_filter=1
+
+[input]
+
+move_up={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_localized","Up","Press",false,false,false,false,263,false,false,0,0) , Object(InputEventKey,"resource_localized","W","Press",false,false,false,false,87,false,false,0,0) , Object(InputEventKey,"resource_localized","W","Press",false,true,false,false,87,false,false,0,0)]
+}
+move_down={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_localized","Down","Press",false,false,false,false,262,false,false,0,0) , Object(InputEventKey,"resource_localized","S","Press",false,false,false,false,83,false,false,0,0) , Object(InputEventKey,"resource_localized","S","Press",false,true,false,false,83,false,false,0,0)]
+}
+move_left={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_localized","Left","Press",false,false,false,false,264,false,false,0,0) , Object(InputEventKey,"resource_localized","A","Press",false,false,false,false,65,false,false,0,0) , Object(InputEventKey,"resource_localized","A","Press",false,true,false,false,65,false,false,0,0)]
+}
+move_right={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_localized","Right","Press",false,false,false,false,261,false,false,0,0) , Object(InputEventKey,"resource_localized","D","Press",false,false,false,false,68,false,false,0,0) , Object(InputEventKey,"resource_localized","D","Press",false,true,false,false,68,false,false,0,0)]
+}
+interact={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_localized","E","Press",false,false,false,false,69,false,false,0,0)]
+}
+toggle_inventory={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_localized","I","Press",false,false,false,false,73,false,false,0,0)]
+}
+toggle_debug={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_localized","F3","Press",false,false,false,false,265,false,false,0,0)]
+}
