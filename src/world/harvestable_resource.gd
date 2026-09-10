@@ -15,7 +15,7 @@ var is_destroyed: bool = false
 var is_highlighted: bool = false
 
 # Visual
-var _sprite: Sprite2D = null
+var _sprite: Node = null
 
 # Signals
 signal health_changed(current: float, max: float)
@@ -42,16 +42,16 @@ func _setup_visuals() -> void:
 		_sprite.texture = texture
 		_sprite.position = Vector2(16, 16)
 	else:
-		# Fallback to colored circle using CanvasItem
-		var canvas := CanvasItem.new()
+		# Fallback: just use a colored circle via CanvasItem
+		var canvas: CanvasItem = CanvasItem.new()
 		add_child(canvas)
-		var color := _get_resource_color()
-		var shape := Polygon2D.new()
+		var color: Color = _get_resource_color()
+		var shape: Polygon2D = Polygon2D.new()
 		shape.position = Vector2(16, 16)
 		shape.color = color
 		shape.polygon = _get_circle_polygon(16, 16)
 		canvas.add_child(shape)
-		_sprite = canvas as Sprite2D
+		_sprite = canvas
 	
 	add_child(_sprite)
 	
@@ -67,41 +67,28 @@ func _setup_visuals() -> void:
 
 ## Get texture for resource type.
 func _get_resource_texture() -> ImageTexture:
-	var generator := TileSetGenerator.new()
+	var generator: Node = load("res://src/world/tile_set_generator.gd").new()
+	add_child(generator)
 	var texture: ImageTexture = null
 	
 	match resource_type:
 		"tree":
-			texture = generator._create_tree_texture()
+			texture = generator.call("_create_tree_texture")
 		"rock":
-			texture = generator._create_rock_texture()
+			texture = generator.call("_create_rock_texture")
 		"fibre":
-			texture = generator._create_fibre_texture()
+			texture = generator.call("_create_fibre_texture")
 		"berry_bush":
-			texture = generator._create_berry_texture()
+			texture = generator.call("_create_berry_texture")
 		"iron_ore":
-			texture = generator._create_iron_ore_texture()
+			texture = generator.call("_create_iron_ore_texture")
 		"coal":
-			texture = generator._create_coal_texture()
+			texture = generator.call("_create_coal_texture")
 		"gold_ore":
-			texture = generator._create_gold_ore_texture()
+			texture = generator.call("_create_gold_ore_texture")
 	
 	generator.queue_free()
 	return texture
-
-## Create a fallback colored sprite.
-func _create_fallback_sprite() -> Sprite2D:
-	var canvas := CanvasItem.new()
-	add_child(canvas)
-	
-	var color := _get_resource_color()
-	var shape := Polygon2D.new()
-	shape.position = Vector2(TILE_SIZE / 2, TILE_SIZE / 2)
-	shape.color = color
-	shape.polygon = _get_circle_polygon(16, 16)
-	canvas.add_child(shape)
-	
-	return canvas
 
 ## Get color for resource type.
 func _get_resource_color() -> Color:
@@ -117,11 +104,11 @@ func _get_resource_color() -> Color:
 
 ## Get circle polygon points.
 func _get_circle_polygon(center_x: int, center_y: int, radius: int = 16) -> PackedVector2Array:
-	var points := PackedVector2Array()
+	var points: PackedVector2Array = PackedVector2Array()
 	for i in range(0, 360, 15):
-		var angle := deg_to_rad(i)
-		var x := center_x + cos(angle) * radius
-		var y := center_y + sin(angle) * radius
+		var angle: float = deg_to_rad(i)
+		var x: float = float(center_x) + cos(angle) * float(radius)
+		var y: float = float(center_y) + sin(angle) * float(radius)
 		points.append(Vector2(x, y))
 	return points
 

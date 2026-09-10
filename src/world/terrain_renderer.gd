@@ -25,10 +25,10 @@ func _ready() -> void:
 ## Create the tile set with proper sprites.
 func _create_tile_set() -> void:
 	# Load and use TileSetGenerator
-	var generator_script := load("res://src/world/tile_set_generator.gd")
-	var generator := generator_script.new()
+	var generator_script: GDScript = load("res://src/world/tile_set_generator.gd")
+	var generator: Node = generator_script.new()
 	add_child(generator)
-	_tile_set = generator.generate_tile_set()
+	_tile_set = generator.call("generate_tile_set")
 	tile_set = _tile_set
 	generator.queue_free()
 
