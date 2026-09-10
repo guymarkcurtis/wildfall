@@ -1,62 +1,45 @@
-## Data-driven item definition resource.
-## Every item in the game is defined by an instance of this resource.
-@icon("res://assets/icons/item_icon.svg")
+## Defines an item with its properties.
 class_name ItemDefinition
 extends Resource
 
-## Unique stable ID for this item (never change after creation).
-@export var id: String = ""
-
-## Display name shown to the player.
-@export var display_name: String = "Unnamed Item"
-
-## Short description shown in tooltips.
+@export var item_id: String = ""
+@export var display_name: String = ""
 @export var description: String = ""
-
-## Category grouping (tool, food, material, resource, etc.).
-@export_enum("tool", "food", "material", "resource", "consumable", "building", "component", "seed", "weapon", "armor") var category: String = "resource"
-
-## Stack size limit. -1 means unstackable.
+@export var category: String = "misc"  # resource, tool, weapon, food, building, material
 @export var stack_size: int = 64
-
-## Weight in game units.
 @export var weight: float = 1.0
+@export var rarity: String = "common"  # common, uncommon, rare, epic
+@export var texture_path: String = ""
+@export var health_bonus: int = 0
+@export var hunger_bonus: int = 0
+@export var damage_bonus: int = 0
+@export var durability: int = 0
+@export var tool_type: String = ""  # axe, pickaxe, sword, etc.
 
-## Whether this item can be picked up automatically.
-@export var auto_pickup: bool = false
+## Create a basic item definition.
+static func create_basic(item_id: String, display_name: String, category: String) -> ItemDefinition:
+	var item := ItemDefinition.new()
+	item.item_id = item_id
+	item.display_name = display_name
+	item.category = category
+	item.stack_size = 64
+	item.weight = 1.0
+	item.rarity = "common"
+	return item
 
-## Whether this is a tool that can be used.
-@export var is_tool: bool = false
+## Check if item is a tool.
+func is_tool() -> bool:
+	return tool_type != "" and tool_type != "hand"
 
-## Whether this is a weapon.
-@export var is_weapon: bool = false
+## Check if item is consumable.
+func is_consumable() -> bool:
+	return health_bonus > 0 or hunger_bonus > 0
 
-## Whether this is consumable.
-@export var is_consumable: bool = false
-
-## Icon asset path (optional, falls back to default).
-@export var icon_path: String = ""
-
-## Base value in game currency.
-@export var value: int = 0
-
-## Custom data dictionary for mod support or extended properties.
-@export var custom_data: Dictionary = {}
-
-## Validate that this definition is complete.
-func is_valid() -> bool:
-	return id != "" and display_name != ""
-
-## Get the icon texture, falling back to a generic icon.
-func get_icon() -> Texture2D:
-	if icon_path != "" and ResourceLoader.exists(icon_path):
-		return ResourceLoader.load(icon_path) as Texture2D
-	return null
-
-## Create a stack of this item with the given quantity.
-static func create_stack(item_id: String, quantity: int) -> Dictionary:
-	return {
-		"item_id": item_id,
-		"quantity": quantity,
-		"metadata": {}
-	}
+## Get item rarity color.
+func get_rarity_color() -> Color:
+	match rarity:
+		"common": return Color(0.8, 0.8, 0.8)
+		"uncommon": return Color(0.2, 0.8, 0.2)
+		"rare": return Color(0.2, 0.4, 0.9)
+		"epic": return Color(0.7, 0.2, 0.8)
+		_: return Color(1.0, 1.0, 1.0)
