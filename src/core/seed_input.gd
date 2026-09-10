@@ -12,7 +12,6 @@ const MAX_SEED: int = 999999
 var _input_buffer: String = ""
 var _current_seed: int = 0
 var _is_editing: bool = false
-var _ui_label: Label = null
 
 func _ready() -> void:
 	# Generate initial random seed
@@ -52,7 +51,8 @@ func _input(event: InputEvent) -> void:
 		if event.keycode == KEY_ENTER or event.keycode == KEY_ESCAPE:
 			finish_editing()
 		elif event.keycode == KEY_BACKSPACE:
-			_input_buffer = _input_buffer.rstrip(-1) if len(_input_buffer) > 0 else ""
+			if len(_input_buffer) > 0:
+				_input_buffer = _input_buffer.substr(0, len(_input_buffer) - 1)
 		elif event.keycode >= KEY_0 and event.keycode <= KEY_9:
 			if len(_input_buffer) < MAX_INPUT_LENGTH:
 				_input_buffer += str(event.keycode - KEY_0)

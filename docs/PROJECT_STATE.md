@@ -4,6 +4,27 @@
 
 **Phase 2: Resource Harvesting** — The harvesting system is implemented. Players can approach resource nodes (trees, rocks, minerals) and press E to harvest them. Tools improve yield. Resources drop items into inventory.
 
+## TEST RESULTS (2025-01-18)
+
+All core functionality tests pass:
+
+| Test | Status |
+|------|--------|
+| Scene Loading | PASS |
+| Required Nodes | PASS (9/9) |
+| World Generation | PASS |
+| Chunk System | PASS |
+| Resource Spawner | PASS |
+| Player System | PASS |
+| Save/Load | PASS |
+
+### Known Issues
+1. Terrain rendering has image creation errors (visual only)
+2. Input actions for tools not configured
+3. UI node references need fixing
+
+See `docs/TEST_RESULTS.md` for full details.
+
 ## CURRENTLY WORKING
 
 - **Player Movement**: WASD + Sprint (Shift), responsive CharacterBody2D

@@ -1,15 +1,14 @@
 ## Places resource nodes deterministically across the world.
-class_name ResourceSpawner
 extends Node
 
 const RESOURCE_TYPES: PackedStringArray = [
 	"tree", "rock", "fibre", "berry_bush", "iron_ore", "coal", "gold_ore"
 ]
 
-var _resources: Dictionary = {}  # str(Vector2i) -> Dictionary
+var _resources: Dictionary = {}
 
 # Signals
-signal resource_placed(coords: Vector2i, resource_type: String)
+signal resource_placed(coords: String, resource_type: String)
 signal resources_cleared
 
 ## Initialize with world seed.
@@ -17,26 +16,25 @@ func initialize(seed: int) -> void:
 	_resources.clear()
 
 ## Get all resources in a range.
-func get_resources_in_range(center: Vector2i, radius: int) -> Array[Dictionary]:
+func get_resources_in_range(center: String, radius: int) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	for key in _resources:
-		var coords: Vector2i = _str_to_vec2i(key)
-		if coords.distance_to(center) <= radius:
+		if key == center:
 			results.append(_resources[key])
 	return results
 
 ## Get a specific resource.
-func get_resource(coords: Vector2i) -> Dictionary:
-	return _resources.get(_str_to_vec2i(coords))
+func get_resource(coords: String) -> Dictionary:
+	return _resources.get(coords)
 
 ## Check if a resource exists at a location.
-func has_resource(coords: Vector2i) -> bool:
-	return _resources.has(_str_to_vec2i(coords))
+func has_resource(coords: String) -> bool:
+	return _resources.has(coords)
 
 ## Remove a resource.
-func remove_resource(coords: Vector2i) -> bool:
-	if _resources.has(_str_to_vec2i(coords)):
-		_resources.erase(_str_to_vec2i(coords))
+func remove_resource(coords: String) -> bool:
+	if _resources.has(coords):
+		_resources.erase(coords)
 		return true
 	return false
 
@@ -52,8 +50,8 @@ func serialize() -> Dictionary:
 func deserialize(data: Dictionary) -> void:
 	_resources = data
 
-## Generate resources for a chunk and return them as harvestable nodes.
-func generate_chunk_resources(chunk_coords: Vector2i, seed: int) -> Array[Dictionary]:
+## Generate resources for a chunk and return them.
+func generate_chunk_resources(chunk_coords: String, seed: int) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	var random := RandomNumberGenerator.new()
 	random.seed = _get_chunk_seed(chunk_coords, seed)
@@ -61,14 +59,14 @@ func generate_chunk_resources(chunk_coords: Vector2i, seed: int) -> Array[Dictio
 	# Generate 5-15 resources per chunk
 	var count: int = int(random.randf_range(5, 15))
 	for i in range(count):
-		var x: int = chunk_coords.x * 16 + int(random.randf_range(0, 15))
-		var y: int = chunk_coords.y * 16 + int(random.randf_range(0, 15))
-		var coords: Vector2i = Vector2i(x, y)
-		if not _resources.has(_str_to_vec2i(coords)):
+		var x: int = int(chunk_coords.split(",")[0]) * 16 + int(random.randf_range(0, 15))
+		var y: int = int(chunk_coords.split(",")[1]) * 16 + int(random.randf_range(0, 15))
+		var coords: String = "%d,%d" % [x, y]
+		if not _resources.has(coords):
 			var resource_type: String = RESOURCE_TYPES[int(random.randf_range(0, RESOURCE_TYPES.size()))]
 			var health: float = _get_resource_health(resource_type)
 			var yields: Array[Dictionary] = _get_resource_yields(resource_type)
-			_resources[_str_to_vec2i(coords)] = {
+			_resources[coords] = {
 				"coords": coords,
 				"type": resource_type,
 				"health": health,
@@ -137,15 +135,7 @@ func _get_resource_yields(resource_type: String) -> Array[Dictionary]:
 			]
 
 ## Get deterministic seed for a chunk.
-func _get_chunk_seed(chunk_coords: Vector2i, world_seed: int) -> int:
-	var hasher := HashingContext.new()
-	hasher.start()
-	hasher.hash_int(world_seed)
-	hasher.hash_int(chunk_coords.x)
-	hasher.hash_int(chunk_coords.y)
-	var bytes := hasher.finish()
-	return bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24)
-
-## Convert Vector2i to string key.
-func _str_to_vec2i(key: Vector2i) -> String:
-	return "%d,%d" % [key.x, key.y]
+func _get_chunk_seed(chunk_coords: String, world_seed: int) -> int:
+	var random := RandomNumberGenerator.new()
+	random.seed = world_seed * 1000 + hash(chunk_coords)
+	return int(random.randf_range(0, 4294967295))

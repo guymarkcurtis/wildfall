@@ -24,34 +24,18 @@ textures/canvas_textures/default_texture_filter=1
 [input]
 
 move_up={
-"deadzone": 0.5,
-"events": [Object(InputEventKey,"resource_localized","Up","Press",false,false,false,false,263,false,false,0,0) , Object(InputEventKey,"resource_localized","W","Press",false,false,false,false,87,false,false,0,0) , Object(InputEventKey,"resource_localized","W","Press",false,true,false,false,87,false,false,0,0)]
-}
+"deadzone": 0.5, "events": [Object(InputEventKey,"resource":0,"resource_local_to_scene":false,"window_state":0,"pressed":false,"keycode":0,"physical_keycode":126,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"command_pressed":false,"unicode":117,"echo":false,"press_delay":0.0,"script":null,"action":"move_up","file":null,"button_mask":0,"force_unit":0,"global_position":Vector2(0, 0),"global_position_normalized":Vector2(0, 0),"position":Vector2(0, 0),"local_position":Vector2(0, 0),"relative":Vector2(0, 0),"button_index":0,"factor":0.0,"context":null,"ui_action":1,"gesture_transform":Transform2D(1, 0, 0, 1, 0, 0))], "gravity":0.13}
 move_down={
-"deadzone": 0.5,
-"events": [Object(InputEventKey,"resource_localized","Down","Press",false,false,false,false,262,false,false,0,0) , Object(InputEventKey,"resource_localized","S","Press",false,false,false,false,83,false,false,0,0) , Object(InputEventKey,"resource_localized","S","Press",false,true,false,false,83,false,false,0,0)]
-}
+"deadzone": 0.5, "events": [Object(InputEventKey,"resource":0,"resource_local_to_scene":false,"window_state":0,"pressed":false,"keycode":0,"physical_keycode":124,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"command_pressed":false,"unicode":100,"echo":false,"press_delay":0.0,"script":null,"action":"move_down","file":null,"button_mask":0,"force_unit":0,"global_position":Vector2(0, 0),"global_position_normalized":Vector2(0, 0),"position":Vector2(0, 0),"local_position":Vector2(0, 0),"relative":Vector2(0, 0),"button_index":0,"factor":0.0,"context":null,"ui_action":1,"gesture_transform":Transform2D(1, 0, 0, 1, 0, 0))], "gravity":0.13}
 move_left={
-"deadzone": 0.5,
-"events": [Object(InputEventKey,"resource_localized","Left","Press",false,false,false,false,264,false,false,0,0) , Object(InputEventKey,"resource_localized","A","Press",false,false,false,false,65,false,false,0,0) , Object(InputEventKey,"resource_localized","A","Press",false,true,false,false,65,false,false,0,0)]
-}
-sprint={
-"deadzone": 0.5,
-"events": [Object(InputEventKey,"resource_localized","Shift","Press",false,false,false,false,340,false,false,0,0) , Object(InputEventKey,"resource_localized","Shift", "Press",false,false,false,false,341,false,false,0,0)]
-}
+"deadzone": 0.5, "events": [Object(InputEventKey,"resource":0,"resource_local_to_scene":false,"window_state":0,"pressed":false,"keycode":0,"physical_keycode":123,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"command_pressed":false,"unicode":102,"echo":false,"press_delay":0.0,"script":null,"action":"move_left","file":null,"button_mask":0,"force_unit":0,"global_position":Vector2(0, 0),"global_position_normalized":Vector2(0, 0),"position":Vector2(0, 0),"local_position":Vector2(0, 0),"relative":Vector2(0, 0),"button_index":0,"factor":0.0,"context":null,"ui_action":1,"gesture_transform":Transform2D(1, 0, 0, 1, 0, 0))], "gravity":0.13}
 move_right={
-"deadzone": 0.5,
-"events": [Object(InputEventKey,"resource_localized","Right","Press",false,false,false,false,261,false,false,0,0) , Object(InputEventKey,"resource_localized","D","Press",false,false,false,false,68,false,false,0,0) , Object(InputEventKey,"resource_localized","D","Press",false,true,false,false,68,false,false,0,0)]
-}
+"deadzone": 0.5, "events": [Object(InputEventKey,"resource":0,"resource_local_to_scene":false,"window_state":0,"pressed":false,"keycode":0,"physical_keycode":125,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"command_pressed":false,"unicode":103,"echo":false,"press_delay":0.0,"script":null,"action":"move_right","file":null,"button_mask":0,"force_unit":0,"global_position":Vector2(0, 0),"global_position_normalized":Vector2(0, 0),"position":Vector2(0, 0),"local_position":Vector2(0, 0),"relative":Vector2(0, 0),"button_index":0,"factor":0.0,"context":null,"ui_action":1,"gesture_transform":Transform2D(1, 0, 0, 1, 0, 0))], "gravity":0.13}
+sprint={
+"deadzone": 0.5, "events": [Object(InputEventKey,"resource":0,"resource_local_to_scene":false,"window_state":0,"pressed":false,"keycode":0,"physical_keycode":340,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"command_pressed":false,"unicode":0,"echo":false,"press_delay":0.0,"script":null,"action":"sprint","file":null,"button_mask":0,"force_unit":0,"global_position":Vector2(0, 0),"global_position_normalized":Vector2(0, 0),"position":Vector2(0, 0),"local_position":Vector2(0, 0),"relative":Vector2(0, 0),"button_index":0,"factor":0.0,"context":null,"ui_action":1,"gesture_transform":Transform2D(1, 0, 0, 1, 0, 0))], "gravity":0.13}
 interact={
-"deadzone": 0.5,
-"events": [Object(InputEventKey,"resource_localized","E","Press",false,false,false,false,69,false,false,0,0)]
-}
+"deadzone": 0.5, "events": [Object(InputEventKey,"resource":0,"resource_local_to_scene":false,"window_state":0,"pressed":false,"keycode":0,"physical_keycode":32,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"command_pressed":false,"unicode":0,"echo":false,"press_delay":0.0,"script":null,"action":"interact","file":null,"button_mask":0,"force_unit":0,"global_position":Vector2(0, 0),"global_position_normalized":Vector2(0, 0),"position":Vector2(0, 0),"local_position":Vector2(0, 0),"relative":Vector2(0, 0),"button_index":0,"factor":0.0,"context":null,"ui_action":1,"gesture_transform":Transform2D(1, 0, 0, 1, 0, 0))], "gravity":0.13}
 toggle_inventory={
-"deadzone": 0.5,
-"events": [Object(InputEventKey,"resource_localized","I","Press",false,false,false,false,73,false,false,0,0)]
-}
+"deadzone": 0.5, "events": [Object(InputEventKey,"resource":0,"resource_local_to_scene":false,"window_state":0,"pressed":false,"keycode":0,"physical_keycode":45,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"command_pressed":false,"unicode":0,"echo":false,"press_delay":0.0,"script":null,"action":"toggle_inventory","file":null,"button_mask":0,"force_unit":0,"global_position":Vector2(0, 0),"global_position_normalized":Vector2(0, 0),"position":Vector2(0, 0),"local_position":Vector2(0, 0),"relative":Vector2(0, 0),"button_index":0,"factor":0.0,"context":null,"ui_action":1,"gesture_transform":Transform2D(1, 0, 0, 1, 0, 0))], "gravity":0.13}
 toggle_debug={
-"deadzone": 0.5,
-"events": [Object(InputEventKey,"resource_localized","F3","Press",false,false,false,false,265,false,false,0,0)]
-}
+"deadzone": 0.5, "events": [Object(InputEventKey,"resource":0,"resource_local_to_scene":false,"window_state":0,"pressed":false,"keycode":0,"physical_keycode":169,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"command_pressed":false,"unicode":0,"echo":false,"press_delay":0.0,"script":null,"action":"toggle_debug","file":null,"button_mask":0,"force_unit":0,"global_position":Vector2(0, 0),"global_position_normalized":Vector2(0, 0),"position":Vector2(0, 0),"local_position":Vector2(0, 0),"relative":Vector2(0, 0),"button_index":0,"factor":0.0,"context":null,"ui_action":1,"gesture_transform":Transform2D(1, 0, 0, 1, 0, 0))], "gravity":0.13}

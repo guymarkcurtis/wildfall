@@ -11,11 +11,14 @@
 [ext_resource type="Script" path="res://src/world/harvestable_resource.gd" id="9_harvest"]
 [ext_resource type="Script" path="res://src/world/harvest_system.gd" id="10_harvestsys"]
 [ext_resource type="Script" path="res://src/ui/debug_overlay.gd" id="11_debug"]
+[ext_resource type="Script" path="res://src/ui/hud.gd" id="13_hud"]
+[ext_resource type="Script" path="res://src/entities/player.gd" id="12_player"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
 
-[node name="GameEventBus" parent="." instance=ExtResource("2_eventbus")]
+[node name="GameEventBus" type="Node" parent="."]
+script = ExtResource("2_eventbus")
 
 [node name="WorldGenerator" type="Node" parent="."]
 script = ExtResource("5_worldgen")
@@ -32,7 +35,7 @@ script = ExtResource("8_resource")
 
 [node name="Player" type="CharacterBody2D" parent="."]
 position = Vector2(0, 0)
-script = ExtResource("res://src/entities/player.gd")
+script = ExtResource("12_player")
 
 [node name="CameraController" type="Camera2D" parent="."]
 script = ExtResource("3_camera")
@@ -45,57 +48,6 @@ script = ExtResource("4_seed")
 layer = 10
 script = ExtResource("11_debug")
 
-[node name="DebugPanel" type="PanelContainer" parent="DebugOverlay"]
-layout_mode = 3
-anchors_preset = 0
-offset_left = 10.0
-offset_top = 10.0
-grow_horizontal = 0
-grow_vertical = 0
-modulate = Color(0.2, 0.2, 0.2, 0.8)
-
-[node name="DebugLabel" type="Label" parent="DebugOverlay/DebugPanel"]
-text = "Debug: Press F3 to toggle"
-autowrap_mode = 2
-layout_mode = 0
-
 [node name="HUD" type="CanvasLayer" parent="."]
 layer = 11
-script = ExtResource("res://src/ui/hud.gd")
-
-[node name="Overlay" type="CanvasLayer" parent="HUD"]
-layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-
-[node name="HBoxContainer" type="HBoxContainer" parent="HUD/Overlay"]
-layout_mode = 3
-anchors_preset = 0
-offset_left = 10.0
-offset_top = 10.0
-grow_horizontal = 0
-grow_vertical = 0
-
-[node name="HealthBar" type="ProgressBar" parent="HUD/Overlay/HBoxContainer"]
-max_value = 100.0
-value = 100.0
-custom_minimum_size = Vector2(200, 20)
-layout_mode = 0
-
-[node name="HungerBar" type="ProgressBar" parent="HUD/Overlay/HBoxContainer"]
-max_value = 100.0
-value = 100.0
-custom_minimum_size = Vector2(200, 20)
-layout_mode = 0
-
-[node name="SeedDisplay" type="Label" parent="HUD/Overlay"]
-text = "Seed: 0 (T to change)"
-layout_mode = 3
-anchors_preset = 7
-anchor_right = 1.0
-offset_right = -10.0
-grow_horizontal = 2
-grow_vertical = 0
+script = ExtResource("13_hud")

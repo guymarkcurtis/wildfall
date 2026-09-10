@@ -1,6 +1,4 @@
 ## Interactive resource node that can be harvested.
-## Represents trees, rocks, mineral deposits, etc.
-class_name HarvestableResource
 extends Area2D
 
 const DEFAULT_HITBOX_RADIUS: float = 16.0
@@ -10,7 +8,7 @@ var resource_type: String = ""
 var display_name: String = ""
 var max_health: float = 10.0
 var current_health: float = 10.0
-var yield_items: Array[Dictionary] = []  # [{item_id, min_qty, max_qty, chance}]
+var yield_items: Array[Dictionary] = []
 
 # State
 var is_destroyed: bool = false
@@ -45,7 +43,6 @@ func _get_display_name(resource_type: String) -> String:
 
 ## Set up visual representation.
 func _setup_visuals() -> void:
-	# Create a simple colored circle as placeholder
 	var visual := CollisionShape2D.new()
 	var shape := CircleShape2D.new()
 	shape.radius = DEFAULT_HITBOX_RADIUS
@@ -53,19 +50,6 @@ func _setup_visuals() -> void:
 	add_child(visual)
 	collision_layer = 1
 	collision_mask = 0
-
-	# Create a visible marker
-	var marker := Sprite2D.new()
-	var texture := _get_placeholder_texture()
-	if texture:
-		marker.texture = texture
-	marker.position = Vector2(0, -DEFAULT_HITBOX_RADIUS)
-	add_child(marker)
-
-## Get placeholder texture for resource type.
-func _get_placeholder_texture() -> Texture2D:
-	# Return null for now - would use actual sprites in production
-	return null
 
 ## Set up collision detection.
 func _setup_collision() -> void:

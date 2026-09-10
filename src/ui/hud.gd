@@ -8,14 +8,14 @@ extends CanvasLayer
 @onready var seed_label: Label = $Overlay/SeedLabel
 
 var _debug_enabled: bool = false
-var _player: "Player" = null
+var _player: Node = null
 
 func _ready() -> void:
 	$Overlay.self_modulate.a = 0.8
 	debug_label.visible = false
 
 ## Set the player reference for HUD updates.
-func set_player(player: "Player") -> void:
+func set_player(player: Node) -> void:
 	_player = player
 	if player.health_component:
 		player.health_component.health_changed.connect(_on_health_changed)
@@ -57,5 +57,5 @@ func set_seed(seed: int) -> void:
 	seed_label.text = "Seed: %d" % seed
 
 ## Show/hide the entire HUD.
-func set_visible(visible: bool) -> void:
+func set_hud_visible(visible: bool) -> void:
 	$Overlay.visible = visible

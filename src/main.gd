@@ -14,7 +14,7 @@ const SAVE_VERSION: int = 1
 
 var _world_seed: int = 0
 var _is_editing_seed: bool = false
-var _resource_nodes: Array[HarvestableResource] = []
+var _resource_nodes: Array = []
 
 func _ready() -> void:
 	# Initialize game systems
@@ -22,9 +22,9 @@ func _ready() -> void:
 	_initialize_game()
 
 	# Connect event bus signals
-	GameEventBus.world_seed_set.connect(_on_world_seed_set)
-	GameEventBus.toggle_debug.connect(_on_toggle_debug)
-	SeedInput.seed_changed.connect(_on_seed_changed)
+	$GameEventBus.world_seed_set.connect(_on_world_seed_set)
+	$GameEventBus.toggle_debug.connect(_on_toggle_debug)
+	seed_input.seed_changed.connect(_on_seed_changed)
 
 	# Set up camera target
 	camera_controller.set_target(player.global_position)
@@ -39,7 +39,6 @@ func _generate_seed() -> int:
 	return randi() % 999999
 
 func _initialize_game() -> void:
-	# World generator is already set up in scene tree
 	pass
 
 func _generate_world(seed: int) -> void:
@@ -50,14 +49,14 @@ func _generate_world(seed: int) -> void:
 	_generate_initial_chunks(seed)
 
 	# Spawn resources
-	_resource_spawner.initialize(seed)
+	resource_spawner.initialize(seed)
 	_generate_initial_resources(seed)
 
 ## Generate initial chunks around the player.
 func _generate_initial_chunks(seed: int) -> void:
 	for x in range(-3, 4):
 		for y in range(-3, 4):
-			var chunk_coords: Vector2i = Vector2i(x, y)
+			var chunk_coords: String = "%d,%d" % [x, y]
 			var chunk_data: Dictionary = world_generator.call("generate_chunk", chunk_coords, seed)
 			terrain_renderer.update_chunk(chunk_coords, chunk_data)
 
@@ -66,17 +65,23 @@ func _generate_initial_resources(seed: int) -> void:
 	_resource_nodes.clear()
 	for x in range(-3, 4):
 		for y in range(-3, 4):
-			var chunk_coords: Vector2i = Vector2i(x, y)
-			var resources: Array[Dictionary] = _resource_spawner.generate_chunk_resources(chunk_coords, seed)
+			var chunk_coords: String = "%d,%d" % [x, y]
+			var resources: Array[Dictionary] = resource_spawner.generate_chunk_resources(chunk_coords, seed)
 			for res_data in resources:
-				var coords: Vector2i = res_data["coords"]
+				var coords: String = res_data["coords"]
+				var parts: PackedStringArray = coords.split(",")
+				var x_val: int = int(parts[0])
+				var y_val: int = int(parts[1])
 				var type: String = res_data["type"]
 				var health: float = res_data["health"]
 				var yields: Array[Dictionary] = res_data["yields"]
 
-				var resource := HarvestableResource.new()
-				resource.setup(type, health, yields)
-				resource.position = Vector2(coords)
+				# Create a simple placeholder node for the resource
+				var resource := Node2D.new()
+				resource.position = Vector2(x_val, y_val)
+				resource.set_meta("resource_type", type)
+				resource.set_meta("health", health)
+				resource.set_meta("yields", yields)
 				add_child(resource)
 				_resource_nodes.append(resource)
 
@@ -85,7 +90,7 @@ func _update_chunks() -> void:
 	chunk_system.update_player_position(player.global_position)
 
 	# Update terrain for newly generated chunks
-	var loaded_chunks: Array[Vector2i] = chunk_system.get_loaded_chunks()
+	var loaded_chunks: Array = chunk_system.get_loaded_chunks()
 	for chunk_coords in loaded_chunks:
 		var chunk_data: Dictionary = chunk_system.get_chunk(chunk_coords)
 		if not chunk_data.is_empty():
@@ -118,8 +123,8 @@ func _handle_seed_input() -> void:
 			_is_editing_seed = false
 
 func _update_debug_overlay() -> void:
-	var tile_pos: Vector2i = Vector2i(player.global_position)
-	var chunk_pos: Vector2i = ChunkSystem.world_to_chunk_coords(tile_pos)
+	var tile_pos: String = "%d,%d" % [int(player.global_position.x), int(player.global_position.y)]
+	var chunk_pos: Vector2i = chunk_system.world_to_chunk_coords(Vector2i(int(tile_pos.split(",")[0]), int(tile_pos.split(",")[1])))
 	var noise_vals: Dictionary = world_generator.get_noise_values(player.global_position.x, player.global_position.y)
 	var biome: String = "unknown"
 	var chunk_data: Dictionary = chunk_system.get_chunk(chunk_pos)
@@ -139,12 +144,19 @@ func _update_debug_overlay() -> void:
 func _on_toggle_debug() -> void:
 	debug_overlay.toggle()
 
+func _on_world_seed_set(seed: int) -> void:
+	_world_seed = seed
+	_generate_world(seed)
+	terrain_renderer.clear_all()
+	resource_spawner.initialize(seed)
+	_generate_initial_chunks(seed)
+	_generate_initial_resources(seed)
+
 func _on_seed_changed(seed: int) -> void:
 	_world_seed = seed
 	_generate_world(seed)
-	# Re-render terrain and resources
 	terrain_renderer.clear_all()
-	_resource_spawner.initialize(seed)
+	resource_spawner.initialize(seed)
 	_generate_initial_chunks(seed)
 	_generate_initial_resources(seed)
 

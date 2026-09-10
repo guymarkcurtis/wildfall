@@ -41,7 +41,7 @@ func update_player_position(world_position: Vector2) -> void:
 
 ## Set the viewport radius.
 func set_viewport_radius(radius: int) -> void:
-	viewport_radius = max(1, radius)
+	_viewport_radius = max(1, radius)
 	_update_chunks()
 
 ## Get the current viewport radius.
@@ -74,7 +74,7 @@ func unload_chunk(chunk_coords: Vector2i) -> void:
 	if _chunks.has(key):
 		_chunks.erase(key)
 		if _chunk_nodes.has(key):
-			chunk_nodes.erase(key)
+			_chunk_nodes.erase(key)
 		chunk_unloaded.emit(chunk_coords)
 		chunks_changed.emit()
 
@@ -85,8 +85,11 @@ func unload_all() -> void:
 	chunks_changed.emit()
 
 ## Get all currently loaded chunk coordinates.
-func get_loaded_chunks() -> Array[Vector2i]:
-	return _chunks.keys().map(func(k: String) -> Vector2i: return _str_to_vec2i(k))
+func get_loaded_chunks() -> Array:
+	var result: Array = []
+	for k in _chunks.keys():
+		result.append(_str_to_vec2i(k))
+	return result
 
 ## Check if a chunk is loaded.
 func has_chunk(chunk_coords: Vector2i) -> bool:
@@ -103,8 +106,8 @@ func get_seed() -> int:
 ## Update chunks around the player.
 func _update_chunks() -> void:
 	# Generate chunks in viewport
-	for dx in range(-viewport_radius, viewport_radius + 1):
-		for dy in range(-viewport_radius, viewport_radius + 1):
+	for dx in range(-_viewport_radius, _viewport_radius + 1):
+		for dy in range(-_viewport_radius, _viewport_radius + 1):
 			var chunk_coords: Vector2i = _player_position + Vector2i(dx, dy)
 			generate_chunk(chunk_coords)
 

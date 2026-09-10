@@ -69,15 +69,15 @@ func _render_chunk(chunk_coords: Vector2i, data: Dictionary) -> void:
 	if not data.has("elevation") or not data.has("moisture") or not data.has("biome"):
 		return
 
-	var world_start := ChunkSystem.chunk_coords_to_world_start(chunk_coords)
+	var world_start: Vector2i = _chunk_coords_to_world_start(chunk_coords)
 	var elevation: PackedFloat32Array = data["elevation"]
 	var moisture: PackedFloat32Array = data["moisture"]
 
 	for y in range(CHUNK_SIZE):
 		for x in range(CHUNK_SIZE):
-			var world_x := world_start.x + x
-			var world_y := world_start.y + y
-			var tile_index := y * CHUNK_SIZE + x
+			var world_x: int = world_start.x + x
+			var world_y: int = world_start.y + y
+			var tile_index: int = y * CHUNK_SIZE + x
 			var elev: float = elevation.get(tile_index) if tile_index < elevation.size() else 0.5
 			var moist: float = moisture.get(tile_index) if tile_index < moisture.size() else 0.5
 			var tile_id: int = _get_tile_id(elev, moist, data["biome"])
@@ -92,7 +92,7 @@ func _get_tile_id(elevation: float, moisture: float, biome: String) -> int:
 	elif moisture > 0.6 and elevation > 0.6:
 		return TILE_SNOW
 	elif moisture > 0.6:
-		if biome == "forest":
+		if biome == "forest" or biome == "temperate_forest":
 			return TILE_FOREST
 		return TILE_MUD
 	elif elevation > 0.7:
@@ -100,7 +100,7 @@ func _get_tile_id(elevation: float, moisture: float, biome: String) -> int:
 	elif elevation > 0.5:
 		return TILE_DIRT
 	else:
-		if biome == "forest":
+		if biome == "forest" or biome == "temperate_forest":
 			return TILE_FOREST
 		return TILE_GRASS
 
@@ -116,3 +116,7 @@ func get_tile_color(tile_id: int) -> Color:
 		TILE_SNOW: return Color(0.9, 0.9, 0.95)
 		TILE_MUD: return Color(0.4, 0.35, 0.25)
 		_: return Color(0.5, 0.5, 0.5)
+
+## Convert chunk coords to world start position.
+func _chunk_coords_to_world_start(chunk_coords: Vector2i) -> Vector2i:
+	return Vector2i(chunk_coords.x * CHUNK_SIZE, chunk_coords.y * CHUNK_SIZE)
