@@ -119,6 +119,6 @@ func craft_recipe() -> bool:
 
 ## Get recipe at index.
 func get_recipe(index: int) -> Dictionary:
-	if 0 <= index < recipes.size():
+	if index >= 0 and index < recipes.size():
 		return recipes[index]
 	return {}

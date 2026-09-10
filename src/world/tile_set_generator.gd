@@ -180,7 +180,7 @@ func _create_fibre_texture() -> ImageTexture:
 		for j in range(-10, 20):
 			var x := i + j
 			var y := i - j + 16
-			if 0 <= x < TILE_SIZE and 0 <= y < TILE_SIZE:
+			if x >= 0 and x < TILE_SIZE and y >= 0 and y < TILE_SIZE:
 				if (i + j) % 3 == 0:
 					image.set_pixel(x, y, Color(0.5, 0.4, 0.2))
 	
@@ -216,7 +216,7 @@ func _create_berry_texture() -> ImageTexture:
 			for dx in range(-2, 3):
 				var px := int(berry.x) + dx
 				var py := int(berry.y) + dy
-				if 0 <= px < TILE_SIZE and 0 <= py < TILE_SIZE:
+				if px >= 0 and px < TILE_SIZE and py >= 0 and py < TILE_SIZE:
 					var dist := Vector2(float(dx), float(dy)).length()
 					if dist <= 2.0:
 						image.set_pixel(px, py, Color(0.8, 0.2, 0.2))
@@ -242,7 +242,7 @@ func _create_iron_ore_texture() -> ImageTexture:
 			for dx in range(-size, size):
 				var px := x + dx
 				var py := y + dy
-				if 0 <= px < TILE_SIZE and 0 <= py < TILE_SIZE:
+				if px >= 0 and px < TILE_SIZE and py >= 0 and py < TILE_SIZE:
 					var dist := Vector2(float(dx), float(dy)).length()
 					if dist <= float(size):
 						image.set_pixel(px, py, Color(0.6, 0.6, 0.6))
@@ -267,7 +267,7 @@ func _create_coal_texture() -> ImageTexture:
 			for dx in range(-4, 5):
 				var px := x + dx
 				var py := y + dy
-				if 0 <= px < TILE_SIZE and 0 <= py < TILE_SIZE:
+				if px >= 0 and px < TILE_SIZE and py >= 0 and py < TILE_SIZE:
 					var dist := Vector2(float(dx), float(dy)).length()
 					if dist <= 4.0:
 						var shine := 0.1 if dist > 3.0 else 0.3
@@ -294,7 +294,7 @@ func _create_gold_ore_texture() -> ImageTexture:
 			for dx in range(-size, size + 1):
 				var px := x + dx
 				var py := y + dy
-				if 0 <= px < TILE_SIZE and 0 <= py < TILE_SIZE:
+				if px >= 0 and px < TILE_SIZE and py >= 0 and py < TILE_SIZE:
 					var dist := Vector2(float(dx), float(dy)).length()
 					if dist <= float(size):
 						image.set_pixel(px, py, Color(0.9, 0.7, 0.2))
