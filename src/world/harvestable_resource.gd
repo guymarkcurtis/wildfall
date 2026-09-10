@@ -14,6 +14,9 @@ var yield_items: Array[Dictionary] = []
 var is_destroyed: bool = false
 var is_highlighted: bool = false
 
+# Visual
+var _sprite: Sprite2D = null
+
 # Signals
 signal health_changed(current: float, max: float)
 signal resource_destroyed(item_id: String, quantity: int)
@@ -29,27 +32,90 @@ func setup(resource_type: String, health: float, yields: Array[Dictionary]) -> v
 	_setup_visuals()
 	_setup_collision()
 
-## Get display name for resource type.
-func _get_display_name(resource_type: String) -> String:
-	match resource_type:
-		"tree": return "Tree"
-		"rock": return "Rock"
-		"fibre": return "Fibre Bundle"
-		"berry_bush": return "Berry Bush"
-		"iron_ore": return "Iron Ore Deposit"
-		"coal": return "Coal Deposit"
-		"gold_ore": return "Gold Ore Deposit"
-		_: return resource_type.capitalize()
-
 ## Set up visual representation.
 func _setup_visuals() -> void:
-	var visual := CollisionShape2D.new()
+	# Create sprite based on resource type
+	_sprite = Sprite2D.new()
+	
+	var texture: ImageTexture = _get_resource_texture()
+	if texture:
+		_sprite.texture = texture
+		_sprite.position = Vector2(TILE_SIZE / 2, TILE_SIZE / 2)
+	else:
+		# Fallback to colored circle
+		_sprite = _create_fallback_sprite()
+	
+	add_child(_sprite)
+	
+	# Add collision shape
+	var collision := CollisionShape2D.new()
 	var shape := CircleShape2D.new()
 	shape.radius = DEFAULT_HITBOX_RADIUS
-	visual.shape = shape
-	add_child(visual)
+	collision.shape = shape
+	add_child(collision)
+	
 	collision_layer = 1
 	collision_mask = 0
+
+## Get texture for resource type.
+func _get_resource_texture() -> ImageTexture:
+	var generator := TileSetGenerator.new()
+	var texture: ImageTexture = null
+	
+	match resource_type:
+		"tree":
+			texture = generator._create_tree_texture()
+		"rock":
+			texture = generator._create_rock_texture()
+		"fibre":
+			texture = generator._create_fibre_texture()
+		"berry_bush":
+			texture = generator._create_berry_texture()
+		"iron_ore":
+			texture = generator._create_iron_ore_texture()
+		"coal":
+			texture = generator._create_coal_texture()
+		"gold_ore":
+			texture = generator._create_gold_ore_texture()
+	
+	generator.queue_free()
+	return texture
+
+## Create a fallback colored sprite.
+func _create_fallback_sprite() -> Sprite2D:
+	var canvas := CanvasItem.new()
+	add_child(canvas)
+	
+	var color := _get_resource_color()
+	var shape := Polygon2D.new()
+	shape.position = Vector2(TILE_SIZE / 2, TILE_SIZE / 2)
+	shape.color = color
+	shape.polygon = _get_circle_polygon(16, 16)
+	canvas.add_child(shape)
+	
+	return canvas
+
+## Get color for resource type.
+func _get_resource_color() -> Color:
+	match resource_type:
+		"tree": return Color(0.2, 0.6, 0.2)
+		"rock": return Color(0.5, 0.5, 0.5)
+		"fibre": return Color(0.6, 0.5, 0.3)
+		"berry_bush": return Color(0.3, 0.7, 0.3)
+		"iron_ore": return Color(0.4, 0.4, 0.4)
+		"coal": return Color(0.2, 0.2, 0.2)
+		"gold_ore": return Color(0.9, 0.7, 0.2)
+		_: return Color(0.5, 0.5, 0.5)
+
+## Get circle polygon points.
+func _get_circle_polygon(center_x: int, center_y: int, radius: int = 16) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for i in range(0, 360, 15):
+		var angle := deg_to_rad(i)
+		var x := center_x + cos(angle) * radius
+		var y := center_y + sin(angle) * radius
+		points.append(Vector2(x, y))
+	return points
 
 ## Set up collision detection.
 func _setup_collision() -> void:
@@ -73,12 +139,14 @@ func _on_body_exited(body: Node) -> void:
 ## Highlight the resource.
 func _highlight() -> void:
 	is_highlighted = true
-	modulate = Color(1.0, 1.0, 0.8, 1.0)
+	if _sprite:
+		_sprite.modulate = Color(1.0, 1.0, 0.8, 1.0)
 
 ## Unhighlight the resource.
 func _unhighlight() -> void:
 	is_highlighted = false
-	modulate = Color(1.0, 1.0, 1.0, 1.0)
+	if _sprite:
+		_sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
 
 ## Damage the resource. Returns true if destroyed.
 func damage(amount: float, tool: String = "") -> bool:
@@ -129,3 +197,15 @@ func get_yields() -> Array[Dictionary]:
 ## Check if resource is destroyed.
 func is_destroyed_check() -> bool:
 	return is_destroyed
+
+## Get display name for resource type.
+func _get_display_name(resource_type: String) -> String:
+	match resource_type:
+		"tree": return "Tree"
+		"rock": return "Rock"
+		"fibre": return "Fibre Bundle"
+		"berry_bush": return "Berry Bush"
+		"iron_ore": return "Iron Ore Deposit"
+		"coal": return "Coal Deposit"
+		"gold_ore": return "Gold Ore Deposit"
+		_: return resource_type.capitalize()

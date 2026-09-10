@@ -1,4 +1,4 @@
-## Renders chunk terrain using TileMapLayer with proper tile set.
+## Renders chunk terrain using TileMapLayer with proper tile sprites.
 class_name TerrainRenderer
 extends TileMapLayer
 
@@ -20,39 +20,15 @@ var _tile_set: TileSet = null
 
 ## Set up the tile set.
 func _ready() -> void:
-	_create_placeholder_tile_set()
+	_create_tile_set()
 
-## Create a placeholder tile set for testing.
-func _create_placeholder_tile_set() -> void:
-	_tile_set = TileSet.new()
-
-	# Create simple colored tiles for each terrain type
-	var tiles: Dictionary = {
-		TILE_WATER: Color(0.2, 0.4, 0.8),
-		TILE_SAND: Color(0.8, 0.7, 0.4),
-		TILE_GRASS: Color(0.2, 0.6, 0.2),
-		TILE_FOREST: Color(0.15, 0.45, 0.15),
-		TILE_DIRT: Color(0.5, 0.4, 0.3),
-		TILE_STONE: Color(0.5, 0.5, 0.5),
-		TILE_SNOW: Color(0.9, 0.9, 0.95),
-		TILE_MUD: Color(0.4, 0.35, 0.25)
-	}
-
-	# Create a simple 1x1 tile set for each terrain type
-	for tile_id in tiles:
-		var tile_data := TileSetAtlasSource.new()
-		var texture := Image.new()
-		texture.create(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
-		var color: Color = tiles[tile_id]
-		for y in range(TILE_SIZE):
-			for x in range(TILE_SIZE):
-				texture.set_pixel(x, y, color)
-		var image_texture := ImageTexture.create_from_image(texture)
-		tile_data.texture = image_texture
-		tile_data.add_texture_rect(Rect2i(0, 0, TILE_SIZE, TILE_SIZE), Vector2i(0, 0))
-		_tile_set.add_texture_source(tile_data, -1)
-
+## Create the tile set with proper sprites.
+func _create_tile_set() -> void:
+	var generator := TileSetGenerator.new()
+	add_child(generator)
+	_tile_set = generator.generate_tile_set()
 	tile_set = _tile_set
+	generator.queue_free()
 
 ## Update terrain for a chunk.
 func update_chunk(chunk_coords: Vector2i, data: Dictionary) -> void:
@@ -76,7 +52,7 @@ func _render_chunk(chunk_coords: Vector2i, data: Dictionary) -> void:
 	for y in range(CHUNK_SIZE):
 		for x in range(CHUNK_SIZE):
 			var world_x: int = world_start.x + x
-			var world_y: int = world_start.y + y
+			var world_y: world_start.y + y
 			var tile_index: int = y * CHUNK_SIZE + x
 			var elev: float = elevation.get(tile_index) if tile_index < elevation.size() else 0.5
 			var moist: float = moisture.get(tile_index) if tile_index < moisture.size() else 0.5
@@ -103,19 +79,6 @@ func _get_tile_id(elevation: float, moisture: float, biome: String) -> int:
 		if biome == "forest" or biome == "temperate_forest":
 			return TILE_FOREST
 		return TILE_GRASS
-
-## Get the color for a tile ID.
-func get_tile_color(tile_id: int) -> Color:
-	match tile_id:
-		TILE_WATER: return Color(0.2, 0.4, 0.8)
-		TILE_SAND: return Color(0.8, 0.7, 0.4)
-		TILE_GRASS: return Color(0.2, 0.6, 0.2)
-		TILE_FOREST: return Color(0.15, 0.45, 0.15)
-		TILE_DIRT: return Color(0.5, 0.4, 0.3)
-		TILE_STONE: return Color(0.5, 0.5, 0.5)
-		TILE_SNOW: return Color(0.9, 0.9, 0.95)
-		TILE_MUD: return Color(0.4, 0.35, 0.25)
-		_: return Color(0.5, 0.5, 0.5)
 
 ## Convert chunk coords to world start position.
 func _chunk_coords_to_world_start(chunk_coords: Vector2i) -> Vector2i:
