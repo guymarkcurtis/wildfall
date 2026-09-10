@@ -24,7 +24,7 @@ var _show_ui: bool = false
 func _ready() -> void:
 	# Initialize game systems
 	_world_seed = _generate_seed()
-	_item_database.initialize()
+	item_database.initialize()
 	_initialize_game()
 
 	# Connect event bus signals
@@ -58,7 +58,7 @@ func _generate_world(seed: int) -> void:
 	_generate_initial_chunks(seed)
 
 	# Spawn resources
-	_resource_spawner.initialize(seed)
+	resource_spawner.initialize(seed)
 	_generate_initial_resources(seed)
 
 ## Generate initial chunks around the player.
@@ -75,7 +75,7 @@ func _generate_initial_resources(seed: int) -> void:
 	for x in range(-3, 4):
 		for y in range(-3, 4):
 			var chunk_coords: String = "%d,%d" % [x, y]
-			var resources: Array[Dictionary] = _resource_spawner.generate_chunk_resources(chunk_coords, seed)
+			var resources: Array[Dictionary] = resource_spawner.generate_chunk_resources(chunk_coords, seed)
 			for res_data in resources:
 				var coords: String = res_data["coords"]
 				var parts: PackedStringArray = coords.split(",")
@@ -189,7 +189,7 @@ func _on_world_seed_set(seed: int) -> void:
 	_world_seed = seed
 	_generate_world(seed)
 	terrain_renderer.clear_all()
-	_resource_spawner.initialize(seed)
+	resource_spawner.initialize(seed)
 	_generate_initial_chunks(seed)
 	_generate_initial_resources(seed)
 
@@ -197,7 +197,7 @@ func _on_seed_changed(seed: int) -> void:
 	_world_seed = seed
 	_generate_world(seed)
 	terrain_renderer.clear_all()
-	_resource_spawner.initialize(seed)
+	resource_spawner.initialize(seed)
 	_generate_initial_chunks(seed)
 	_generate_initial_resources(seed)
 

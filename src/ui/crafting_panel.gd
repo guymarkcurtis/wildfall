@@ -113,7 +113,7 @@ func craft_recipe() -> bool:
 	var result_qty: int = recipe.get("result_quantity", 1)
 	inventory[result_item_id] = inventory.get(result_item_id, 0) + result_qty
 	
-	result_crafted.emit(result_item_id, result_qty)
+	emit_signal("result_crafted", result_item_id, result_qty)
 	_refresh()
 	return true
 
