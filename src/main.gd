@@ -36,6 +36,7 @@ const INITIAL_CHUNK_RADIUS: int = 3
 @onready var building_manager: BuildingManager = $BuildingManager
 @onready var world_modulate: CanvasModulate = $WorldModulate
 @onready var pause_menu: PauseMenu = $PauseMenu
+@onready var performance_overlay: PerformanceOverlay = $PerformanceOverlay
 
 var _world_seed: int = 0
 var _debug_enabled: bool = false
@@ -171,9 +172,13 @@ func _on_chunk_generated(chunk_coords: Vector2i) -> void:
 	var data: Dictionary = chunk_system.get_chunk(chunk_coords)
 	if data.is_empty():
 		return
+	var start_usec := Time.get_ticks_usec()
 	terrain_renderer.update_chunk(chunk_coords, data)
 	_spawn_resources_for_chunk(chunk_coords)
 	_spawn_creatures_for_chunk(chunk_coords)
+	if performance_overlay != null:
+		performance_overlay.record_chunk_load(chunk_coords,
+				float(Time.get_ticks_usec() - start_usec) / 1000.0)
 
 ## A chunk left the viewport: free its resources and clear its terrain.
 func _on_chunk_unloaded(chunk_coords: Vector2i) -> void:
@@ -312,6 +317,9 @@ func _process(delta: float) -> void:
 		hud.set_seed_editing(seed_input.is_editing(), seed_input.get_input_buffer())
 	_update_world_presentation(delta)
 	_update_debug_overlay()
+	if performance_overlay != null:
+		performance_overlay.update_frame(delta, chunk_system.get_loaded_chunk_count(),
+				_resource_nodes.size(), _creature_nodes.size())
 
 	if pause_menu != null and pause_menu.visible:
 		return

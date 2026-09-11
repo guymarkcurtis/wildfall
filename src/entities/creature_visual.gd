@@ -17,6 +17,11 @@ const SPECIES_COLUMNS := {
 	"fish": 3
 }
 
+# Creature instances stream in and out with chunks. Build the two presentation
+# frames once per species/size pair instead of resampling a large source image
+# every time a creature enters view.
+static var _texture_cache: Dictionary = {}
+
 var _sprite: Sprite2D
 var _species: String = "rabbit"
 var _frame: int = 0
@@ -32,12 +37,20 @@ func _ready() -> void:
 
 func configure(species: String, visual_size: float) -> void:
 	_species = species
+	var cache_key := "%s_%.1f" % [_species, visual_size]
+	if _texture_cache.has(cache_key):
+		var frames: Array = _texture_cache[cache_key]
+		_idle_texture = frames[0]
+		_move_texture = frames[1]
+		_apply_texture()
+		return
 	var sheet := ROSTER_SHEET.get_image()
 	var cell_width: int = sheet.get_width() / COLUMNS
 	var cell_height: int = sheet.get_height() / ROWS
 	var column: int = int(SPECIES_COLUMNS.get(_species, 0))
 	_idle_texture = _make_texture(sheet, Rect2i(column * cell_width, 0, cell_width, cell_height), visual_size)
 	_move_texture = _make_texture(sheet, Rect2i(column * cell_width, cell_height, cell_width, cell_height), visual_size)
+	_texture_cache[cache_key] = [_idle_texture, _move_texture]
 	_apply_texture()
 
 func update_animation(motion: Vector2, delta: float) -> void:

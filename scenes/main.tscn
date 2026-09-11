@@ -1,4 +1,4 @@
-[gd_scene load_steps=24 format=3]
+[gd_scene load_steps=25 format=3]
 
 [ext_resource type="Script" path="res://src/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://src/core/game_event_bus.gd" id="2_eventbus"]
@@ -23,6 +23,7 @@
 [ext_resource type="Script" path="res://src/systems/status_effect_system.gd" id="21_status"]
 [ext_resource type="Script" path="res://src/systems/building_manager.gd" id="22_build"]
 [ext_resource type="Script" path="res://src/ui/pause_menu.gd" id="23_pause"]
+[ext_resource type="Script" path="res://src/ui/performance_overlay.gd" id="24_perf"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -85,6 +86,10 @@ script = ExtResource("23_pause")
 [node name="DebugOverlay" type="CanvasLayer" parent="."]
 layer = 10
 script = ExtResource("9_debug")
+
+[node name="PerformanceOverlay" type="CanvasLayer" parent="."]
+layer = 12
+script = ExtResource("24_perf")
 
 [node name="DebugPanel" type="PanelContainer" parent="DebugOverlay"]
 anchors_preset = 0

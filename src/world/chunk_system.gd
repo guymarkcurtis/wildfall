@@ -96,6 +96,10 @@ func get_loaded_chunks() -> Array:
 		result.append(_str_to_vec2i(k))
 	return result
 
+## Cheap count for diagnostics; avoids allocating an array every frame.
+func get_loaded_chunk_count() -> int:
+	return _chunks.size()
+
 ## Check if a chunk is loaded.
 func has_chunk(chunk_coords: Vector2i) -> bool:
 	return _chunks.has(_key(chunk_coords))

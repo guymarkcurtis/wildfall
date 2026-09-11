@@ -17,6 +17,7 @@ var is_highlighted: bool = false
 
 # Visual
 var _sprite: Sprite2D = null
+static var _texture_cache: Dictionary = {}
 
 # Signals
 signal health_changed(current: float, max: float)
@@ -60,8 +61,9 @@ func _setup_visuals() -> void:
 
 ## Get texture for resource type.
 func _get_resource_texture() -> ImageTexture:
+	if _texture_cache.has(resource_type):
+		return _texture_cache[resource_type]
 	var generator: Node = load("res://src/world/tile_set_generator.gd").new()
-	add_child(generator)
 	var texture: ImageTexture = null
 	
 	match resource_type:
@@ -80,7 +82,8 @@ func _get_resource_texture() -> ImageTexture:
 		"gold_ore":
 			texture = generator.call("_create_gold_ore_texture")
 	
-	generator.queue_free()
+	if texture != null:
+		_texture_cache[resource_type] = texture
 	return texture
 
 ## Create a fallback colored sprite.
