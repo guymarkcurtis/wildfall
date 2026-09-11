@@ -167,6 +167,8 @@ func _update_chunk_surface(chunk_coords: Vector2i, tile_ids: PackedInt32Array) -
 		else:
 			add_child(sprite)
 		_chunk_art_sprites[chunk_key] = sprite
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		sprite.scale = Vector2.ONE * (float(TILE_SIZE) / float(TileSetGenerator.MATERIAL_PIXELS_PER_TILE))
 	sprite.texture = texture
 
 ## Add sparse, independently placed accents. They make the ground feel alive

@@ -15,7 +15,7 @@ var _has_target: bool = false
 var _dragging: bool = false
 var _rotation_locked: bool = false
 
-func _unhandled_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if _rotation_locked:
 		return
 	if event.is_action_pressed("rotate_ccw"):

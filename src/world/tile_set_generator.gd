@@ -7,6 +7,9 @@ class_name TileSetGenerator
 extends Node
 
 const TILE_SIZE: int = 32
+# Quiet ground can be composed at low material resolution and smoothly scaled.
+# This keeps chunk streaming light enough to avoid gameplay hitches.
+const MATERIAL_PIXELS_PER_TILE: int = 8
 
 const TERRAIN_ATLAS_PATH := "res://assets/tiles/wildfall-terrain-atlas.png"
 const RESOURCE_ATLAS_PATH := "res://assets/tiles/wildfall-resources-atlas.png"
@@ -61,7 +64,7 @@ func _generate_terrain_tiles(tile_set: TileSet) -> void:
 	# Water is placed in four different TileSet sources so TerrainRenderer can
 	# switch all water cells together without changing the game's tile IDs.
 	for frame in range(WATER_FRAME_SOURCE_IDS.size()):
-		_add_tile(tile_set, get_water_source_id(frame), _create_water_texture(frame))
+		_add_tile(tile_set, get_water_source_id(frame), _create_water_texture(frame), true)
 
 	_add_tile(tile_set, TILE_SAND, _create_terrain_texture(TILE_SAND))
 	_add_tile(tile_set, TILE_GRASS, _create_terrain_texture(TILE_GRASS))
@@ -137,36 +140,38 @@ func get_ground_detail_texture(index: int) -> ImageTexture:
 ## repeating. Props, plants and rocks are rendered later as independent nodes.
 func create_contiguous_chunk_image(world_start: Vector2i, tile_ids: PackedInt32Array,
 		chunk_size: int, water_frame: int) -> Image:
-	var image := Image.create_empty(chunk_size * TILE_SIZE, chunk_size * TILE_SIZE,
+	var image := Image.create_empty(chunk_size * MATERIAL_PIXELS_PER_TILE,
+			chunk_size * MATERIAL_PIXELS_PER_TILE,
 			false, Image.FORMAT_RGBA8)
 	for y in range(image.get_height()):
 		for x in range(image.get_width()):
-			var tile_x: int = x / TILE_SIZE
-			var tile_y: int = y / TILE_SIZE
+			var tile_x: int = x / MATERIAL_PIXELS_PER_TILE
+			var tile_y: int = y / MATERIAL_PIXELS_PER_TILE
 			var tile_index: int = tile_y * chunk_size + tile_x
 			var tile_id: int = tile_ids[tile_index] if tile_index < tile_ids.size() else TILE_GRASS
-			var world_x: int = (world_start.x * TILE_SIZE) + x
-			var world_y: int = (world_start.y * TILE_SIZE) + y
+			var scale: int = TILE_SIZE / MATERIAL_PIXELS_PER_TILE
+			var world_x: int = (world_start.x * TILE_SIZE) + x * scale + scale / 2
+			var world_y: int = (world_start.y * TILE_SIZE) + y * scale + scale / 2
 			var colour: Color = _material_colour(tile_id, world_x, world_y, water_frame)
 			# Feather only the edge between differing materials. This preserves
 			# shorelines and biome shapes without a hard 32px checkerboard seam.
-			var edge_distance: int = min(min(x % TILE_SIZE, TILE_SIZE - 1 - (x % TILE_SIZE)),
-					min(y % TILE_SIZE, TILE_SIZE - 1 - (y % TILE_SIZE)))
-			if edge_distance < 4:
+			var edge_distance: int = min(min(x % MATERIAL_PIXELS_PER_TILE, MATERIAL_PIXELS_PER_TILE - 1 - (x % MATERIAL_PIXELS_PER_TILE)),
+					min(y % MATERIAL_PIXELS_PER_TILE, MATERIAL_PIXELS_PER_TILE - 1 - (y % MATERIAL_PIXELS_PER_TILE)))
+			if edge_distance < 1:
 				var neighbour_id := _nearest_different_neighbour(tile_ids, chunk_size, tile_x, tile_y, x, y, tile_id)
 				if neighbour_id >= 0:
 					var neighbour_colour := _material_colour(neighbour_id, world_x, world_y, water_frame)
-					colour = neighbour_colour.lerp(colour, float(edge_distance + 1) / 5.0)
+					colour = neighbour_colour.lerp(colour, float(edge_distance + 1) / 2.0)
 			image.set_pixel(x, y, colour)
 	return image
 
 func _nearest_different_neighbour(tile_ids: PackedInt32Array, chunk_size: int,
 		tile_x: int, tile_y: int, pixel_x: int, pixel_y: int, tile_id: int) -> int:
 	var candidates: Array[Vector2i] = []
-	if pixel_x % TILE_SIZE < 4: candidates.append(Vector2i(-1, 0))
-	if pixel_x % TILE_SIZE > TILE_SIZE - 5: candidates.append(Vector2i(1, 0))
-	if pixel_y % TILE_SIZE < 4: candidates.append(Vector2i(0, -1))
-	if pixel_y % TILE_SIZE > TILE_SIZE - 5: candidates.append(Vector2i(0, 1))
+	if pixel_x % MATERIAL_PIXELS_PER_TILE < 1: candidates.append(Vector2i(-1, 0))
+	if pixel_x % MATERIAL_PIXELS_PER_TILE > MATERIAL_PIXELS_PER_TILE - 2: candidates.append(Vector2i(1, 0))
+	if pixel_y % MATERIAL_PIXELS_PER_TILE < 1: candidates.append(Vector2i(0, -1))
+	if pixel_y % MATERIAL_PIXELS_PER_TILE > MATERIAL_PIXELS_PER_TILE - 2: candidates.append(Vector2i(0, 1))
 	for direction in candidates:
 		var nx := tile_x + direction.x
 		var ny := tile_y + direction.y
