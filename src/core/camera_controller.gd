@@ -1,4 +1,4 @@
-## Smooth follow camera for the isometric/2D perspective.
+## Smooth follow camera for the orthogonal 2D top-down view.
 class_name CameraController
 extends Camera2D
 

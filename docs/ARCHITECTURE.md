@@ -52,7 +52,8 @@ reference and passes it into the systems it creates.
 
 ### Player
 CharacterBody2D with:
-- WASD movement + Sprint (Shift)
+- Screen-relative WASD movement + Sprint (Shift)
+- Planned: face / aim at the mouse pointer for ranged weapons
 - Health and hunger components
 - Inventory management
 - Position tracking
@@ -78,13 +79,27 @@ Manages chunk lifecycle:
 - 16x16 tile chunks
 
 ### CameraController
-Smooth follow camera:
-- Interpolates toward player position
-- Configurable speed and offset
-- Part of the camera system
+Orthogonal top-down `Camera2D` (not isometric, not 3D):
+- Smooth follow toward the player
+- Configurable look-ahead offset
+- Planned: player-controlled view rotation (45° snaps, free rotate, reset to north-up)
+- Movement stays screen-relative while the view is rotated; mouse aim uses world position of the cursor (`get_global_mouse_position()`), which already accounts for camera rotation
+
+### Presentation / camera
+
+The world is a **2D cartesian grid**: 16×16 square-tile chunks, 32px cells, axis-aligned collision. Graphics are top-down placeholders today.
+
+**Extending into 2.5D later** is cheap if “2.5D” means visual depth on this grid (Y-sort, sprite height, drop shadows, wall occlusion). That does not change world gen, chunk coords, physics, WASD, mouse aim, or view rotation.
+
+These would be large rewrites and are **out of scope**:
+- True isometric (`TileSet` isometric shape, diamond tiles, iso movement/aiming/building)
+- 3D world (`CharacterBody3D` / `Camera3D`) with billboard sprites
+
+Keep the orthogonal 2D simulation. Add art and sort order for a 2.5D look.
 
 ### TerrainRenderer
 TileMapLayer-based rendering:
+- Orthogonal square tiles (32×32), not isometric
 - 8 terrain types with distinct colors
 - Updates chunks as they load
 - Placeholder system for future sprite tiles

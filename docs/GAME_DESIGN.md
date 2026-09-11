@@ -2,7 +2,7 @@
 
 ## Overview
 
-Wildfall is an original persistent open-world 2D/2.5D survival crafting action RPG. The player begins with almost nothing and gradually transforms a dangerous wilderness into a network of camps, settlements, workshops, roads, and advanced facilities.
+Wildfall is an original persistent open-world 2D top-down survival crafting action RPG. The player begins with almost nothing and gradually transforms a dangerous wilderness into a network of camps, settlements, workshops, roads, and advanced facilities.
 
 ## Core Vision
 
@@ -58,7 +58,7 @@ The player's world should gradually develop a history:
 
 ### Combat
 - Action RPG feel with responsive attacks
-- Melee and ranged weapons
+- Melee plus mouse-aimed ranged weapons (face the cursor, fire with LMB)
 - Enemy variety with state-based AI
 - Boss encounters in persistent world
 
@@ -75,19 +75,29 @@ The player's world should gradually develop a history:
 4. **Electrical** — Generators, powered machinery
 5. **Frontier Tech** — Advanced composites, vehicles
 
+## Presentation
+
+**Current and intended camera:** orthogonal **2D top-down**. Square 32px tiles on a `TileMapLayer`, `Camera2D` looking straight down, `CharacterBody2D` movement on a cartesian grid. This is not isometric and not a 3D world.
+
+Depth and “2.5D” later means taller sprites, Y-sort, shadows, and height offsets on this same top-down grid — not a switch to isometric tiles or a 3D camera. See [ARCHITECTURE.md](ARCHITECTURE.md#presentation--camera).
+
 ## Controls
 
-| Key | Action |
-|-----|--------|
-| W/Up | Move up |
-| S/Down | Move down |
-| A/Left | Move left |
-| D/Right | Move right |
-| Shift | Sprint |
-| E | Interact |
-| I | Toggle inventory |
-| F3 | Toggle debug |
-| T | Change world seed |
+Movement is **screen-relative**: W always walks toward the top of the current view, even after the map is rotated. The mouse pointer aims ranged weapons in world space (the character / weapon faces the cursor). View rotation turns the world under the player; it does not change WASD or mouse-aim rules.
+
+| Input | Action | Status |
+|-----|--------|--------|
+| W A S D | Move (screen-relative) | Implemented |
+| Shift | Sprint | Implemented |
+| Mouse pointer | Aim ranged weapons | Planned |
+| Left mouse | Fire / use aimed weapon | Planned |
+| `,` / `.` | Rotate view 45° CCW / CW | Planned |
+| Middle-mouse drag | Free-rotate view | Planned |
+| Home | Reset view to world-north up | Planned |
+| E | Interact / harvest | Implemented |
+| I | Toggle inventory | Implemented |
+| F3 | Toggle debug | Implemented |
+| T | Change world seed | Implemented |
 
 ## Development Phases
 
@@ -126,8 +136,9 @@ The player's world should gradually develop a history:
 
 ## Visual Target
 
-- 2D/2.5D isometric perspective
-- High-quality sprites (eventually)
+- Orthogonal 2D top-down (square tiles, not isometric)
+- Optional player-controlled view rotation around the character
+- High-quality top-down sprites (eventually); tall props may Y-sort for a 2.5D read
 - Dynamic lighting and weather
 - Particle effects
 - Polished UI

@@ -51,7 +51,8 @@ A 30-second headless run of the actual game also completed with 0 errors,
 
 ## CURRENTLY WORKING (all verified by the test run above)
 
-- **Player Movement**: WASD + Sprint (Shift), CharacterBody2D
+- **Presentation**: Orthogonal 2D top-down (square 32px tiles, Camera2D). Not isometric. View rotation and mouse-aim are designed, not implemented yet.
+- **Player Movement**: WASD + Sprint (Shift), CharacterBody2D. Intended to stay screen-relative once view rotation lands.
 - **Camera**: Smooth follow (delta-based lerp) with configurable offset
 - **World Generation**: Deterministic seed-based generation using 3 FastNoiseLite layers
 - **Chunk System**: 16×16 tile chunks, radius-3 (7×7) viewport streaming; reloads are deterministic (B3)
@@ -137,18 +138,26 @@ Exit code = number of failed checks (0 = green). Also run
 `--headless --import` after any script change to refresh the class cache.
 
 Manual:
-1. Open project in Godot 4.6, run the main scene (F5)
-2. WASD to move, Shift+WASD to sprint
+1. Open project in Godot 4.6+ (this machine: 4.7.2), run the main scene (F5)
+2. WASD to move (orthogonal 2D top-down, not isometric), Shift+WASD to sprint
 3. Walk to a tree/rock/ore node and press E to harvest (matching tool doubles damage)
-4. Check inventory (I key) for collected resources
-5. Open crafting (C key) and craft planks → a tool
-6. F3 toggles the debug overlay
-7. T changes the world seed (Enter confirms, Escape cancels) — the whole world regenerates
-8. Verify different biomes look and drop differently (desert → sand, mountain → copper, arctic → tin)
+4. Walk to a creature and press E to hunt (loot drops into inventory)
+5. Check inventory (I key) for collected resources
+6. Open crafting (C key) and craft planks → a tool
+7. F3 toggles the debug overlay
+8. T changes the world seed (Enter confirms, Escape cancels) — the whole world regenerates
+9. Verify different biomes look and drop differently (desert → sand, mountain → copper, arctic → tin)
+
+Local headless:
+```bash
+godot --headless --path . --script tests/test_game.gd
+```
 
 ## IMPORTANT DECISIONS
 
-- Project name is "Wildfall"
+- **Graphics: orthogonal 2D top-down**, square tiles / Camera2D. Not isometric. A later 2.5D look is sprites + Y-sort on this same grid, not an iso or 3D rewrite.
+- **Controls: WASD to move** (screen-relative), **mouse pointer to aim** ranged weapons, **`,` / `.` and middle-mouse drag to rotate the view**, Home to reset north-up. Mouse-aim and view rotation are specified, not implemented yet.
+- Project name is "Wildfall" (renamed from "2D Icarus")
 - HarvestableResource is an Area2D for proximity detection
 - Resource yields are configurable per type and biome
 - Tool multipliers affect damage dealt to resources
