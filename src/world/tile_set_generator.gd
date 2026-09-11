@@ -184,18 +184,45 @@ func _nearest_different_neighbour(tile_ids: PackedInt32Array, chunk_size: int,
 
 func _material_colour(tile_id: int, world_x: int, world_y: int, water_frame: int) -> Color:
 	var base := _base_colour(tile_id)
-	# Several low-amplitude waves create a hand-painted mineral/soil variation
-	# but intentionally never form a visible repeating stamp.
-	var variation := sin(float(world_x) * 0.022 + float(world_y) * 0.013) * 0.028
-	variation += sin(float(world_x) * -0.007 + float(world_y) * 0.019) * 0.018
-	variation += sin(float(world_x + world_y) * 0.051) * 0.009
+	# Continuous value-noise gives each biome a real surface character: broad
+	# soil shifts plus fine mineral grain. It is world-space sampled, so it
+	# never repeats as a tile or accidentally becomes a baked prop layer.
+	var broad: float = _value_noise(world_x, world_y, 96)
+	var grain: float = _value_noise(world_x, world_y, 14)
+	var variation := (broad - 0.5) * 0.095 + (grain - 0.5) * 0.050
+	variation += sin(float(world_x) * 0.022 + float(world_y) * 0.013) * 0.018
 	if tile_id == TILE_WATER:
-		variation += sin(float(world_x) * 0.036 + float(world_y) * 0.018 + water_frame * 1.57) * 0.035
+		variation += sin(float(world_x) * 0.036 + float(world_y) * 0.018 + water_frame * 1.57) * 0.025
+		return Color(
+			clampf(base.r + variation * 0.55, 0.0, 1.0),
+			clampf(base.g + variation * 0.80, 0.0, 1.0),
+			clampf(base.b + variation, 0.0, 1.0), 1.0
+		)
+	var warmth: float = (grain - 0.5) * 0.024
 	return Color(
-		clampf(base.r + variation, 0.0, 1.0),
-		clampf(base.g + variation, 0.0, 1.0),
-		clampf(base.b + variation, 0.0, 1.0), 1.0
+		clampf(base.r + variation + warmth, 0.0, 1.0),
+		clampf(base.g + variation * 0.86, 0.0, 1.0),
+		clampf(base.b + variation * 0.66 - warmth, 0.0, 1.0), 1.0
 	)
+
+func _value_noise(world_x: int, world_y: int, cell_size: int) -> float:
+	var grid_x: int = floori(float(world_x) / float(cell_size))
+	var grid_y: int = floori(float(world_y) / float(cell_size))
+	var tx: float = float(posmod(world_x, cell_size)) / float(cell_size)
+	var ty: float = float(posmod(world_y, cell_size)) / float(cell_size)
+	tx = tx * tx * (3.0 - 2.0 * tx)
+	ty = ty * ty * (3.0 - 2.0 * ty)
+	var top := lerpf(_hash_grid(grid_x, grid_y), _hash_grid(grid_x + 1, grid_y), tx)
+	var bottom := lerpf(_hash_grid(grid_x, grid_y + 1), _hash_grid(grid_x + 1, grid_y + 1), tx)
+	return lerpf(top, bottom, ty)
+
+func _hash_grid(grid_x: int, grid_y: int) -> float:
+	# Integer hashing is cheaper than a random object and stays stable across
+	# chunk loads, including negative coordinates.
+	var value: int = grid_x * 374761393 + grid_y * 668265263
+	value = (value ^ (value >> 13)) * 1274126177
+	value = value ^ (value >> 16)
+	return float(value & 0x7fffffff) / 2147483647.0
 
 func _base_colour(tile_id: int) -> Color:
 	match tile_id:
