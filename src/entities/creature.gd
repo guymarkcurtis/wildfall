@@ -50,7 +50,7 @@ var _loot: Array[Dictionary] = []
 var _loot_table: Array[Dictionary] = []
 
 # Visual
-var _body: Polygon2D = null
+var _visual: CreatureVisual = null
 var _label: Label = null
 var _health_bar: ProgressBar = null
 
@@ -101,17 +101,13 @@ func _ready() -> void:
 	if parent:
 		_player_ref = parent.get_node_or_null("Player")
 
-## Set up the placeholder visual (a colored circle, a name label, and a
-## small health bar) — same placeholder-art style as the resource nodes.
+## Set up the animated creature art, name label, and small health bar.
 func _setup_visuals(def: CreatureDefinition) -> void:
 	var size: float = float(def.custom_data.get("size", 10.0))
-	# Godot 4's Circle2D is an abstract drawing primitive (it cannot be
-	# instantiated), so the placeholder body is a filled Polygon2D that
-	# approximates a circle.
-	_body = Polygon2D.new()
-	_body.polygon = _circle_points(size)
-	_body.color = _get_creature_color()
-	add_child(_body)
+	_visual = CreatureVisual.new()
+	_visual.name = "CreatureVisual"
+	add_child(_visual)
+	_visual.configure(creature_type, size)
 
 	_label = Label.new()
 	_label.text = display_name
@@ -185,8 +181,12 @@ func _physics_process(delta: float) -> void:
 	if player != null:
 		var dist_to_player: float = global_position.distance_to(player.global_position)
 		if dist_to_player <= detection_range:
-			if is_hostile:
+			if is_hostile and not GameSession.is_creative():
 				current_state = State.ATTACK if dist_to_player <= 28.0 else State.CHASE
+			elif GameSession.is_creative():
+				if current_state == State.CHASE or current_state == State.ATTACK or current_state == State.FLEE:
+					current_state = State.PATROL
+					state_timer = 0.0
 			elif current_state != State.FLEE:
 				current_state = State.FLEE
 				state_timer = 0.0
@@ -207,6 +207,9 @@ func _physics_process(delta: float) -> void:
 			_chase_behavior(delta, player)
 		State.ATTACK:
 			_attack_behavior(delta, player)
+
+	if _visual != null:
+		_visual.update_animation(velocity, delta)
 
 ## Stay still for a while, then start a patrol leg.
 func _idle_behavior(_delta: float) -> void:

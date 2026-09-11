@@ -52,8 +52,8 @@ reference and passes it into the systems it creates.
 
 ### Player
 CharacterBody2D with:
-- Screen-relative WASD movement + Sprint (Shift)
-- Faces the mouse pointer; LMB fires bow projectiles (arrows)
+- Mouse-relative WASD: W toward cursor, S away, A/D orbit; Sprint (Shift)
+- Faces the mouse pointer (orientation does not follow movement); LMB fires bow projectiles (arrows)
 - Collides with stone tiles and blocking buildings; water slows movement
 - Health, hunger, and status-effect components
 - Inventory management

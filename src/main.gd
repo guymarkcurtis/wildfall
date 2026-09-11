@@ -35,6 +35,7 @@ const INITIAL_CHUNK_RADIUS: int = 3
 @onready var status_effects: StatusEffectSystem = $StatusEffectSystem
 @onready var building_manager: BuildingManager = $BuildingManager
 @onready var world_modulate: CanvasModulate = $WorldModulate
+@onready var pause_menu: PauseMenu = $PauseMenu
 
 var _world_seed: int = 0
 var _debug_enabled: bool = false
@@ -71,6 +72,10 @@ func _ready() -> void:
 	# SaveSystem needs typed references (the project has no autoloads).
 	save_system.set_player(player)
 	save_system.set_world_generator(world_generator)
+	_register_save_modules()
+	if pause_menu:
+		pause_menu.save_requested.connect(func() -> void: save_game())
+		pause_menu.load_requested.connect(func(path: String) -> void: load_game(path))
 
 	day_night.modulate_node = world_modulate
 	day_night.initialize()
@@ -105,11 +110,16 @@ func _ready() -> void:
 
 	# SeedInput._ready already emitted its own random seed (before the
 	# connections above existed). Push Main's chosen seed so the world is
-	# generated exactly once, for the seed that is displayed.
-	seed_input.set_seed(_world_seed)
+	# generated exactly once, for the seed that is displayed — unless the
+	# title screen asked us to load a save instead.
+	if GameSession.consume_load():
+		if not save_system.load_game(GameSession.load_path):
+			seed_input.set_seed(_world_seed)
+	else:
+		seed_input.set_seed(_world_seed)
 
 	_refresh_ui()
-	print("Main scene ready. Seed: %d" % _world_seed)
+	print("Main scene ready. Seed: %d  Mode: %s" % [_world_seed, GameSession.mode_label()])
 
 ## SeedInput wants the world (re)generated with a new seed.
 func _on_seed_changed(seed: int) -> void:
@@ -303,6 +313,8 @@ func _process(delta: float) -> void:
 	_update_world_presentation(delta)
 	_update_debug_overlay()
 
+	if pause_menu != null and pause_menu.visible:
+		return
 	if Input.is_action_just_pressed("toggle_debug"):
 		_toggle_debug()
 	if Input.is_action_just_pressed("save"):
@@ -326,7 +338,8 @@ func _update_world_presentation(_delta: float) -> void:
 		if building_manager != null and building_manager.build_mode:
 			extra = "   Build: %s  (LMB place, wheel cycle, F demolish, B exit)" % building_manager.selected_item_id
 		hud.set_world_info(day_night.get_time_of_day(), weather_system.get_weather_name(),
-				status_effects.get_effect_names() if status_effects else PackedStringArray(), extra)
+				status_effects.get_effect_names() if status_effects else PackedStringArray(),
+				extra, GameSession.mode_label())
 
 ## Toggle the debug overlays (Main's DebugOverlay + the HUD debug label).
 func _toggle_debug() -> void:
@@ -348,17 +361,22 @@ func _update_debug_overlay() -> void:
 			world_generator.get_noise_values(float(tile_pos.x), float(tile_pos.y)),
 			Engine.get_frames_per_second())
 
-## Save the game to a JSON file (F5).
+## Save the game (F5 / pause Save). Empty path creates a new manual slot.
 func save_game(path: String = "") -> bool:
 	if path == "":
-		path = SaveSystem.SAVE_PATH
-	return save_system.save_game(path)
+		return save_system.save_manual()
+	return save_system.save_game(path, "manual")
 
-## Load the game from a JSON file (F9).
+## Load a save (F9 loads the newest). Empty path picks the most recent file.
 func load_game(path: String = "") -> bool:
 	if path == "":
-		path = SaveSystem.SAVE_PATH
-	return save_system.load_game(path)
+		path = save_system.most_recent_save_path()
+	if path == "":
+		return false
+	var ok: bool = save_system.load_game(path)
+	if ok:
+		_refresh_ui()
+	return ok
 
 ## Refresh the inventory and crafting UI from the player's real components.
 func _refresh_ui() -> void:
@@ -467,12 +485,105 @@ func _on_craft_requested(index: int) -> void:
 		$GameEventBus.recipe_failed.emit("unknown", "invalid_recipe_index")
 		return
 	var def: RecipeDefinition = _recipe_defs[index]
-	var inv_data: Dictionary = player.inventory.get_all_items()
-	if not def.can_craft(inv_data):
-		$GameEventBus.recipe_failed.emit(def.recipe_id, "missing_items")
-		return
-	for item_id in def.required_items:
-		player.inventory.remove_item(item_id, int(def.required_items[item_id]))
+	if not GameSession.is_creative():
+		var inv_data: Dictionary = player.inventory.get_all_items()
+		if not def.can_craft(inv_data):
+			$GameEventBus.recipe_failed.emit(def.recipe_id, "missing_items")
+			return
+		for item_id in def.required_items:
+			player.inventory.remove_item(item_id, int(def.required_items[item_id]))
 	player.inventory.add_item(def.result_item_id, def.result_quantity)
 	$GameEventBus.recipe_crafted.emit(def.recipe_id)
 	_refresh_ui()
+
+func _register_save_modules() -> void:
+	save_system.clear_modules()
+	save_system.register_module("world", _collect_world, _apply_world)
+	save_system.register_module("time", _collect_time, _apply_time)
+	save_system.register_module("weather", _collect_weather, _apply_weather)
+	save_system.register_module("status", _collect_status, _apply_status)
+	save_system.register_module("buildings", _collect_buildings, _apply_buildings)
+	save_system.register_module("player", _collect_player, _apply_player)
+	save_system.register_module("camera", _collect_camera, _apply_camera)
+
+func _collect_world() -> Dictionary:
+	return {"seed": _world_seed, "game_mode": GameSession.game_mode}
+
+func _apply_world(data: Variant) -> void:
+	var world: Dictionary = data if typeof(data) == TYPE_DICTIONARY else {}
+	var seed: int = int(world.get("seed", _world_seed))
+	seed_input.set_seed(seed)
+
+func _collect_time() -> Dictionary:
+	return day_night.serialize() if day_night else {}
+
+func _apply_time(data: Variant) -> void:
+	if day_night and typeof(data) == TYPE_DICTIONARY:
+		day_night.deserialize(data)
+
+func _collect_weather() -> Dictionary:
+	return weather_system.serialize() if weather_system else {}
+
+func _apply_weather(data: Variant) -> void:
+	if weather_system and typeof(data) == TYPE_DICTIONARY:
+		weather_system.deserialize(data)
+
+func _collect_status() -> Dictionary:
+	return status_effects.serialize_all() if status_effects else {}
+
+func _apply_status(data: Variant) -> void:
+	if status_effects and typeof(data) == TYPE_DICTIONARY:
+		status_effects.deserialize_all(data)
+
+func _collect_buildings() -> Array:
+	return building_manager.serialize() if building_manager else []
+
+func _apply_buildings(data: Variant) -> void:
+	if building_manager:
+		building_manager.deserialize(data)
+
+func _collect_player() -> Dictionary:
+	var payload: Dictionary = {
+		"position": {"x": 0.0, "y": 0.0},
+		"health": {},
+		"hunger": {},
+		"inventory": {},
+		"equipped_tool": "hand"
+	}
+	if player == null:
+		return payload
+	var pos: Vector2 = player.get_world_position()
+	payload["position"] = {"x": pos.x, "y": pos.y}
+	if player.health_component:
+		payload["health"] = player.health_component.serialize()
+	if player.hunger_component:
+		payload["hunger"] = player.hunger_component.serialize()
+	if player.inventory:
+		payload["inventory"] = player.inventory.serialize()
+	payload["equipped_tool"] = player.equipped_tool
+	return payload
+
+func _apply_player(data: Variant) -> void:
+	if player == null or typeof(data) != TYPE_DICTIONARY:
+		return
+	var player_data: Dictionary = data
+	var pos: Dictionary = player_data.get("position", {"x": 0.0, "y": 0.0})
+	player.global_position = Vector2(float(pos.get("x", 0.0)), float(pos.get("y", 0.0)))
+	if player.health_component != null and player_data.has("health"):
+		player.health_component.deserialize(player_data["health"])
+	if player.hunger_component != null and player_data.has("hunger"):
+		player.hunger_component.deserialize(player_data["hunger"])
+	if player.inventory != null and player_data.has("inventory"):
+		player.inventory.deserialize(player_data["inventory"])
+	if player_data.has("equipped_tool"):
+		player.equipped_tool = str(player_data.get("equipped_tool", "hand"))
+
+func _collect_camera() -> Dictionary:
+	if camera_controller == null:
+		return {"rotation": 0.0}
+	return {"rotation": camera_controller.rotation}
+
+func _apply_camera(data: Variant) -> void:
+	if camera_controller == null or typeof(data) != TYPE_DICTIONARY:
+		return
+	camera_controller.rotation = float(data.get("rotation", 0.0))

@@ -39,7 +39,7 @@ it (event bus → Main, same wiring as the I-key inventory). The harness grew
 
 ## TEST RESULTS (2026-09-10, updated after the post-push gameplay fixes)
 
-Automated headless run of the real main scene — **76/76 checks passed,
+Automated headless run of the real main scene — **96/96 checks passed,
 0 script errors, exit code 0**:
 
 | Test | Status |
@@ -68,7 +68,7 @@ A 30-second headless run of the actual game also completed with 0 errors,
 ## CURRENTLY WORKING (all verified by the test run above)
 
 - **Presentation**: Orthogonal 2D top-down (square 32px tiles, Camera2D). Not isometric.
-- **Player Movement**: Screen-relative WASD + Sprint (Shift), CharacterBody2D. Water slows; stone cliffs collide.
+- **Player Movement**: Mouse-relative WASD (W toward cursor, S away, A/D orbit) + Sprint. Faces the pointer. Water slows; stone cliffs collide.
 - **Camera**: Smooth follow; `,`/`.` snap-rotate, middle-mouse free rotate, Home resets north-up.
 - **Ranged combat**: Face the cursor; LMB fires the wooden bow (consumes arrows).
 - **Buildings**: B toggles place mode, LMB places an owned building item, F demolishes.
@@ -87,7 +87,8 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - **Inventory System**: Stack-based with weight limits, `inventory_full` signal
 - **Crafting System**: 40 recipes; Phase 3 closed every obtainability gap, so the panel shows all 40 (the obtainability filter remains as a safety net for future recipes)
 - **Creature System (Phase 3)**: per-chunk deterministic spawning (7 creature types, biome-gated; fish only in water), IDLE/PATROL/FLEE AI, E-to-kill with per-creature loot tables (meat, fish, hide, feather, bone)
-- **Save System**: JSON (user://savegame.json) with version tracking; position/health/hunger/inventory/seed round-trip verified
+- **Title screen**: New Game (Survival / Creative, locked per world), Load Game, Options, Quit. Esc pause in-game.
+- **Save System**: Versioned module JSON under `user://saves/` — unlimited timestamped manual saves plus rotating autosaves (last 2). Load Game lists both. Options toggles autosave.
 
 ## ARCHITECTURE
 
@@ -99,7 +100,7 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - `src/systems/` — SaveSystem, ItemDatabase, CreatureSpawner (Phase 3)
 - `resources/` — ItemDefinition, RecipeDefinition, BiomeDefinition, CreatureDefinition (wired); TechnologyDefinition, BuildingDefinition (future phases)
 - `scenes/` — `main.tscn` is the only wired scene (see dead-code inventory in ARCHITECTURE.md)
-- `tests/` — `test_game.gd` headless harness (76 checks)
+- `tests/` — `test_game.gd` headless harness (96 checks)
 - `docs/` — Project documentation
 
 ## RECENTLY COMPLETED (2026-09-10 review)
@@ -166,7 +167,7 @@ Exit code = number of failed checks (0 = green). Also run
 
 Manual:
 1. Open project in Godot 4.6+ (this machine: 4.7.2), run the main scene (F5)
-2. WASD to move (orthogonal 2D top-down, not isometric), Shift+WASD to sprint
+2. WASD is mouse-relative (W toward cursor, S away, A/D strafe), Shift to sprint
 3. Walk to a tree/rock/ore node and press E to harvest (matching tool doubles damage)
 4. Walk to a creature and press E to hunt (loot drops into inventory)
 5. Check inventory (I key) for collected resources
@@ -183,7 +184,7 @@ godot --headless --path . --script tests/test_game.gd
 ## IMPORTANT DECISIONS
 
 - **Graphics: orthogonal 2D top-down**, square tiles / Camera2D. Not isometric. A later 2.5D look is sprites + Y-sort on this same grid, not an iso or 3D rewrite.
-- **Controls: WASD to move** (screen-relative), **mouse pointer to aim** ranged weapons, **`,` / `.` and middle-mouse drag to rotate the view**, Home to reset north-up.
+- **Controls: WASD is mouse-relative** (W toward pointer, S back, A/D orbit), **mouse aims** ranged weapons, **`,` / `.` and middle-mouse drag rotate the view**, Home resets north-up.
 - Project name is "Wildfall" (renamed from "2D Icarus")
 - HarvestableResource is an Area2D for proximity detection
 - Resource yields are configurable per type and biome

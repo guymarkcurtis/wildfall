@@ -17,7 +17,7 @@ func _ready() -> void:
 	_info_label = Label.new()
 	_info_label.name = "WorldInfoLabel"
 	_info_label.position = Vector2(8.0, 62.0)
-	_info_label.size = Vector2(520.0, 40.0)
+	_info_label.size = Vector2(720.0, 40.0)
 	$Overlay.add_child(_info_label)
 
 ## Set the player reference for HUD updates.
@@ -82,8 +82,9 @@ func set_hud_visible(visible: bool) -> void:
 	$Overlay.visible = visible
 
 ## Time, weather, statuses, and current tool/build hint.
-func set_world_info(time_text: String, weather_text: String, statuses: PackedStringArray, extra: String = "") -> void:
+func set_world_info(time_text: String, weather_text: String, statuses: PackedStringArray, extra: String = "", mode_text: String = "") -> void:
 	if _info_label == null:
 		return
 	var status_text: String = ", ".join(statuses) if statuses.size() > 0 else "none"
-	_info_label.text = "%s   %s   Effects: %s%s" % [time_text, weather_text, status_text, extra]
+	var mode_bit: String = ("   " + mode_text) if mode_text != "" else ""
+	_info_label.text = "%s   %s%s   Effects: %s%s" % [time_text, weather_text, mode_bit, status_text, extra]

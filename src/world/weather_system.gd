@@ -37,6 +37,22 @@ func initialize() -> void:
 	set_weather(WeatherType.CLEAR, 0.0, 40.0)
 	next_weather_change = 40.0
 
+func serialize() -> Dictionary:
+	return {
+		"weather": int(current_weather),
+		"intensity": weather_intensity,
+		"duration": weather_duration,
+		"next_change": next_weather_change
+	}
+
+func deserialize(data: Dictionary) -> void:
+	if data.is_empty():
+		return
+	var weather_id: int = int(data.get("weather", 0))
+	weather_id = clampi(weather_id, 0, int(WeatherType.SANDSTORM))
+	set_weather(weather_id as WeatherType, float(data.get("intensity", 0.0)), float(data.get("duration", 40.0)))
+	next_weather_change = float(data.get("next_change", 40.0))
+
 func _process(delta: float) -> void:
 	weather_duration -= delta
 	next_weather_change -= delta

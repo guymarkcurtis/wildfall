@@ -21,6 +21,13 @@ Constant tension between:
 
 **Persistent Open World** — The player creates or selects a procedural world that remains persistent across the entire playthrough. All exploration, crafting, building, combat, missions, and progression occur within this same world.
 
+Game mode is chosen on **New Game** and is locked for that world:
+
+| Mode | Rules |
+|---|---|
+| Survival | Crafting needs ingredients. Hostile wildlife hunts the player. |
+| Creative | Crafting is free (no ingredients). Wildlife is peaceful. The player can still die. |
+
 ## World Philosophy
 
 The player's world should gradually develop a history:
@@ -83,11 +90,13 @@ Depth and “2.5D” later means taller sprites, Y-sort, shadows, and height off
 
 ## Controls
 
-Movement is **screen-relative**: W always walks toward the top of the current view, even after the map is rotated. The mouse pointer aims ranged weapons in world space (the character / weapon faces the cursor). View rotation turns the world under the player; it does not change WASD or mouse-aim rules.
+Movement is **mouse-relative**. The character sprite **always faces the cursor**. **W** walks toward the pointer, **S** walks away without turning the sprite, **A** / **D** strafe in a circle around the pointer. View rotation does not change this.
 
 | Input | Action | Status |
 |-----|--------|--------|
-| W A S D | Move (screen-relative) | Implemented |
+| W | Move toward the mouse pointer | Implemented |
+| S | Move away from the pointer (no turn) | Implemented |
+| A / D | Strafe / orbit around the pointer | Implemented |
 | Shift | Sprint | Implemented |
 | Mouse pointer | Aim ranged weapons | Implemented |
 | Left mouse | Fire bow (consumes arrows) | Implemented |
@@ -102,6 +111,7 @@ Movement is **screen-relative**: W always walks toward the top of the current vi
 | C | Toggle crafting | Implemented |
 | F3 | Toggle debug | Implemented |
 | T | Change world seed | Implemented |
+| Esc | Pause menu (save / load / title / quit) | Implemented |
 
 ## Development Phases
 

@@ -4,7 +4,7 @@ extends Control
 
 # Must be >= the recipe database size: smaller caps silently make recipes
 # unreachable in the panel (there is no scroll view on the list).
-const MAX_RECIPES: int = 40
+const MAX_RECIPES: int = 64
 
 @onready var recipe_list: VBoxContainer = $MarginContainer/VBox/RecipeList
 @onready var recipe_template: Control = $MarginContainer/VBox/RecipeList/RecipeItem
@@ -71,6 +71,8 @@ func _refresh() -> void:
 
 ## Check if recipe can be crafted.
 func _can_craft(recipe: Dictionary) -> bool:
+	if GameSession.is_creative():
+		return true
 	var required: Dictionary = recipe.get("required_items", {})
 	for item_id in required:
 		var needed: int = required[item_id]

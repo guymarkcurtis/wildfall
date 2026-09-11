@@ -76,7 +76,8 @@ func _process(_delta: float) -> bool:
 				_check(true, "Second C press closes the crafting panel again")
 				Input.action_release("toggle_crafting")
 				_walk_start = _main.get_node("Player").global_position
-				Input.action_press("move_right")
+				(_main.get_node("Player") as Player).set_aim_locked(Vector2.RIGHT)
+				Input.action_press("move_up")
 				_phase = 3
 				_phase_frame = _frames
 			elif _frames > _phase_frame + 20:
@@ -87,7 +88,8 @@ func _process(_delta: float) -> bool:
 			var pos: Vector2 = _main.get_node("Player").global_position
 			if pos.x > _walk_start.x + 1050.0 or _frames > _phase_frame + 3600:
 				_run_walk_checks(pos)
-				Input.action_release("move_right")
+				Input.action_release("move_up")
+				(_main.get_node("Player") as Player).clear_aim_lock()
 				# Free a couple of frames later: queued frees flush at the
 				# end of the frame, so exiting immediately would report
 				# leaked instances.
@@ -131,6 +133,7 @@ func _check(condition: bool, label: String) -> void:
 		print("[FAIL] ", label)
 
 func _run_checks() -> void:
+	GameSession.set_game_mode(GameSession.MODE_SURVIVAL)
 	var main: Node = _main
 	var world_gen: Node = main.get_node_or_null("WorldGenerator")
 	var chunk_system: Node = main.get_node_or_null("ChunkSystem")
@@ -265,12 +268,21 @@ func _run_checks() -> void:
 	var player_ent: Player = player as Player
 	camera.rotate_view(PI * 0.5)
 	_check(abs(camera.rotation - PI * 0.5) < 0.01, "Camera rotate_view applies radians")
-	Input.action_press("move_up")
-	var screen_move: Vector2 = player_ent.get_screen_move_vector()
-	Input.action_release("move_up")
-	_check(screen_move.x > 0.5, "Screen-relative WASD: W with 90-degree camera is world +X (%s)" % str(screen_move))
 	camera.reset_view()
 	_check(is_zero_approx(camera.rotation), "reset_view returns north-up")
+	player_ent.set_aim_locked(Vector2.RIGHT)
+	Input.action_press("move_up")
+	var toward: Vector2 = player_ent.get_move_vector()
+	Input.action_release("move_up")
+	_check(toward.x > 0.5, "W moves toward the aim/mouse (%s)" % str(toward))
+	Input.action_press("move_down")
+	var away: Vector2 = player_ent.get_move_vector()
+	Input.action_release("move_down")
+	_check(away.x < -0.5, "S moves away from the aim/mouse (%s)" % str(away))
+	Input.action_press("move_right")
+	var orbit: Vector2 = player_ent.get_move_vector()
+	Input.action_release("move_right")
+	_check(orbit.y > 0.5, "D strafes around the pointer (%s)" % str(orbit))
 	_check(_player_has_shape(player_ent), "Player has a collision shape for terrain")
 	var tileset: TileSet = (terrain_renderer as TerrainRenderer).tile_set
 	_check(tileset != null and tileset.get_physics_layers_count() > 0,
@@ -312,6 +324,96 @@ func _run_checks() -> void:
 		buildings.demolish_at(Vector2i(3, 3))
 	_check(item_database.has_item("wooden_bow"), "Wooden bow exists for ranged combat")
 	_check(item_database.has_item("arrow"), "Arrows exist for ranged combat")
+
+	# --- 11. Title screen + versioned saves ----------------------------------
+	var title: Node = load("res://scenes/title.tscn").instantiate()
+	root.add_child(title)
+	_check(title != null, "Title scene instantiates")
+	var title_buttons: PackedStringArray = PackedStringArray()
+	_collect_button_labels(title, title_buttons)
+	_check("New Game" in title_buttons, "Title has New Game")
+	_check("Load Game" in title_buttons, "Title has Load Game")
+	_check("Options" in title_buttons, "Title has Options placeholder")
+	_check("Quit Game" in title_buttons, "Title has Quit Game")
+	(title as TitleScreen)._on_new_game()
+	var mode_buttons: PackedStringArray = PackedStringArray()
+	_collect_button_labels(title, mode_buttons)
+	_check("Survival" in mode_buttons, "New Game offers Survival mode")
+	_check("Creative" in mode_buttons, "New Game offers Creative mode")
+	title.queue_free()
+	var ss: SaveSystem = main.get_node("SaveSystem") as SaveSystem
+	_check(SaveSystem.SAVE_VERSION >= 2, "Save format is versioned (v2+)")
+	var v1: Dictionary = {
+		"version": 1,
+		"player": {"position": {"x": 9.0, "y": 4.0}},
+		"world": {"seed": 77}
+	}
+	var migrated: Dictionary = ss.migrate(v1)
+	_check(int(migrated.get("version", 0)) == SaveSystem.SAVE_VERSION, "v1 saves migrate to current version")
+	var modules: Dictionary = migrated.get("modules", {})
+	_check(modules.has("player") and modules.has("world"), "Migrated save has required modules")
+	_check(int(modules.get("world", {}).get("seed", 0)) == 77, "Migrated world seed is preserved")
+	GameSession.set_game_mode(GameSession.MODE_CREATIVE)
+	_check(GameSession.is_creative(), "Creative mode can be selected")
+	var plank_idx: int = -1
+	var defs: Array = main.get("_recipe_defs")
+	for i in range(defs.size()):
+		if str(defs[i].recipe_id) == "plank":
+			plank_idx = i
+			break
+	var wood_before: int = player_ent.inventory.get_item_quantity("wood")
+	var plank_before: int = player_ent.inventory.get_item_quantity("plank")
+	main.call("_on_craft_requested", plank_idx)
+	_check(player_ent.inventory.get_item_quantity("plank") > plank_before, "Creative mode crafts without ingredients")
+	_check(player_ent.inventory.get_item_quantity("wood") == wood_before, "Creative mode does not consume materials")
+	ss.save_manual()
+	var creative_seen: bool = false
+	for entry in SaveSystem.list_save_entries():
+		if str(entry.get("game_mode", "")) == GameSession.MODE_CREATIVE:
+			creative_seen = true
+			break
+	_check(creative_seen, "Save list records Creative mode")
+	GameSession.set_game_mode(GameSession.MODE_SURVIVAL)
+	_check(GameSession.is_survival(), "Survival is the default locked mode")
+	_check(ss.has_any_save(), "A save exists after save_game()")
+	var before_manual: int = 0
+	var before_auto: int = 0
+	for entry in SaveSystem.list_save_entries():
+		if str(entry.get("kind", "")) == "autosave":
+			before_auto += 1
+		else:
+			before_manual += 1
+	_check(ss.save_manual(), "save_manual() creates another slot")
+	_check(ss.save_manual(), "save_manual() can create multiple slots")
+	var after_manual: int = 0
+	for entry in SaveSystem.list_save_entries():
+		if str(entry.get("kind", "")) != "autosave":
+			after_manual += 1
+	_check(after_manual >= before_manual + 2, "Multiple manual saves are kept (%d)" % after_manual)
+	_check(ss.save_autosave(), "save_autosave() writes an autosave")
+	_check(ss.save_autosave(), "save_autosave() can rotate")
+	_check(ss.save_autosave(), "save_autosave() third write")
+	var autos: int = 0
+	var kinds_ok: bool = false
+	for entry in SaveSystem.list_save_entries():
+		if str(entry.get("kind", "")) == "autosave":
+			autos += 1
+		else:
+			kinds_ok = true
+	_check(autos <= SaveSystem.AUTOSAVE_KEEP, "Only the last %d autosaves are kept (%d found)" % [SaveSystem.AUTOSAVE_KEEP, autos])
+	_check(kinds_ok and autos >= 1, "Load list includes both manual and autosave files")
+	var prev_auto: bool = SaveSystem.is_autosave_enabled()
+	SaveSystem.set_autosave_enabled(false)
+	_check(SaveSystem.is_autosave_enabled() == false, "Options can disable autosave")
+	SaveSystem.set_autosave_enabled(true)
+	_check(SaveSystem.is_autosave_enabled() == true, "Options can enable autosave")
+	SaveSystem.set_autosave_enabled(prev_auto)
+
+func _collect_button_labels(node: Node, into: PackedStringArray) -> void:
+	if node is Button:
+		into.append((node as Button).text)
+	for child in node.get_children():
+		_collect_button_labels(child, into)
 
 func _player_has_shape(player: Node) -> bool:
 	for child in player.get_children():

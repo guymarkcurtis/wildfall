@@ -147,6 +147,47 @@ func demolish_at(tile: Vector2i) -> bool:
 func get_building_count() -> int:
 	return buildings.size()
 
+func serialize() -> Array:
+	var out: Array = []
+	for tile in buildings:
+		var building: Building = buildings[tile]
+		if not is_instance_valid(building):
+			continue
+		out.append({
+			"item_id": building.building_id,
+			"x": int(tile.x),
+			"y": int(tile.y),
+			"health": building.health
+		})
+	return out
+
+func deserialize(data: Variant) -> void:
+	clear_all()
+	if typeof(data) != TYPE_ARRAY:
+		return
+	for entry in data:
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		var item_id: String = str(entry.get("item_id", ""))
+		var tile := Vector2i(int(entry.get("x", 0)), int(entry.get("y", 0)))
+		restore_building(item_id, tile, int(entry.get("health", 50)))
+
+## Spawn a building from a save without consuming inventory.
+func restore_building(item_id: String, tile: Vector2i, health: int = 50) -> bool:
+	if item_id == "" or buildings.has(tile):
+		return false
+	var display: String = item_id
+	if item_database != null and item_database.has_item(item_id):
+		display = item_database.get_item_display_name(item_id)
+	var building := Building.new()
+	building.setup(item_id, display, tile, health)
+	building.health = health
+	building.building_destroyed.connect(_on_building_destroyed.bind(building))
+	add_child(building)
+	buildings[tile] = building
+	building_placed.emit(item_id, tile)
+	return true
+
 func clear_all() -> void:
 	for tile in buildings.keys():
 		var building: Building = buildings[tile]

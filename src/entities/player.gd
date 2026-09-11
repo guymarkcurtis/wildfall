@@ -18,8 +18,11 @@ var hunger_component: HungerComponent = null
 
 # State
 @export var starting_inventory: Array[Dictionary] = []
+@export_enum("male", "female") var character_gender: String = "female"
+@export_enum("base", "storm") var character_outfit: String = "base"
 var equipped_tool: String = "hand"
 var nearby_resources: Array = []
+var character_visual: CharacterVisual = null
 
 # Event bus (GameEventBus is a sibling of the player under Main)
 var event_bus: Node = null
@@ -29,6 +32,7 @@ var item_database: ItemDatabase = null
 var status_effects: StatusEffectSystem = null
 
 var _aim_dir: Vector2 = Vector2.RIGHT
+var _aim_locked: bool = false
 var _fire_cooldown: float = 0.0
 var _facing: Polygon2D = null
 
@@ -48,6 +52,7 @@ func _ready() -> void:
 	_init_components()
 	_setup_collision()
 	_setup_facing()
+	_setup_character_visual()
 	_spawn_at(Vector2(0, 0))
 	_populate_initial_inventory()
 
@@ -81,7 +86,7 @@ func _physics_process(delta: float) -> void:
 	_fire_cooldown = maxf(0.0, _fire_cooldown - delta)
 	_update_aim()
 
-	var direction: Vector2 = get_screen_move_vector()
+	var direction: Vector2 = get_move_vector()
 	var speed: float = MOVE_SPEED
 	if Input.is_action_pressed("sprint") and direction != Vector2.ZERO:
 		speed = SPRINT_SPEED
@@ -90,6 +95,8 @@ func _physics_process(delta: float) -> void:
 		direction = direction.normalized()
 	velocity = direction * speed
 	move_and_slide()
+	if character_visual != null:
+		character_visual.update_animation(velocity, delta, _aim_dir)
 	position_changed.emit(global_position)
 
 	if not _ui_blocks_world_input():
@@ -109,26 +116,35 @@ func _physics_process(delta: float) -> void:
 		if event_bus:
 			event_bus.toggle_crafting_ui.emit()
 
-## WASD in screen space, rotated into the world by the camera.
-func get_screen_move_vector() -> Vector2:
+## Mouse-relative move: W toward the pointer, S away, A/D orbit around it.
+## Facing stays on the cursor; movement never turns the character.
+func get_move_vector() -> Vector2:
+	var forward: Vector2 = _aim_dir
+	if forward == Vector2.ZERO:
+		forward = Vector2.RIGHT
+	var right: Vector2 = forward.rotated(PI * 0.5)
 	var direction: Vector2 = Vector2.ZERO
 	if Input.is_action_pressed("move_up"):
-		direction.y -= 1
+		direction += forward
 	if Input.is_action_pressed("move_down"):
-		direction.y += 1
-	if Input.is_action_pressed("move_left"):
-		direction.x -= 1
+		direction -= forward
 	if Input.is_action_pressed("move_right"):
-		direction.x += 1
-	if direction == Vector2.ZERO:
-		return direction
-	var camera := _get_camera()
-	if camera != null:
-		direction = direction.rotated(camera.rotation)
+		direction += right
+	if Input.is_action_pressed("move_left"):
+		direction -= right
 	return direction
 
 func get_aim_direction() -> Vector2:
 	return _aim_dir
+
+## Used by the headless harness so a walk test can keep a stable aim.
+func set_aim_locked(dir: Vector2) -> void:
+	_aim_locked = true
+	if dir != Vector2.ZERO:
+		_aim_dir = dir.normalized()
+
+func clear_aim_lock() -> void:
+	_aim_locked = false
 
 ## Update hunger over time.
 func _process(delta: float) -> void:
@@ -278,13 +294,25 @@ func _setup_facing() -> void:
 		Vector2(14.0, 0.0), Vector2(-8.0, -7.0), Vector2(-8.0, 7.0)
 	])
 	_facing.color = Color(0.95, 0.85, 0.35)
+	_facing.visible = false
 	add_child(_facing)
 
+func _setup_character_visual() -> void:
+	character_visual = CharacterVisual.new()
+	character_visual.name = "CharacterVisual"
+	add_child(character_visual)
+	character_visual.set_appearance(character_gender, character_outfit)
+
+func set_character_outfit(outfit: String) -> void:
+	character_outfit = outfit
+	if character_visual != null:
+		character_visual.set_outfit(outfit)
+
 func _update_aim() -> void:
-	var mouse: Vector2 = get_global_mouse_position()
-	var to_mouse: Vector2 = mouse - global_position
-	if to_mouse.length() > 1.0:
-		_aim_dir = to_mouse.normalized()
+	if not _aim_locked:
+		var to_mouse: Vector2 = get_global_mouse_position() - global_position
+		if to_mouse.length() > 1.0:
+			_aim_dir = to_mouse.normalized()
 	if _facing:
 		_facing.rotation = _aim_dir.angle()
 
@@ -347,9 +375,3 @@ func _ui_blocks_world_input() -> bool:
 	if craft_panel != null and craft_panel.visible:
 		return true
 	return false
-
-func _get_camera() -> Camera2D:
-	var parent := get_parent()
-	if parent == null:
-		return null
-	return parent.get_node_or_null("CameraController") as Camera2D

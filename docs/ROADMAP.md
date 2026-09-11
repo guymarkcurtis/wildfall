@@ -28,7 +28,7 @@
 - [x] Player collision with terrain (stone cliffs solid; water slows)
 - [x] Mouse-aimed ranged combat (face cursor, LMB fires bow/arrows)
 - [x] View rotation while moving (`,` / `.` 45° snaps, middle-mouse free rotate, Home reset)
-- [x] Screen-relative WASD under a rotated camera
+- [x] Mouse-relative WASD (W toward pointer, S away, A/D orbit)
 - [x] Creature AI (pathfinding, aggression / chase-attack for wolf, boar, polar bear)
 - [x] Building placement and destruction (B to build, LMB place, F demolish)
 - [x] Weather system
