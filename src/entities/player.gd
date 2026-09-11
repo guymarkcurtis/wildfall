@@ -79,6 +79,8 @@ func _init_components() -> void:
 	health_component.health_changed.connect(_on_health_changed)
 	hunger_component.hunger_changed.connect(_on_hunger_changed)
 	inventory.inventory_changed.connect(_on_inventory_changed)
+	inventory.durability_changed.connect(_on_tool_durability_changed)
+	inventory.tool_broken.connect(_on_tool_broken)
 	health_component.died.connect(_on_died)
 
 ## Spawn player at world position.
@@ -124,6 +126,9 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("toggle_crafting"):
 		if event_bus:
 			event_bus.toggle_crafting_ui.emit()
+	if Input.is_action_just_pressed("toggle_missions"):
+		if event_bus:
+			event_bus.toggle_missions_ui.emit()
 
 ## Mouse-relative move: W toward the pointer, S away, A/D orbit around it.
 ## Facing stays on the cursor; movement never turns the character.
@@ -195,6 +200,7 @@ func _handle_interaction() -> void:
 	# Yields are granted by Main through the resource's resource_destroyed
 	# signal; here we only report the interaction for HUD/audio purposes.
 	closest.damage(damage_amount, equipped_tool)
+	_consume_tool_durability()
 	resource_interacted.emit(resource_type, "", 0)
 
 ## Get nearby harvestable resources (live HarvestableResource nodes),
@@ -239,6 +245,7 @@ func _attack_creature(creature: Creature) -> void:
 	if event_bus:
 		event_bus.entity_hit.emit(creature.creature_type, damage_amount)
 	creature.take_damage(damage_amount)
+	_consume_tool_durability()
 
 ## Select the item assigned to the numbered quick-bar slot. Tools and weapons
 ## become the equipped item; other selected items remain ready for their game
@@ -330,6 +337,30 @@ func _on_inventory_changed() -> void:
 	if event_bus:
 		event_bus.inventory_changed.emit()
 
+## A carried tool's durability changed — relay to the bus (HUD toasts,
+## mission panel refresh, ...).
+func _on_tool_durability_changed(item_id: String, current: int, max: int) -> void:
+	if event_bus:
+		event_bus.durability_changed.emit(item_id, current, max)
+
+## A tool just broke. If it was the equipped tool, fall back to bare hands
+## immediately so the player does not keep 'wielding' a tool they no
+## longer carry. (The empty hotbar slot itself is normalised by
+## _on_inventory_changed, since a broken tool's slot is removed.)
+func _on_tool_broken(item_id: String) -> void:
+	if equipped_tool == item_id:
+		equipped_tool = "hand"
+		tool_changed.emit(equipped_tool)
+	if event_bus:
+		event_bus.tool_broken.emit(item_id)
+
+## One durability point per tool use: a swing that actually hits a
+## resource or creature, or a bow shot fired. The inventory handles the
+## decrement, breakage (slot removed, tool_broken signal) and UI events.
+func _consume_tool_durability() -> void:
+	if inventory != null and equipped_tool != "" and equipped_tool != "hand":
+		inventory.damage_tool(equipped_tool, 1)
+
 func _on_died() -> void:
 	if event_bus:
 		event_bus.player_died.emit()
@@ -415,6 +446,7 @@ func _fire_ranged() -> void:
 	var bolt := Projectile.new()
 	get_parent().add_child(bolt)
 	bolt.setup(global_position + _aim_dir * 16.0, _aim_dir, damage)
+	_consume_tool_durability()
 	if event_bus:
 		event_bus.projectile_fired.emit(global_position, _aim_dir)
 
@@ -450,6 +482,9 @@ func _ui_blocks_world_input() -> bool:
 		return true
 	var tech_panel: Node = parent.get_node_or_null("HUD/TechnologyPanel")
 	if tech_panel != null and tech_panel.visible:
+		return true
+	var mission_panel: Node = parent.get_node_or_null("HUD/MissionPanel")
+	if mission_panel != null and mission_panel.visible:
 		return true
 	var hovered := get_viewport().gui_get_hovered_control()
 	if hovered != null and hovered.mouse_filter != Control.MOUSE_FILTER_IGNORE:

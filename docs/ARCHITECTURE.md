@@ -56,8 +56,12 @@ CharacterBody2D with:
 - Faces the mouse pointer (orientation does not follow movement); LMB fires bow projectiles (arrows)
 - Rocky ground is walkable; water retains terrain collision and blocking buildings collide
 - Health, hunger, and status-effect components
-- Inventory management
+- Inventory management (9-slot quick bar; durability lives in the
+  inventory component — see docs/TOOL_SYSTEM.md)
 - Position tracking
+- E interacts (creatures take harvest priority), C / U / B / M toggle
+  the inventory / research / build palette / mission journal, which the
+  player relays on the bus
 
 ### WorldGenerator
 Handles procedural generation:
@@ -150,6 +154,23 @@ and placement-failure feedback; it is wired under the HUD.
 overlay and can apply wet/cold statuses. `StatusEffectSystem` ticks
 poison/heal/slow on the player.
 
+### Missions (Phase 4 — wired)
+- MissionManager (plain node in main.tscn, last child): code-defined
+  catalog of 7 missions (4-chapter main chain + 3 sides), all runtime
+  state (available / in-progress / completed lists). Resolves its peers
+  (bus, item database, player, technology system) in `_ready` and wires
+  live gameplay signals into progress counters. `start_new_world()`
+  auto-accepts the first main mission; saves restore per-mission
+  state/progress (save format v5 "missions" module).
+- Progress counts only while a mission is IN_PROGRESS (accepting arms
+  it); completion grants item rewards + free tech unlocks, then emits
+  `mission_completed` + `missions_changed`.
+- MissionPanel (under HUD): M-key journal (active / completed /
+  available sections, progress bars, accept buttons), toggled via
+  `toggle_missions_ui`, refreshed on every state change.
+- Mission (src/world/mission.gd): plain RefCounted data object — no
+  signals, no scene-tree access. See docs/MISSION_SYSTEM.md.
+
 ## Data-Driven Resources
 
 All game content uses Resource subclasses:
@@ -176,25 +197,36 @@ and creature art. See `TEXTURE_PACKS.md` for the pack contract.
 
 ## Unwired future-phase code (known, intentional)
 
-34 scripts for phases 4+ do **not** parse (they were drafted with Godot
-3.x / Python-style syntax) and are **not referenced by any scene or
-script**, so they have zero runtime impact — the game's entire runtime
-surface is the ~27 wired scripts listed above (including the Phase 3
-`Creature` entity and `CreatureSpawner`). The scripts below are kept as
-placeholders for their future phases and are NOT part of the shipped
-game:
+35 scripts for phases 4+ **parse cleanly but are not instantiated** —
+no scene, script, or class reference pulls them into the running tree,
+so they have zero runtime impact. The game's entire runtime
+surface is the 50 wired scripts listed above (including the Phase 3
+`Creature` entity and `CreatureSpawner`, and the Phase 4 mission
+system). The scripts below are kept as placeholders for their future
+phases and are NOT part of the shipped game:
 
 - `src/entities/`: combat_system, mount, vehicle
 - `src/systems/`: accessibility_manager, advanced_ai, ai_manager,
-  audio_effects, combat_manager,
-  durability_system, mission_manager, mount_manager,
+  audio_effects, combat_manager, mount_manager,
   optimization_manager, performance_manager, station_manager,
   vehicle_manager, weather_effects
-- `src/core/`: audio_manager, game_manager
-- `src/components/`: inventory_upgrades
+- `src/core/`: audio_manager, game_manager, recipe_registry
+- `src/components/`: crafting_component, inventory_upgrades
 - `src/ui/`: accessibility_ui, ai_display, audio_ui, building_panel,
-  inventory_upgrades_ui, mission_panel, mount_ui, performance_ui,
-  status_effect_ui, vehicle_ui, weather_display
+  combat_ui, creature_ui, inventory_upgrades_ui, mount_ui,
+  performance_ui, station_panel, status_effect_ui, time_display,
+  vehicle_ui, weather_display
+- `src/world/`: harvest_system, lighting_manager
+
+Phase 4 notes: `durability_system` was **deleted** (tool durability
+now lives in `InventoryComponent` — see `TOOL_SYSTEM.md`), and
+`mission_manager`, `mission`, and `mission_panel` are now **wired** —
+see the Missions section above. The remaining placeholders
+(`crafting_component`, `recipe_registry`, `harvest_system`,
+`lighting_manager`) are stale drafts: the live craft path is
+`CraftingPanel` → `recipe_craft_requested` →
+`Main._on_craft_requested`, and harvesting is handled directly in
+`Player._handle_interaction()`.
 
 
 Also unwired: orphan scene duplicates `scenes/crafting_panel.tscn` and
@@ -210,11 +242,21 @@ built or deleted; they should not be read as working code.
 Actual signals on GameEventBus:
 
 ```
-world_seed_set(int)  inventory_changed   item_added(item_id, qty)
-recipe_crafted       recipe_failed       entity_hit
-entity_died          player_spawned      health_changed
-hunger_changed       player_died         toggle_debug
-toggle_inventory_ui
+game_started  game_paused  game_resumed  game_over
+world_seed_set(seed)
+chunk_loaded(coords)  chunk_unloaded(coords)  biome_changed(id)
+player_spawned(pos)   player_died
+health_changed(current, max)  hunger_changed(current, max)
+inventory_changed  item_added(id, qty)  item_removed(id, qty)
+inventory_full
+durability_changed(id, current, max)  tool_broken(id)
+recipe_crafted(recipe_id)  recipe_failed(recipe_id, reason)
+toggle_debug  toggle_inventory_ui  toggle_crafting_ui
+toggle_build_ui  toggle_missions_ui
+mission_accepted(id)  mission_completed(id)  missions_changed
+entity_hit(id, dmg)  entity_died(id)  projectile_fired(origin, dir)
+time_changed(hour, day)  weather_changed(name)
+building_placed(id, coords)
 ```
 
 Flows:
@@ -227,10 +269,18 @@ Flows:
   nodes → wander/flee in _physics_process → player E → take_damage →
   death rolls loot → creature_died → Main adds loot to inventory +
   entity_died on the bus
-- Harvest: Player E → HarvestSystem → node destroyed → yields →
-  Main adds to inventory → item_added → HUD/panel refresh
-- Craft: panel button → CraftingComponent.craft_recipe →
-  result_crafted / recipe_failed → inventory + panel refresh
+- Harvest: Player E → Player._handle_interaction → node destroyed
+  → yields → Main adds to inventory → item_added → HUD/panel
+  refresh; landed swings consume tool durability → durability_changed
+  (toast/HUD) → at zero tool_broken → slot cleared + toast
+- Craft: panel button → recipe_craft_requested(index) →
+  Main._on_craft_requested (validates tech unlock + station, swaps
+  ingredients for the result) → recipe_crafted / recipe_failed →
+  inventory + panel refresh
+- Missions: M → toggle_missions_ui → MissionPanel toggle; accept →
+  mission_accepted → live pickups/kills/builds advance IN_PROGRESS
+  missions → missions_changed → panel refresh; completion →
+  mission_completed → reward items + free tech unlock
 - Debug toggle (F3) → toggle_debug → DebugOverlay
 - Seed change (T/Enter) → seed_changed + world_regenerated
 

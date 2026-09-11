@@ -10,6 +10,7 @@ extends CanvasLayer
 var _debug_enabled: bool = false
 var _player: Node = null
 var _info_label: Label = null
+var _toast_label: Label = null
 
 func _ready() -> void:
 	$Overlay.self_modulate.a = 0.8
@@ -19,6 +20,12 @@ func _ready() -> void:
 	_info_label.position = Vector2(8.0, 62.0)
 	_info_label.size = Vector2(720.0, 40.0)
 	$Overlay.add_child(_info_label)
+	_toast_label = Label.new()
+	_toast_label.name = "ToastLabel"
+	_toast_label.position = Vector2(8, 106)
+	_toast_label.size = Vector2(720.0, 30.0)
+	_toast_label.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	$Overlay.add_child(_toast_label)
 
 ## Set the player reference for HUD updates.
 func set_player(player: Node) -> void:
@@ -88,3 +95,13 @@ func set_world_info(time_text: String, weather_text: String, statuses: PackedStr
 	var status_text: String = ", ".join(statuses) if statuses.size() > 0 else "none"
 	var mode_bit: String = ("   " + mode_text) if mode_text != "" else ""
 	_info_label.text = "%s   %s%s   Effects: %s%s" % [time_text, weather_text, mode_bit, status_text, extra]
+
+## Flash a short message under the world info line (mission and tool
+## feedback). The label fades back out after `duration` seconds.
+func show_toast(text: String, duration: float = 2.5) -> void:
+	if _toast_label == null or not is_inside_tree():
+		return
+	_toast_label.text = text
+	_toast_label.modulate.a = 1.0
+	var tween := create_tween()
+	tween.tween_property(_toast_label, "modulate:a", 0.0, duration)

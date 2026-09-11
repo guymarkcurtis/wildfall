@@ -3,7 +3,7 @@ class_name CreatureVisual
 extends Node2D
 
 const ROSTER_SHEET_PATH := "res://assets/creatures/alien-creature-roster.png"
-const COLUMNS := 4
+const COLUMNS := 7
 const ROWS := 2
 const FRAME_SECONDS := 0.22
 
@@ -11,10 +11,10 @@ const SPECIES_COLUMNS := {
 	"rabbit": 2,       # quick bone-shell scavenger
 	"deer": 1,         # moss-backed grazer
 	"boar": 0,         # plated dusk stalker
-	"wolf": 0,
-	"polar_bear": 1,
+	"wolf": 4,         # striped dusk hunter (generated art)
+	"polar_bear": 5,   # heavy white fur (generated art)
 	"vulture": 3,      # hovering spore predator
-	"fish": 3
+	"fish": 6          # river drifter (generated art)
 }
 
 # Creature instances stream in and out with chunks. Build the two presentation

@@ -23,6 +23,7 @@ var _hotbar_items: Array[String] = ["", "", "", "", "", "", "", "", ""]
 var _active_hotbar_slot := -1
 var _move_source: Dictionary = {}
 var _is_open := false
+var _durations: Dictionary = {}
 
 var _dim: ColorRect
 var _window: Panel
@@ -41,9 +42,10 @@ func _ready() -> void:
 
 ## Update the inventory view. Hotbar assignments are owned by Player so they
 ## survive saves and are available to input handling even when this UI is shut.
-func refresh(items: Dictionary, hotbar_items: Array[String]) -> void:
+func refresh(items: Dictionary, hotbar_items: Array[String], durations: Dictionary = {}) -> void:
 	_items = items.duplicate()
 	_hotbar_items = _normalise_hotbar(hotbar_items)
+	_durations = durations
 	_refresh_slots()
 
 func is_open() -> bool:
@@ -293,12 +295,20 @@ func _set_slot(slot: Dictionary, item_id: String, quantity: int, is_hotbar: bool
 	)
 	(slot["selected"] as ColorRect).visible = selected
 	(slot["background"] as ColorRect).color = Color(0.24, 0.31, 0.19, 0.98) if selected else Color(0.12, 0.16, 0.12, 0.96)
-	(slot["item_label"] as Label).text = _display_name(item_id) if item_id != "" else ""
+	var item_label := slot["item_label"] as Label
+	item_label.text = _durability_label(item_id) if item_id != "" else ""
+	item_label.remove_theme_color_override("font_color")
+	var max_durability := _max_duration(item_id)
+	if item_label != null and item_id != "" and max_durability > 0:
+		item_label.add_theme_color_override("font_color", _durability_color(int(_durations.get(item_id, 0)), max_durability))
 	(slot["quantity"] as Label).text = str(quantity) if quantity > 1 else ""
 	var button: Button = slot["slot"]
 	button.set("item_id", item_id)
 	button.set("item_name", _display_name(item_id))
-	button.tooltip_text = "%s (%d)" % [_display_name(item_id), quantity] if item_id != "" else "Empty slot"
+	if item_id != "" and max_durability > 0:
+		button.tooltip_text = "%s — %d/%d durability" % [_display_name(item_id), int(_durations.get(item_id, 0)), max_durability]
+	else:
+		button.tooltip_text = "%s (%d)" % [_display_name(item_id), quantity] if item_id != "" else "Empty slot"
 
 func _backpack_items() -> Array[String]:
 	var result: Array[String] = []
@@ -335,6 +345,31 @@ func _display_name(item_id: String) -> String:
 		return ""
 	var item_db := get_tree().root.get_node_or_null("Main/ItemDatabase")
 	return item_db.get_item_display_name(item_id) if item_db != null else item_id.capitalize()
+
+func _durability_label(item_id: String) -> String:
+	if item_id == "":
+		return ""
+	var name := _display_name(item_id)
+	var max_dur := _max_duration(item_id)
+	if max_dur <= 0:
+		return name
+	return "%s\n%d/%d" % [name, int(_durations.get(item_id, 0)), max_dur]
+
+func _max_duration(item_id: String) -> int:
+	var item_db := get_tree().root.get_node_or_null("Main/ItemDatabase")
+	if item_db == null:
+		return 0
+	return int(item_db.get_all_durations().get(item_id, 0))
+
+func _durability_color(current: int, max: int) -> Color:
+	if max <= 0:
+		return Color(0.90, 0.92, 0.72)
+	var ratio := float(current) / float(max)
+	if ratio >= 0.5:
+		return Color(0.65, 0.88, 0.58)
+	if ratio >= 0.25:
+		return Color(0.88, 0.75, 0.47)
+	return Color(0.85, 0.45, 0.40)
 
 func _make_window_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()

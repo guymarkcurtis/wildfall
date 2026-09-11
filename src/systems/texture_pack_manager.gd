@@ -28,6 +28,8 @@ const PACK_ASSETS: PackedStringArray = [
 	"assets/tiles/wildfall-resources-atlas.png",
 	"assets/tiles/wildfall-ground-details.png",
 	"assets/tiles/wildfall-crafting-stations.png",
+	"assets/tiles/wildfall-building-parts.png",
+	"assets/tiles/wildfall-building-utilities.png",
 	"assets/resources/wildfall-forage-plants.png",
 	"assets/characters/explorer-base-walk.png",
 	"assets/characters/explorer-storm-walk.png",
@@ -110,7 +112,9 @@ static func get_stock_image(path: String) -> Image:
 					image.set_pixel(x, y, generator.stock_material_colour(index, x, y, 0))
 			generator.free()
 			return image
-	if path == "res://assets/tiles/wildfall-crafting-stations.png":
+	if path == "res://assets/tiles/wildfall-crafting-stations.png" and not FileAccess.file_exists(path):
+		# Hand-authored station art ships in the repo; the procedural fallback
+		# only exists for fresh checkouts before that sheet lands.
 		return _create_crafting_station_atlas()
 	var texture: Texture2D = load(path)
 	return texture.get_image() if texture != null else null

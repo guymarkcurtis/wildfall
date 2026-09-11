@@ -13,9 +13,33 @@ crafting, research, and building mode block harvesting.
 
 Matching tool damage is five times its item damage bonus (minimum 10).
 Hands or mismatched items deal 5; forage receives at least 25 damage.
-Repeated actions have a 0.45-second cooldown. This is an initial balance pass;
-durability and authored character/tool animation sheets are still future work.
+Repeated actions have a 0.45-second cooldown.
 
-Verification: `godot --headless --path . --script tests/test_harvesting.gd`
-exercises quick-bar selection, wood and stone collection, and crafting planks
-from harvested wood through the real main scene.
+# Durability
+
+Every tool (axe, pickaxe, sword, bow) carries a durability counter taken
+from its `ItemDefinition.durability` — e.g. the wooden axe is 50. Rules:
+
+- One point is consumed per swing that actually lands on a resource or
+  creature, and per arrow fired from a bow. Merely selecting or equipping
+  a tool on the quick-bar costs nothing.
+- Current durability is shown next to the tool in the inventory and on the
+  quick-bar slots, and decreases live as the tool is used.
+- At zero the tool breaks: its inventory slot is cleared, a toast notifies
+  the player, and the player automatically falls back to bare hands (no
+  swing, no damage bonus) until a replacement is equipped.
+- There is no repair in v1 — a broken tool is gone. Crafting another one
+  (the recipe stays unlocked) gives a fresh tool at full durability.
+
+Durability state lives in the inventory component (per-slot `current` /
+`max`), not in the player or the tool visuals, so it persists naturally:
+save format v5 stores per-slot durability and restores it on load, and
+pre-v5 saves are migrated by backfilling tools at full durability.
+
+Verification: `tests/test_game.gd` (full harness, sections "Tool
+durability" and "Missions") covers definition values, consumption on
+use, break-at-zero with the bare-hand fallback, re-crafting at full,
+non-durable items, and the save/load round trip. The standalone
+`godot --headless --path . --script tests/test_harvesting.gd` run
+exercises quick-bar selection, wood and stone collection, and crafting
+planks from harvested wood through the real main scene.

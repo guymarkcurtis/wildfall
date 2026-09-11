@@ -1,7 +1,7 @@
 # Wildfall Test Results
 
 ## Test Run Summary
-- **Current verification**: 178 checks passed, 0 failures (macOS Godot 4.7.2 headless run)
+- **Current verification**: 239 checks passed, 0 failures, 0 script errors (Godot 4.7.2 headless run after the generated-art pass; the two new atlases and the 7-column roster imported cleanly)
 - **Godot Version**: 4.7.2.stable (linux.x86_64, official) — the project was upgraded to Godot 4.7 on 2026-09-11 (editor config sync from the Mac) and the Linux verification binary was upgraded to match
 - **Test Script**: `tests/test_game.gd` (SceneTree harness that boots the real `main.tscn`, validates world, UI, inventory, building, technology progression, texture-pack export/live switching, save persistence of player-caused world mutations, and resource accessibility, then exits with the failure count as its exit code)
 
@@ -26,6 +26,76 @@ TileMapLayer cell checks still hold — the renderer keeps TileMapLayer as
 its logical grid), and a 35 s live headless run with **0 errors**. The
 new rendering code uses only 4.0-era API, so nothing 4.7-specific was
 required.
+
+## Durability + missions pass (2026-09-11)
+
+The Phase 4 core work (tool durability + the mission system) extended
+the harness from 178 to **230 checks**, adding a 22-check durability
+section and a 32-check mission section (plus reworked hotbar checks —
+the axe is located by `get_hotbar_items().find(...)` instead of a
+hardcoded slot, since the quick bar keeps stale entries by design).
+All 230 pass with 0 script errors and exit code 0; a second
+consecutive run (with the first run's save files still on disk) is
+also green, which is what caught and then confirmed the fix for S1
+below.
+
+- **Durability (22 checks)** — per-tool max values from the item
+  definitions (wooden axe 50 / pickaxe 100 / sword 50 / bow 80); one
+  point consumed per landed swing and per bow shot, none on quick-bar
+  selection; live decrement; break at zero (slot cleared, toast,
+  bare-hand fallback); re-craft restores full durability;
+  non-durable items untouched; worn durability survives a save/load
+  round trip (save format v5).
+- **Missions (32 checks)** — 7-mission catalog; M-key journal
+  toggle; First Steps auto-accepts on a new world; prerequisite locks
+  (accept rejected with the unmet-prerequisite titles reported);
+  progress counts only while a mission is IN_PROGRESS and only from
+  real pickups / kills / builds; completion grants item rewards +
+  free tech unlocks; the full 7/7 main + side chain completes; panel
+  refreshes on every state change; mission state + progress survive
+  save/load.
+
+### Bugs found by the harness
+
+| # | Issue | Root cause | Fix |
+|---|-------|-----------|-----|
+| S1 | "Worn durability survives a save/load round trip" flaked — the post-load step could restore the *older* of two saves made in the same wall-clock second | Save files are named `manual_<unix-sec>[_N].json` and the payload stores a second-granularity timestamp; `list_save_entries()` sorted by timestamp only, so same-second saves tied and "most recent save" was a coin flip (the harness's section-7 and section-12 saves land in the same second) | `peek_save_summary()` now parses the `_N` filename suffix into a `seq` field, and the newest-save sort breaks timestamp ties by `seq` (descending) — the last-written slot deterministically wins |
+
+## Generated art + wiring pass (2026-09-11)
+
+All four sheets from `docs/ART_REQUESTS.md` were generated on this
+machine (Antigravity CLI `agy` driving the Gemini image model in
+headless `--print` mode, one generation per cell/sheet) and composed
+with PIL to the exact grid contracts the code slices:
+
+| Sheet | Size | Layout | Source |
+|-------|------|--------|--------|
+| `assets/creatures/alien-creature-roster.png` | 2688×1024 | 7 cols × 2 rows (idle/move) of 384×512, true alpha | cols 0–3 kept from the previous sheet; wolf/polar_bear/fish generated at 768×1024 (3:4) and resampled exactly 0.5× |
+| `assets/tiles/wildfall-building-parts.png` | 64×288 | 2 cols (0 wood, 1 stone) × 9 rows (foundation, floor, wall, window, door, roof, stair, ramp, pillar) | 9 generated 1024×1024 dual-cell sheets (left=wood, right=stone), each half resampled 512→32 |
+| `assets/tiles/wildfall-building-utilities.png` | 160×32 | 5 cols (torch, bed, chest, farm_soil, fence) | 5 generated 1024×1024 single-object frames, resampled to 32 |
+| `assets/tiles/wildfall-crafting-stations.png` | 128×32 | 4 cols (campfire, furnace, workbench, anvil) | 4 generated 1024×1024 frames; replaces the procedural pixels (generator kept as missing-file fallback) |
+
+One regeneration was needed: the first fence tile was a 7%-of-frame
+thin strip (two posts + one rail, invisible once resampled to 32 px).
+The re-prompt forced a chunky posts-and-rails block filling ~80% of
+the frame; the landed tile is 47% opaque, consistent with its
+utility-sheet neighbours.
+
+Harness: **230 → 239 checks**, 0 failures, 0 script errors. The 9 new
+checks: roster sheet is exactly 2688×1024; `CreatureVisual.COLUMNS ==
+7`; all 7 species present; **no two species share a roster column**;
+parts atlas is exactly 64×288; every one of the 18 parts-atlas cells
+contains artwork; utilities atlas is exactly 160×32; all 5 utility
+cells contain artwork; all 4 station cells contain artwork.
+
+Notes:
+- Per-cell "contains artwork" is a per-cell opaque-pixel scan (32×32
+  each, ~28k pixel reads total) — cheap enough to stay in the harness.
+- The exit-time "ObjectDB instances leaked / resources still in use"
+  count grew slightly (119 → 150 instances, 2 → 3 resources): the
+  same pre-existing SceneTree-script quit artifact (see Notes below),
+  now with a few more cached atlas textures. The normal game exit
+  path remains the clean one.
 
 ## Historical verification record (2026-09-10)
 

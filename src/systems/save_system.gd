@@ -7,7 +7,7 @@
 class_name SaveSystem
 extends Node
 
-const SAVE_VERSION: int = 4
+const SAVE_VERSION: int = 5
 const FORMAT_ID: String = "wildfall-save"
 const SAVE_DIR: String = "user://saves"
 const SAVE_PATH: String = "user://saves/slot_1.json"
@@ -15,7 +15,7 @@ const SETTINGS_PATH: String = "user://settings.json"
 const AUTOSAVE_INTERVAL_SEC: float = 300.0
 const AUTOSAVE_KEEP: int = 2
 const APPLY_ORDER: PackedStringArray = [
-	"world", "world_state", "time", "weather", "status", "technology", "buildings", "player", "camera"
+	"world", "world_state", "time", "weather", "status", "technology", "buildings", "player", "missions", "camera"
 ]
 
 static var _autosave_enabled: bool = true
@@ -28,6 +28,7 @@ signal save_failed(reason: String)
 var event_bus: Node = null
 var player_ref: Player = null
 var world_generator_ref: WorldGenerator = null
+var item_database_ref: ItemDatabase = null
 
 var _collectors: Dictionary = {}
 var _appliers: Dictionary = {}
@@ -36,6 +37,7 @@ var last_save_path: String = ""
 
 func _ready() -> void:
 	event_bus = get_node_or_null("../GameEventBus")
+	item_database_ref = get_node_or_null("../ItemDatabase")
 	_ensure_save_dir()
 	load_settings()
 
@@ -145,6 +147,22 @@ func migrate(data: Dictionary) -> Dictionary:
 		if not modules.has("world_state"):
 			modules["world_state"] = {"destroyed_resources": [], "destroyed_creatures": []}
 		current["modules"] = modules
+	if version < 5:
+		# v5 adds per-slot tool durability. Older saves predate it: backfill
+		# tool slots at full durability from the item database.
+		if item_database_ref != null:
+			var modules5: Dictionary = current.get("modules", {})
+			var player5: Dictionary = modules5.get("player", {})
+			var inventory5: Dictionary = player5.get("inventory", {})
+			var slots5: Dictionary = inventory5.get("slots", {})
+			for item_id in slots5:
+				var slot5: Variant = slots5[item_id]
+				if typeof(slot5) != TYPE_DICTIONARY:
+					continue
+				var slot_dict: Dictionary = slot5
+				var max_dur: int = int(item_database_ref.get_all_durations().get(str(item_id), 0))
+				if max_dur > 0 and not slot_dict.has("durability"):
+					slot_dict["durability"] = max_dur
 	current["version"] = SAVE_VERSION
 	current["format"] = FORMAT_ID
 	return current
@@ -226,7 +244,13 @@ static func list_save_entries() -> Array[Dictionary]:
 				entries.append(summary)
 		file_name = dir.get_next()
 	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return int(a.get("timestamp", 0)) > int(b.get("timestamp", 0))
+		var ta: int = int(a.get("timestamp", 0))
+		var tb: int = int(b.get("timestamp", 0))
+		if ta != tb:
+			return ta > tb
+		# Same-second saves tie on timestamp; the higher sequence
+		# suffix was written later, so it is the most recent.
+		return int(a.get("seq", 0)) > int(b.get("seq", 0))
 	)
 	return entries
 
@@ -263,12 +287,20 @@ static func peek_save_summary(path: String) -> Dictionary:
 		return {}
 	var raw: Dictionary = parsed
 	var kind: String = str(raw.get("kind", ""))
+	var file_name: String = path.get_file()
 	if kind == "":
-		var file_name: String = path.get_file()
 		if file_name.begins_with("autosave_"):
 			kind = "autosave"
 		else:
 			kind = "manual"
+	# Saves in the same second share a timestamp; the filename suffix
+	# (<prefix>_<stamp>_N.json) records save order within that second.
+	var seq: int = 0
+	var base_name: String = file_name.trim_suffix(".json")
+	if base_name.count("_") >= 2:
+		var last_part: String = base_name.substr(base_name.rfind("_") + 1)
+		if last_part.is_valid_int():
+			seq = int(last_part)
 	var stamp: int = int(raw.get("timestamp", 0))
 	var modules: Dictionary = raw.get("modules", {})
 	if modules.is_empty() and raw.has("world"):
@@ -286,6 +318,7 @@ static func peek_save_summary(path: String) -> Dictionary:
 		"game_mode": mode,
 		"version": int(raw.get("version", 0)),
 		"timestamp": stamp,
+		"seq": seq,
 		"seed": int(world.get("seed", 0)),
 		"day": int(time_mod.get("current_day", 1)),
 		"when": _format_time(stamp)

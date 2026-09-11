@@ -18,7 +18,7 @@
 - [x] Creature definitions (7 types, wired)
 - [x] Modular building definitions and stackable story cutaway (wood + stone structural kits)
 - [x] Technology tree (U-panel research, costs, prerequisites, recipe/build-tier gates, saved unlocks)
-- [ ] Placeholder art assets (colored shapes only; no sprites)
+- [x] Art assets: all sheets generated + wired — terrain, resources, characters, 7-species creature roster, building parts, utilities, crafting stations (docs/ART_REQUESTS.md, all requests DONE)
 
 ## Phase 3: Gameplay
 
@@ -38,6 +38,8 @@
 ## Phase 4: Polish
 - [x] Expandable inventory window with persistent, movable (click or drag) 1–9 quick bar
 - [x] Runtime texture-pack system (stock card export, editable overrides, live Options/Pause switching)
+- [x] Tool durability (consume on use, break at zero → bare hands, re-craft to replace, saved in v5)
+- [x] Mission system (7 data-driven missions tracking real play, M-key journal, prerequisite chain, item + tech rewards, saved in v5)
 - [ ] Sound effects
 - [ ] Music
 - [ ] Particle effects
@@ -50,6 +52,6 @@
 - [ ] Multiplayer support
 - [ ] Mod support
 - [ ] Additional biomes
-- [ ] Quest system
+- [x] Quest system (delivered as the mission system in Phase 4 — see docs/MISSION_SYSTEM.md)
 - [ ] Advanced crafting stations
 - [ ] Vehicle system

@@ -7,11 +7,14 @@ signal inventory_changed
 signal item_added(item_id: String, quantity: int)
 signal item_removed(item_id: String, quantity: int)
 signal inventory_full
+signal durability_changed(item_id: String, current: int, max: int)
+signal tool_broken(item_id: String)
 
-var _slots: Dictionary = {}  # item_id -> Dictionary {quantity, max_stack}
+var _slots: Dictionary = {}  # item_id -> Dictionary {quantity, max_stack, durability?}
 var _max_weight: float = 100.0
 var _max_slots: int = 50
 var _stack_sizes: Dictionary = {}  # item_id -> max stack size (from ItemDatabase)
+var _max_durations: Dictionary = {}  # item_id -> max durability (from ItemDatabase)
 
 ## Total weight of all items.
 var total_weight: float = 0.0
@@ -31,6 +34,19 @@ var is_full: bool:
 func set_stack_sizes(sizes: Dictionary) -> void:
 	for item_id in sizes:
 		_stack_sizes[str(item_id)] = int(sizes[item_id])
+
+## Apply per-item max durabilities (typically from the ItemDatabase).
+## Durable items (tools/weapons) are stack-size-1, so each one occupies
+## its own slot: the slot's "durability" key is that tool's durability.
+## Slots of durable items that predate the key (older saves) are
+## backfilled to full durability.
+func set_item_durations(durations: Dictionary) -> void:
+	for item_id in durations:
+		_max_durations[str(item_id)] = int(durations[item_id])
+	for item_id in _slots:
+		var max_dur: int = _get_max_durability(str(item_id))
+		if max_dur > 0 and not _slots[item_id].has("durability"):
+			_slots[item_id]["durability"] = max_dur
 
 ## Set maximum weight capacity.
 func set_max_weight(weight: float) -> void:
@@ -61,9 +77,14 @@ func add_item(item_id: String, quantity: int) -> int:
 
 	# 2. No slot yet: open one if there is room. Never overwrite an
 	# existing (full) slot — that would silently discard the old stack.
+	# (and a durable tool in the old slot is never silently replaced).
 	if quantity > 0 and not _slots.has(item_id) and _slots.size() < _max_slots:
 		var new_qty: int = min(quantity, max_stack)
-		_slots[item_id] = {"quantity": new_qty, "max_stack": max_stack}
+		var slot: Dictionary = {"quantity": new_qty, "max_stack": max_stack}
+		var max_dur: int = _get_max_durability(item_id)
+		if max_dur > 0:
+			slot["durability"] = max_dur
+		_slots[item_id] = slot
 		added += new_qty
 		quantity -= new_qty
 
@@ -84,6 +105,51 @@ func add_item(item_id: String, quantity: int) -> int:
 		inventory_changed.emit()
 		item_added.emit(item_id, added)
 	return quantity
+
+## Damage a tool in the inventory by `amount` durability.
+## Tools are one-per-slot (stack size 1), so the slot's "durability" key
+## is the tool's own durability. Returns true if this damage broke the
+## tool — the slot is removed and tool_broken() fires; the player is
+## expected to fall back to bare hands and craft a replacement.
+## There is no repair feature yet: a broken tool is simply gone.
+func damage_tool(item_id: String, amount: int) -> bool:
+	if amount <= 0 or not _slots.has(item_id):
+		return false
+	var max_dur: int = _get_max_durability(item_id)
+	if max_dur <= 0:
+		return false
+	var slot: Dictionary = _slots[item_id]
+	slot["durability"] = int(slot.get("durability", max_dur)) - amount
+	if int(slot["durability"]) <= 0:
+		var qty: int = int(slot.get("quantity", 1))
+		_slots.erase(item_id)
+		_calculate_weight()
+		inventory_changed.emit()
+		item_removed.emit(item_id, qty)
+		tool_broken.emit(item_id)
+		return true
+	inventory_changed.emit()
+	durability_changed.emit(item_id, int(slot["durability"]), max_dur)
+	return false
+
+## {current, max} durability for a tool the player carries (max = 0 if
+## the item is not durable or is not in the inventory).
+func get_tool_durability(item_id: String) -> Dictionary:
+	var max_dur: int = _get_max_durability(item_id)
+	if max_dur <= 0 or not _slots.has(item_id):
+		return {"current": 0, "max": 0}
+	return {"current": int(_slots[item_id].get("durability", max_dur)), "max": max_dur}
+
+## Current durability of every durable tool in the inventory
+## (item_id -> current). The UI combines this with the ItemDatabase's
+## max values for display.
+func get_all_durations() -> Dictionary:
+	var result: Dictionary = {}
+	for item_id in _slots:
+		var max_dur: int = _get_max_durability(str(item_id))
+		if max_dur > 0:
+			result[str(item_id)] = int(_slots[item_id].get("durability", max_dur))
+	return result
 
 ## Remove items from inventory. Returns actual quantity removed.
 func remove_item(item_id: String, quantity: int) -> int:
@@ -182,6 +248,12 @@ func deserialize(data: Dictionary) -> void:
 	_slots = data.get("slots", {})
 	_max_weight = float(data.get("max_weight", 100.0))
 	_max_slots = int(data.get("max_slots", 50))
+	# Backfill durability for tool slots from pre-v5 saves (they predate
+	# the "durability" key); they start at full durability.
+	for item_id in _slots:
+		var max_dur: int = _get_max_durability(str(item_id))
+		if max_dur > 0 and not _slots[item_id].has("durability"):
+			_slots[item_id]["durability"] = max_dur
 	_calculate_weight()
 	inventory_changed.emit()
 
@@ -197,3 +269,7 @@ func _calculate_weight() -> void:
 ## otherwise the default of 64).
 func _get_max_stack(item_id: String) -> int:
 	return int(_stack_sizes.get(item_id, 64))
+
+## Internal: max durability of an item (0 = not durable).
+func _get_max_durability(item_id: String) -> int:
+	return int(_max_durations.get(item_id, 0))

@@ -101,6 +101,19 @@ func try_unlock(technology_id: String, inventory: InventoryComponent = null) -> 
 	technology_unlocked.emit(technology_id)
 	return true
 
+## Unlock a technology without charging the research cost (used by
+## mission rewards). Prerequisites are unlocked for free as well so a
+## reward never points at a locked line.
+func unlock_free(technology_id: String) -> bool:
+	var definition: TechnologyDefinition = get_definition(technology_id)
+	if definition == null or is_unlocked(technology_id):
+		return is_unlocked(technology_id)
+	for prerequisite in definition.prerequisites:
+		unlock_free(str(prerequisite))
+	unlocked[technology_id] = true
+	technology_unlocked.emit(technology_id)
+	return true
+
 func serialize() -> Dictionary:
 	return {"unlocked": Array(get_unlocked_ids())}
 

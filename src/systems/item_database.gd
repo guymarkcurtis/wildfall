@@ -418,3 +418,13 @@ func has_item(item_id: String) -> bool:
 ## Check if recipe exists.
 func has_recipe(recipe_id: String) -> bool:
 	return recipes.has(recipe_id)
+
+## All durable items as {item_id: max durability}. Only items with
+## durability > 0 are listed (tools and weapons).
+func get_all_durations() -> Dictionary:
+	var result: Dictionary = {}
+	for item_id in items:
+		var item: ItemDefinition = items[item_id]
+		if item.durability > 0:
+			result[str(item_id)] = int(item.durability)
+	return result

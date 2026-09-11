@@ -30,6 +30,8 @@ const INITIAL_CHUNK_RADIUS: int = 3
 @onready var inventory_panel: InventoryPanel = $HUD/InventoryPanel
 @onready var build_palette: Variant = $HUD/BuildPalette
 @onready var technology_panel: Variant = $HUD/TechnologyPanel
+@onready var mission_manager: MissionManager = $MissionManager
+@onready var mission_panel: Variant = $HUD/MissionPanel
 @onready var crafting_panel: CraftingPanel = $HUD/CraftingPanel
 @onready var save_system: SaveSystem = $SaveSystem
 @onready var day_night: DayNightCycle = $DayNightCycle
@@ -82,6 +84,10 @@ func _ready() -> void:
 	event_bus.world_seed_set.connect(_on_world_seed_set)
 	event_bus.inventory_changed.connect(_on_inventory_changed)
 	event_bus.toggle_inventory_ui.connect(_on_toggle_inventory_ui)
+	event_bus.tool_broken.connect(_on_tool_broken)
+	event_bus.toggle_missions_ui.connect(_on_toggle_missions_ui)
+	event_bus.missions_changed.connect(_on_missions_changed)
+	event_bus.mission_completed.connect(_on_mission_completed)
 	event_bus.toggle_crafting_ui.connect(_on_toggle_crafting_ui)
 	chunk_system.chunk_generated.connect(_on_chunk_generated)
 	chunk_system.chunk_unloaded.connect(_on_chunk_unloaded)
@@ -132,6 +138,9 @@ func _ready() -> void:
 		technology_panel.configure(technology_system, item_database, player)
 		technology_panel.unlock_requested.connect(_on_technology_unlock_requested)
 
+	if mission_panel != null:
+		mission_panel.configure(mission_manager)
+
 	# Tell the player's inventory the real per-item stack sizes from the
 	# database (the component defaults to 64 for everything without this).
 	if player and player.inventory:
@@ -141,6 +150,7 @@ func _ready() -> void:
 			if item_def != null:
 				stack_sizes[str(item_id)] = int(item_def.stack_size)
 		player.inventory.set_stack_sizes(stack_sizes)
+	player.inventory.set_item_durations(item_database.get_all_durations())
 
 	# SeedInput._ready already emitted its own random seed (before the
 	# connections above existed). Push Main's chosen seed so the world is
@@ -356,6 +366,26 @@ func _on_creature_died(creature_node: Node) -> void:
 	if is_instance_valid(creature_node):
 		creature_node.queue_free()
 
+func _on_tool_broken(item_id: String) -> void:
+	var item_name := item_database.get_item_display_name(item_id) if item_database.has_item(item_id) else item_id
+	hud.show_toast("%s broke!" % item_name)
+	_refresh_ui()
+
+func _on_toggle_missions_ui() -> void:
+	if mission_panel != null:
+		mission_panel.toggle()
+
+func _on_missions_changed() -> void:
+	if mission_panel != null and mission_panel.visible:
+		mission_panel.refresh()
+
+func _on_mission_completed(mission_id: String) -> void:
+	if mission_panel != null:
+		var mission := mission_manager.get_mission(mission_id)
+		hud.show_toast("Mission complete: %s" % (mission.title if mission != null else mission_id))
+		if mission_panel.visible:
+			mission_panel.refresh()
+
 ## Record the depleted spawn before the node leaves the tree. This is kept
 ## separate from loot because an unlucky resource can yield no optional drops.
 func _on_resource_depleted(resource_node: Node) -> void:
@@ -548,7 +578,7 @@ func _refresh_ui() -> void:
 	if not player or not player.inventory:
 		return
 	var items: Dictionary = player.inventory.get_all_items()
-	inventory_panel.refresh(items, player.get_hotbar_items())
+	inventory_panel.refresh(items, player.get_hotbar_items(), player.inventory.get_all_durations())
 	_refresh_crafting_ui()
 	if technology_panel != null:
 		technology_panel.refresh()
@@ -685,6 +715,7 @@ func _register_save_modules() -> void:
 	save_system.register_module("technology", _collect_technology, _apply_technology)
 	save_system.register_module("buildings", _collect_buildings, _apply_buildings)
 	save_system.register_module("player", _collect_player, _apply_player)
+	save_system.register_module("missions", _collect_missions, _apply_missions)
 	save_system.register_module("camera", _collect_camera, _apply_camera)
 
 func _collect_world() -> Dictionary:
@@ -829,3 +860,12 @@ func _apply_camera(data: Variant) -> void:
 	if camera_controller == null or typeof(data) != TYPE_DICTIONARY:
 		return
 	camera_controller.rotation = float(data.get("rotation", 0.0))
+
+func _collect_missions() -> Dictionary:
+	if mission_manager == null:
+		return {}
+	return mission_manager.serialize()
+
+func _apply_missions(data: Variant) -> void:
+	if mission_manager != null:
+		mission_manager.apply_missions(data)

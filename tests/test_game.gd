@@ -241,6 +241,43 @@ func _run_checks() -> void:
 		"Stock reference pack includes the crafting-station texture atlas")
 	var station_texture := TexturePackManager.get_texture("res://assets/tiles/wildfall-crafting-stations.png")
 	_check(station_texture != null and station_texture.get_width() == 128 and station_texture.get_height() == 32, "Crafting-station atlas has four 32px cells")
+	# --- Generated art sheets (external image pipeline) ----------------------
+	var artreq_roster_img: Image = TexturePackManager.get_image("res://assets/creatures/alien-creature-roster.png")
+	_check(artreq_roster_img != null and artreq_roster_img.get_size() == Vector2i(2688, 1024), "Creature roster atlas is the full 7x2 sheet")
+	_check(CreatureVisual.COLUMNS == 7, "CreatureVisual samples the roster as seven columns")
+	var artreq_species_columns: Dictionary = CreatureVisual.SPECIES_COLUMNS
+	var artreq_columns_seen: Array = []
+	var artreq_columns_unique := true
+	for artreq_species in artreq_species_columns:
+		var artreq_species_col = artreq_species_columns[artreq_species]
+		if artreq_columns_seen.has(artreq_species_col):
+			artreq_columns_unique = false
+		artreq_columns_seen.append(artreq_species_col)
+	_check(artreq_species_columns.size() == 7, "All seven creature species have roster columns")
+	_check(artreq_columns_unique, "No two creature species share a roster column")
+	var artreq_parts_img: Image = TexturePackManager.get_image("res://assets/tiles/wildfall-building-parts.png")
+	_check(artreq_parts_img != null and artreq_parts_img.get_size() == Vector2i(64, 288), "Building parts atlas is the 2x9 wood/stone grid")
+	var artreq_parts_full := true
+	if artreq_parts_img != null:
+		for artreq_row in range(9):
+			for artreq_col in range(2):
+				if not _atlas_cell_has_art(artreq_parts_img, artreq_col * 32, artreq_row * 32):
+					artreq_parts_full = false
+	_check(artreq_parts_img != null and artreq_parts_full, "Every building parts atlas cell contains artwork")
+	var artreq_utils_img: Image = TexturePackManager.get_image("res://assets/tiles/wildfall-building-utilities.png")
+	_check(artreq_utils_img != null and artreq_utils_img.get_size() == Vector2i(160, 32), "Building utilities atlas is the 5x1 grid")
+	var artreq_utils_full := true
+	if artreq_utils_img != null:
+		for artreq_util_col in range(5):
+			if not _atlas_cell_has_art(artreq_utils_img, artreq_util_col * 32, 0):
+				artreq_utils_full = false
+	_check(artreq_utils_img != null and artreq_utils_full, "Every building utilities atlas cell contains artwork")
+	var artreq_stations_full := true
+	if station_texture != null:
+		for artreq_station_col in range(4):
+			if not _atlas_cell_has_art(station_texture.get_image(), artreq_station_col * 32, 0):
+				artreq_stations_full = false
+	_check(artreq_stations_full, "Every crafting-station atlas cell contains artwork")
 	var refinement_export := TexturePackManager.create_refinement_pack()
 	_check(FileAccess.file_exists("user://texture_packs/refinement/manifest.json"), "Editable refinement pack is created with its manifest")
 	_check(TexturePackManager.get_available_pack_ids().has(TexturePackManager.REFINEMENT_PACK), "Editable refinement pack appears in the selector")
@@ -648,6 +685,106 @@ func _run_checks() -> void:
 	_check(SaveSystem.is_autosave_enabled() == true, "Options can enable autosave")
 	SaveSystem.set_autosave_enabled(prev_auto)
 
+	# ------------------------------------------------- tool durability
+	_check(SaveSystem.SAVE_VERSION == 5, "Save format v5 persists tool durability")
+	var all_durations: Dictionary = item_database.get_all_durations()
+	_check(all_durations.size() > 0, "Item database knows which items are durable")
+	_check(int(all_durations.get("wooden_axe", 0)) == 50, "Wooden axe is defined at 50 durability")
+	_check(int(player.inventory.get_tool_durability("wooden_axe")["max"]) == 50, "Starting axe carries full durability")
+	_check(int(player.inventory.get_tool_durability("wooden_axe")["current"]) == 50, "Starting axe has unused durability")
+	_check(player.inventory.damage_tool("wooden_axe", 25) == false, "Partly worn tool does not break")
+	_check(int(player.inventory.get_tool_durability("wooden_axe")["current"]) == 25, "Tool durability is consumed by use")
+	var axe_slot: int = player.get_hotbar_items().find("wooden_axe")
+	player.select_hotbar_slot(axe_slot)
+	_check(axe_slot >= 0 and player.equipped_tool == "wooden_axe", "Quick-bar slot equips the tool")
+	var bus = main.get_node_or_null("GameEventBus")
+	_check(bus != null, "Main scene owns the event bus")
+	var broken_ids: Array[String] = []
+	bus.tool_broken.connect(func(item_id: String) -> void: broken_ids.append(str(item_id)))
+	_check(player.inventory.damage_tool("wooden_axe", 25) == true, "Fully worn tool breaks")
+	_check(player.inventory.has_item("wooden_axe") == false, "Broken tool is removed from the inventory")
+	_check(broken_ids == ["wooden_axe"], "Tool break is announced on the event bus")
+	_check(player.equipped_tool == "hand", "Broken equipped tool falls back to bare hands")
+	player.inventory.add_item("wooden_axe", 1)
+	player.populate_hotbar_from_inventory()  # same refresh the crafting flow triggers
+	var re_axe_slot: int = player.get_hotbar_items().find("wooden_axe")
+	player.select_hotbar_slot(re_axe_slot)
+	_check(re_axe_slot >= 0 and player.equipped_tool == "wooden_axe", "Re-crafting restores the tool")
+	_check(int(player.inventory.get_tool_durability("wooden_axe")["current"]) == 50, "A re-crafted tool starts at full durability")
+	_check(int(player.inventory.get_tool_durability("wood")["max"]) == 0, "Non-durable items have no durability")
+	player.inventory.damage_tool("wooden_axe", 12)
+	_check(int(player.inventory.get_tool_durability("wooden_axe")["current"]) == 38, "Wear accumulates across uses")
+	_check(main.call("save_game"), "Worn tool durability can be saved")
+	_check(main.call("load_game"), "Worn tool durability can be loaded")
+	_check(int(player.inventory.get_tool_durability("wooden_axe")["current"]) == 38, "Worn durability survives a save/load round trip")
+	player.inventory.add_item("wood", 1)
+
+	# ------------------------------------------------- missions
+	_check(InputMap.has_action("toggle_missions"), "M is registered to toggle the mission journal")
+	_check(bus.has_signal("mission_accepted") and bus.has_signal("mission_completed") and bus.has_signal("missions_changed"), "Event bus relays mission lifecycle signals")
+	var mm = main.get_node_or_null("MissionManager")
+	_check(mm != null, "Main scene owns the mission manager")
+	var mission_panel = main.get_node_or_null("HUD/MissionPanel")
+	_check(mission_panel != null, "HUD hosts the mission journal")
+	var main_1 = mm.get_mission("main_1")
+	# main_1 was auto-accepted at world start and already completed from
+	# the wood the research refuel picked up earlier in this run.
+	_check(main_1 != null and main_1.state == Mission.MissionState.COMPLETED, "Auto-accepted mission completes from real play pickups")
+	_check(main_1.progress == 15, "Completed mission progress caps at the objective")
+	bus.entity_died.emit("fish")
+	_check(mm.get_mission("side_fish").progress == 0, "Progress only counts while a mission is active")
+	player.inventory.add_item("wood", 20)
+	player.inventory.set_max_weight(1000.0)  # room for every reward granted in this section
+	_check(main_1.state == Mission.MissionState.COMPLETED and main_1.progress == 15, "Completed missions stop counting further pickups")
+	_check(mm.accept_mission("main_2") == true, "Completed prerequisite unlocks the next main mission")
+	var clay_before: int = player.inventory.get_item_quantity("clay")
+	player.inventory.add_item("stone", 25)
+	_check(mm.get_mission("main_2").state == Mission.MissionState.COMPLETED, "Second main mission completes")
+	_check(player.inventory.get_item_quantity("clay") == clay_before + 15, "Second mission reward is granted")
+	_check(technology_system.is_unlocked("stone_building"), "Research reward leaves the tech line available")
+	mm.accept_mission("main_3")
+	var hide_before: int = player.inventory.get_item_quantity("hide")
+	bus.entity_died.emit("rabbit")
+	bus.entity_died.emit("rabbit")
+	bus.entity_died.emit("rabbit")
+	_check(mm.get_mission("main_3").state == Mission.MissionState.COMPLETED, "Kill missions track creature deaths on the bus")
+	_check(player.inventory.get_item_quantity("hide") == hide_before + 5, "Hunt reward (hide) is granted")
+	mm.accept_mission("main_4")
+	var metal_before: bool = technology_system.is_unlocked("metalworking")
+	bus.building_placed.emit("campfire", Vector2i(3, 4))
+	_check(mm.get_mission("main_4").state == Mission.MissionState.COMPLETED, "Build mission completes when the player places the building")
+	_check(metal_before == false and technology_system.is_unlocked("metalworking"), "Research reward unlocks the technology for free")
+	mm.accept_mission("side_forage")
+	player.inventory.add_item("fibre", 12)
+	_check(mm.get_mission("side_forage").state == Mission.MissionState.COMPLETED, "Side missions are completable from real play")
+	mm.accept_mission("side_ore")
+	player.inventory.add_item("copper_ore", 5)
+	_check(mm.get_mission("side_ore").state == Mission.MissionState.COMPLETED, "Ore prospecting completes")
+	mm.accept_mission("side_fish")
+	bus.entity_died.emit("fish")
+	bus.entity_died.emit("fish")
+	bus.entity_died.emit("fish")
+	_check(mm.get_mission("side_fish").state == Mission.MissionState.COMPLETED, "Fishing mission completes from kills")
+	_check((mm.get_completed_missions() as Array).size() == 7, "All seven missions can complete in one run")
+	_check(main.call("save_game"), "Mission progress can be saved")
+	mm.start_new_world()
+	_check(mm.get_mission("main_1").state == Mission.MissionState.IN_PROGRESS, "start_new_world() resets mission state for a new world")
+	_check(mm.accept_mission("main_2") == false, "Second mission stays locked until the first completes")
+	_check("First Steps" in mm.get_unmet_prerequisites("main_2"), "Locked mission names its unmet prerequisite")
+	_check(main.call("load_game"), "Mission progress can be loaded")
+	_check(mm.get_mission("main_1").state == Mission.MissionState.COMPLETED, "Mission state is restored from the save")
+	_check((mm.get_completed_missions() as Array).size() == 7, "Completed missions persist across a save/load cycle")
+	_check(mission_panel.get_node_or_null("MissionWindow") != null, "Mission journal builds its window UI")
+	bus.toggle_missions_ui.emit()
+	_check(mission_panel.visible == true, "M (bus toggle) opens the mission journal")
+	bus.toggle_missions_ui.emit()
+	_check(mission_panel.visible == false, "M again closes the mission journal")
+	var v2_save: Dictionary = {"version": 2, "modules": {"world": {"seed": 77}, "player": {"position": {"x": 9.0, "y": 4.0}, "inventory": {"slots": {"wooden_axe": {"quantity": 1, "max_stack": 1}}}, "max_weight": 100.0, "max_slots": 50}}}
+	var v2_migrated: Dictionary = ss.migrate(v2_save)
+	_check(int(v2_migrated.get("version", 0)) == SaveSystem.SAVE_VERSION, "Legacy v2 save migrates to the current version")
+	var v2_axe: Dictionary = v2_migrated["modules"]["player"]["inventory"]["slots"]["wooden_axe"]
+	_check(int(v2_axe.get("durability", -1)) == 50, "Legacy v2 save backfills tool durability at full")
+
 func _collect_button_labels(node: Node, into: PackedStringArray) -> void:
 	if node is Button:
 		into.append((node as Button).text)
@@ -658,4 +795,12 @@ func _player_has_shape(player: Node) -> bool:
 	for child in player.get_children():
 		if child is CollisionShape2D:
 			return true
+	return false
+
+## True when the 32x32 atlas cell at (x, y) holds at least one opaque pixel.
+func _atlas_cell_has_art(atlas: Image, x: int, y: int) -> bool:
+	for py in range(32):
+		for px in range(32):
+			if atlas.get_pixel(x + px, y + py).a > 0.0:
+				return true
 	return false

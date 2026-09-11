@@ -24,6 +24,8 @@ signal inventory_changed
 signal item_added(item_id: String, quantity: int)
 signal item_removed(item_id: String, quantity: int)
 signal inventory_full
+signal durability_changed(item_id: String, current: int, max: int)
+signal tool_broken(item_id: String)
 
 # --- Crafting Events ---
 signal recipe_crafted(recipe_id: String)
@@ -34,6 +36,12 @@ signal toggle_debug
 signal toggle_inventory_ui
 signal toggle_crafting_ui
 signal toggle_build_ui
+signal toggle_missions_ui
+
+# --- Mission Events ---
+signal mission_accepted(mission_id: String)
+signal mission_completed(mission_id: String)
+signal missions_changed
 
 # --- Combat Events ---
 signal entity_hit(entity_id: String, damage: float)
