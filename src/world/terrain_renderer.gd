@@ -14,7 +14,6 @@ const TILE_DIRT: int = 4
 const TILE_STONE: int = 5
 const TILE_SNOW: int = 6
 const TILE_MUD: int = 7
-const WATER_FRAME_SECONDS: float = 0.32
 
 var _chunk_data: Dictionary = {}
 var _tile_set: TileSet = null
@@ -22,7 +21,6 @@ var _tile_set: TileSet = null
 var world_generator: Node = null
 var _water_cells: Dictionary = {}
 var _water_frame: int = 0
-var _water_frame_elapsed: float = 0.0
 var _art_generator: TileSetGenerator = null
 # The TileMap remains as the logical terrain grid. Visuals deliberately live
 # in sibling layers so its legacy tiles can never peek through the new surface.
@@ -65,14 +63,6 @@ func _create_tile_set() -> void:
 	add_child(_art_generator)
 	_tile_set = _art_generator.generate_tile_set()
 	tile_set = _tile_set
-
-func _process(delta: float) -> void:
-	_water_frame_elapsed += delta
-	if _water_frame_elapsed < WATER_FRAME_SECONDS or _water_cells.is_empty():
-		return
-	_water_frame_elapsed = 0.0
-	_water_frame = (_water_frame + 1) % 4
-	_refresh_water_animation()
 
 ## Update terrain for a chunk.
 func update_chunk(chunk_coords: Vector2i, data: Dictionary) -> void:
@@ -159,14 +149,6 @@ func _get_source_id(tile_id: int) -> int:
 		return tile_id
 	return 100 + _water_frame
 
-func _refresh_water_animation() -> void:
-	for cell in _water_cells:
-		set_cell(cell, _get_source_id(TILE_WATER), Vector2i(0, 0))
-	for chunk_key in _chunk_tile_ids:
-		var tile_ids: PackedInt32Array = _chunk_tile_ids[chunk_key]
-		if tile_ids.has(TILE_WATER):
-			_update_chunk_surface_from_key(chunk_key, tile_ids)
-
 func _update_chunk_surface(chunk_coords: Vector2i, tile_ids: PackedInt32Array) -> void:
 	if _art_generator == null:
 		return
@@ -237,13 +219,6 @@ func _detail_for_tile(tile_id: int, random: RandomNumberGenerator) -> int:
 		TILE_STONE: return [0, 4, 7][random.randi_range(0, 2)]
 		TILE_SNOW: return 7
 		_: return -1
-
-func _update_chunk_surface_from_key(chunk_key: String, tile_ids: PackedInt32Array) -> void:
-	var coords_text := chunk_key.trim_prefix("(").trim_suffix(")").split(", ")
-	if coords_text.size() != 2:
-		return
-	var chunk_coords := Vector2i(int(coords_text[0]), int(coords_text[1]))
-	_update_chunk_surface(chunk_coords, tile_ids)
 
 ## Get tile ID based on elevation, moisture, and the tile's biome.
 ## Water and sand shoreline are shared by all biomes; the biome then picks
