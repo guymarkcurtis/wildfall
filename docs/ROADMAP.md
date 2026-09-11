@@ -22,20 +22,18 @@
 
 ## Phase 3: Gameplay
 
-Creature slice is wired (2026-09-10). The rest of this phase is not done.
-
 - [x] Tile-based terrain rendering (orthogonal 32px top-down tiles)
 - [x] Resource node placement and pickup
 - [x] Creature spawn + wander/flee AI (7 types, biome-gated, E-to-kill, loot)
-- [ ] Player collision with terrain
-- [ ] Mouse-aimed ranged combat (face cursor, fire with LMB)
-- [ ] View rotation while moving (`,` / `.` 45° snaps, middle-mouse free rotate, Home reset)
-- [ ] Screen-relative WASD under a rotated camera
-- [ ] Creature AI (pathfinding, aggression / chase-attack)
-- [ ] Building placement and destruction
-- [ ] Weather system
-- [ ] Day/night cycle
-- [ ] Status effects
+- [x] Player collision with terrain (stone cliffs solid; water slows)
+- [x] Mouse-aimed ranged combat (face cursor, LMB fires bow/arrows)
+- [x] View rotation while moving (`,` / `.` 45° snaps, middle-mouse free rotate, Home reset)
+- [x] Screen-relative WASD under a rotated camera
+- [x] Creature AI (pathfinding, aggression / chase-attack for wolf, boar, polar bear)
+- [x] Building placement and destruction (B to build, LMB place, F demolish)
+- [x] Weather system
+- [x] Day/night cycle
+- [x] Status effects
 
 ## Phase 4: Polish
 - [ ] Sound effects

@@ -53,8 +53,9 @@ reference and passes it into the systems it creates.
 ### Player
 CharacterBody2D with:
 - Screen-relative WASD movement + Sprint (Shift)
-- Planned: face / aim at the mouse pointer for ranged weapons
-- Health and hunger components
+- Faces the mouse pointer; LMB fires bow projectiles (arrows)
+- Collides with stone tiles and blocking buildings; water slows movement
+- Health, hunger, and status-effect components
 - Inventory management
 - Position tracking
 
@@ -81,9 +82,9 @@ Manages chunk lifecycle:
 ### CameraController
 Orthogonal top-down `Camera2D` (not isometric, not 3D):
 - Smooth follow toward the player
-- Configurable look-ahead offset
-- Planned: player-controlled view rotation (45° snaps, free rotate, reset to north-up)
-- Movement stays screen-relative while the view is rotated; mouse aim uses world position of the cursor (`get_global_mouse_position()`), which already accounts for camera rotation
+- Look-ahead offset rotates with the view
+- `,` / `.` snap 45°, middle-mouse drag free-rotates, Home resets north-up
+- Movement is screen-relative; mouse aim uses `get_global_mouse_position()`
 
 ### Presentation / camera
 
@@ -133,14 +134,16 @@ resources:
   creature drops are what unhide the Phase 3 hunting recipes
 
 ### Creature (Phase 3 — wired)
-CharacterBody2D with a small IDLE → PATROL → FLEE state machine:
-creatures wander inside their spawn chunk's bounds and flee while the
-player is within `detection_range`; fish only flee into water tiles.
-Placeholder visual is a filled `Polygon2D` circle (Godot 4's `Circle2D`
-is an abstract drawing primitive that cannot be instantiated) plus a name
-label and a mini health bar. Phase 3 creatures are passive/neutral — the
-player kills them with E and they roll their loot table
-(meat/fish/hide/feather/bone) on death.
+CharacterBody2D with IDLE → PATROL → FLEE / CHASE / ATTACK:
+passive animals flee; wolf, boar, and polar bear chase and melee.
+Fish stay in water. Placeholder visual is a filled `Polygon2D` circle
+plus a name label and a mini health bar. Loot rolls on death.
+
+### Buildings / weather / day-night / statuses
+`BuildingManager` places inventory `building` items on the 32px grid.
+`DayNightCycle` drives a `CanvasModulate`. `WeatherSystem` tints a
+overlay and can apply wet/cold statuses. `StatusEffectSystem` ticks
+poison/heal/slow on the player.
 
 ## Data-Driven Resources
 
@@ -148,8 +151,8 @@ All game content uses Resource subclasses:
 
 | Resource | Purpose | Key Fields (actual) |
 |----------|---------|------------|
-| ItemDefinition | Item data (62 items) | item_id, display_name, category, stack_size, weight, rarity, health_bonus, hunger_bonus, damage_bonus, durability, tool_type |
-| RecipeDefinition | Crafting recipe (40 recipes) | recipe_id, result_item_id, result_quantity, crafting_station, required_items {id: qty}, craft_time, unlocked |
+| ItemDefinition | Item data (64 items) | item_id, display_name, category, stack_size, weight, rarity, health_bonus, hunger_bonus, damage_bonus, durability, tool_type |
+| RecipeDefinition | Crafting recipe (42 recipes) | recipe_id, result_item_id, result_quantity, crafting_station, required_items {id: qty}, craft_time, unlocked |
 | BiomeDefinition | Biome config (6 biomes) | id, display_name, elevation_range, moisture_range, temperature_range, ground_color, rain_chance, snow_chance, resource_types, creature_types, vegetation_types |
 | CreatureDefinition | Creature data — **wired (Phase 3)** | id, type, health, speed, detection_range, hostile, allowed_biomes, loot_table, custom_data |
 | TechnologyDefinition | Tech unlock — **future phase, not wired** | id, prerequisites[], unlock_cost[] |
@@ -167,16 +170,16 @@ game:
 
 - `src/entities/`: combat_system, mount, vehicle
 - `src/systems/`: accessibility_manager, advanced_ai, ai_manager,
-  audio_effects, building_manager, combat_manager,
+  audio_effects, combat_manager,
   durability_system, mission_manager, mount_manager,
   optimization_manager, performance_manager, station_manager,
-  status_effect_system, vehicle_manager, weather_effects
+  vehicle_manager, weather_effects
 - `src/core/`: audio_manager, game_manager
 - `src/components/`: inventory_upgrades
 - `src/ui/`: accessibility_ui, ai_display, audio_ui, building_panel,
   inventory_upgrades_ui, mission_panel, mount_ui, performance_ui,
   status_effect_ui, vehicle_ui, weather_display
-- `src/world/`: building, weather_system
+
 
 Also unwired: orphan scene duplicates `scenes/crafting_panel.tscn` and
 `scenes/inventory_panel.tscn` (the real panels live inside

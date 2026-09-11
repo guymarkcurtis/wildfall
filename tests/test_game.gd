@@ -254,3 +254,67 @@ func _run_checks() -> void:
 	_check(chunk_system.get_chunk(Vector2i(0, 0)).size() > 0, "World regenerated for new seed")
 	var seed_label: String = str(hud.get_node("Overlay/SeedLabel").text)
 	_check(seed_label.find("42") >= 0, "HUD seed label shows the new seed (%s)" % seed_label)
+
+	# --- 10. Phase 3 remainder: camera, combat, world systems ---------------
+	_check(InputMap.has_action("rotate_ccw"), "rotate_ccw input action exists")
+	_check(InputMap.has_action("rotate_cw"), "rotate_cw input action exists")
+	_check(InputMap.has_action("reset_view"), "reset_view input action exists")
+	_check(InputMap.has_action("fire"), "fire input action exists")
+	_check(InputMap.has_action("toggle_build"), "toggle_build input action exists")
+	var camera: CameraController = camera_controller as CameraController
+	var player_ent: Player = player as Player
+	camera.rotate_view(PI * 0.5)
+	_check(abs(camera.rotation - PI * 0.5) < 0.01, "Camera rotate_view applies radians")
+	Input.action_press("move_up")
+	var screen_move: Vector2 = player_ent.get_screen_move_vector()
+	Input.action_release("move_up")
+	_check(screen_move.x > 0.5, "Screen-relative WASD: W with 90-degree camera is world +X (%s)" % str(screen_move))
+	camera.reset_view()
+	_check(is_zero_approx(camera.rotation), "reset_view returns north-up")
+	_check(_player_has_shape(player_ent), "Player has a collision shape for terrain")
+	var tileset: TileSet = (terrain_renderer as TerrainRenderer).tile_set
+	_check(tileset != null and tileset.get_physics_layers_count() > 0,
+			"Terrain TileSet has a physics layer (stone collision)")
+	var creature_spawner: Node = main.get_node_or_null("CreatureSpawner")
+	_check(creature_spawner != null, "CreatureSpawner node present")
+	if creature_spawner != null:
+		var wolf: CreatureDefinition = creature_spawner.get_definition("wolf")
+		_check(wolf != null and wolf.hostile, "Wolf is a hostile predator")
+		var rabbit: CreatureDefinition = creature_spawner.get_definition("rabbit")
+		_check(rabbit != null and not rabbit.hostile, "Rabbit stays passive")
+	var day_night: DayNightCycle = main.get_node_or_null("DayNightCycle") as DayNightCycle
+	_check(day_night != null, "DayNightCycle node present")
+	if day_night != null:
+		_check(day_night.is_daytime() == true, "DayNightCycle starts in daytime")
+		day_night.set_time(22.0, 1)
+		_check(day_night.is_nighttime() == true, "DayNightCycle set_time reaches night")
+		day_night.set_time(8.0, 1)
+	var weather: WeatherSystem = main.get_node_or_null("WeatherSystem") as WeatherSystem
+	_check(weather != null, "WeatherSystem node present")
+	if weather != null:
+		weather.set_weather(WeatherSystem.WeatherType.RAIN, 0.8, 10.0)
+		_check(weather.get_weather_name() == "Rain", "WeatherSystem can switch to rain")
+		weather.set_weather(WeatherSystem.WeatherType.CLEAR, 0.0, 40.0)
+	var statuses: StatusEffectSystem = main.get_node_or_null("StatusEffectSystem") as StatusEffectSystem
+	_check(statuses != null, "StatusEffectSystem node present")
+	if statuses != null:
+		statuses.apply_effect("poison")
+		_check(statuses.has_effect("poison"), "StatusEffectSystem applies poison")
+		statuses.remove_effect("poison")
+		_check(not statuses.has_effect("poison"), "StatusEffectSystem removes poison")
+	var buildings: BuildingManager = main.get_node_or_null("BuildingManager") as BuildingManager
+	_check(buildings != null, "BuildingManager node present")
+	if buildings != null and player_ent.inventory != null:
+		player_ent.inventory.add_item("wooden_wall", 1)
+		var placed: bool = buildings.place_building_item("wooden_wall", Vector2i(3, 3), player_ent.inventory)
+		_check(placed, "BuildingManager places a wooden wall")
+		_check(buildings.get_building_count() >= 1, "BuildingManager tracks placed buildings")
+		buildings.demolish_at(Vector2i(3, 3))
+	_check(item_database.has_item("wooden_bow"), "Wooden bow exists for ranged combat")
+	_check(item_database.has_item("arrow"), "Arrows exist for ranged combat")
+
+func _player_has_shape(player: Node) -> bool:
+	for child in player.get_children():
+		if child is CollisionShape2D:
+			return true
+	return false

@@ -55,22 +55,21 @@ func _load_creature_definitions() -> void:
 		{"item_id": "meat", "min_qty": 2, "max_qty": 3, "chance": 1.0},
 		{"item_id": "hide", "min_qty": 1, "max_qty": 2, "chance": 0.8}
 	])
-	_add_definition("boar", "Boar", "passive", 28, 2.2, 4.5, 80.0, 12.0, ["swamp"], [
+	_add_definition("boar", "Boar", "predator", 28, 2.2, 4.5, 80.0, 12.0, ["swamp"], [
 		{"item_id": "meat", "min_qty": 2, "max_qty": 3, "chance": 1.0},
 		{"item_id": "hide", "min_qty": 1, "max_qty": 2, "chance": 0.7},
 		{"item_id": "bone", "min_qty": 0, "max_qty": 1, "chance": 0.5}
-	])
-	# --- Neutral predators: dangerous, but still flee in Phase 3 ---
-	_add_definition("wolf", "Wolf", "neutral", 35, 4.2, 5.5, 120.0, 11.0, ["mountain", "arctic"], [
+	], true, 6.0, "bleed")
+	_add_definition("wolf", "Wolf", "predator", 35, 4.2, 5.5, 120.0, 11.0, ["mountain", "arctic"], [
 		{"item_id": "meat", "min_qty": 1, "max_qty": 2, "chance": 1.0},
 		{"item_id": "hide", "min_qty": 1, "max_qty": 2, "chance": 0.8},
 		{"item_id": "bone", "min_qty": 1, "max_qty": 1, "chance": 0.6}
-	])
-	_add_definition("polar_bear", "Polar Bear", "neutral", 60, 2.5, 6.0, 120.0, 16.0, ["arctic"], [
+	], true, 8.0, "")
+	_add_definition("polar_bear", "Polar Bear", "predator", 60, 2.5, 6.0, 120.0, 16.0, ["arctic"], [
 		{"item_id": "meat", "min_qty": 3, "max_qty": 5, "chance": 1.0},
 		{"item_id": "hide", "min_qty": 2, "max_qty": 3, "chance": 1.0},
 		{"item_id": "bone", "min_qty": 1, "max_qty": 2, "chance": 0.7}
-	])
+	], true, 12.0, "slow")
 	_add_definition("vulture", "Vulture", "passive", 8, 1.7, 4.5, 72.0, 8.0, ["desert"], [
 		{"item_id": "feather", "min_qty": 1, "max_qty": 2, "chance": 1.0},
 		{"item_id": "meat", "min_qty": 1, "max_qty": 1, "chance": 0.5}
@@ -85,7 +84,8 @@ func _load_creature_definitions() -> void:
 ## Build and register one CreatureDefinition.
 func _add_definition(id: String, display_name: String, ctype: String, health: int,
 		speed_tiles: float, detection_tiles: float, patrol_radius_px: float,
-		size_px: float, biomes: Array, loot: Array[Dictionary]) -> void:
+		size_px: float, biomes: Array, loot: Array[Dictionary],
+		hostile: bool = false, attack_damage: float = 0.0, hit_status: String = "") -> void:
 	var def := CreatureDefinition.new()
 	def.id = id
 	def.display_name = display_name
@@ -93,9 +93,13 @@ func _add_definition(id: String, display_name: String, ctype: String, health: in
 	def.health = health
 	def.speed = speed_tiles
 	def.detection_range = detection_tiles
+	def.aggression_range = detection_tiles * 0.7
+	def.attack_damage = attack_damage
+	def.attack_cooldown = 1.1
+	def.hostile = hostile
 	def.loot_table = loot
 	def.allowed_biomes = PackedStringArray(biomes)
-	def.custom_data = {"patrol_radius": patrol_radius_px, "size": size_px}
+	def.custom_data = {"patrol_radius": patrol_radius_px, "size": size_px, "hit_status": hit_status}
 	creature_definitions[id] = def
 
 ## Spawn creatures for a chunk and return their records.

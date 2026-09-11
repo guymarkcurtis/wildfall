@@ -1,4 +1,4 @@
-[gd_scene load_steps=19 format=3]
+[gd_scene load_steps=23 format=3]
 
 [ext_resource type="Script" path="res://src/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://src/core/game_event_bus.gd" id="2_eventbus"]
@@ -18,6 +18,10 @@
 [ext_resource type="Script" path="res://src/ui/slot_ui.gd" id="16_slot"]
 [ext_resource type="Script" path="res://src/ui/recipe_item_ui.gd" id="17_recipe"]
 [ext_resource type="Script" path="res://src/systems/creature_spawner.gd" id="18_creature_spawner"]
+[ext_resource type="Script" path="res://src/systems/day_night_cycle.gd" id="19_day"]
+[ext_resource type="Script" path="res://src/world/weather_system.gd" id="20_weather"]
+[ext_resource type="Script" path="res://src/systems/status_effect_system.gd" id="21_status"]
+[ext_resource type="Script" path="res://src/systems/building_manager.gd" id="22_build"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -56,6 +60,21 @@ position = Vector2(0, 0)
 script = ExtResource("4_seed")
 
 [node name="WorldRoot" type="Node2D" parent="."]
+
+[node name="DayNightCycle" type="Node" parent="."]
+script = ExtResource("19_day")
+
+[node name="WeatherSystem" type="Node" parent="."]
+script = ExtResource("20_weather")
+
+[node name="StatusEffectSystem" type="Node" parent="."]
+script = ExtResource("21_status")
+
+[node name="BuildingManager" type="Node2D" parent="."]
+script = ExtResource("22_build")
+
+[node name="WorldModulate" type="CanvasModulate" parent="."]
+color = Color(1, 1, 1, 1)
 
 [node name="DebugOverlay" type="CanvasLayer" parent="."]
 layer = 10

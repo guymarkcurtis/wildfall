@@ -4,7 +4,7 @@ extends Node
 
 # Time constants
 const HOURS_IN_DAY: float = 24.0
-const SECONDS_PER_HOUR: float = 10.0  # Real seconds per game hour
+const SECONDS_PER_HOUR: float = 4.0  # Real seconds per game hour (~96s day)
 const DAY_START: float = 6.0  # 6 AM
 const DAY_END: float = 20.0  # 8 PM
 
@@ -16,8 +16,10 @@ var total_hours_passed: float = 0.0
 # Light settings
 var ambient_light: float = 1.0
 var sun_color: Color = Color(1.0, 0.95, 0.8)
-var moon_color: Color = Color(0.6, 0.7, 1.0)
+var moon_color: Color = Color(0.55, 0.62, 0.95)
 var night_overlay: Color = Color(0.1, 0.1, 0.2, 0.6)
+var modulate_node: CanvasModulate = null
+var _was_daytime: bool = true
 
 # Signals
 signal hour_changed(hour: float, day: int)
@@ -31,6 +33,8 @@ signal time_changed(hour: float, day: int)
 func initialize(hours_per_day: float = SECONDS_PER_HOUR) -> void:
 	current_hour = DAY_START
 	current_day = 1
+	_was_daytime = true
+	_apply_modulate()
 	print("DayNightCycle: Initialized with %.1f seconds per hour" % hours_per_day)
 
 ## Get the current time of day.
@@ -108,30 +112,38 @@ func get_celestial_color() -> Color:
 			return moon_color.lerp(sun_color, 1.0 - progress)
 		return moon_color
 
-## Update the day/night cycle.
-func _physics_process(delta: float) -> void:
-	# Advance time
+## Update the day/night cycle and world lighting.
+func _process(delta: float) -> void:
+	var previous_hour := current_hour
 	var hours_passed := delta / SECONDS_PER_HOUR
 	current_hour += hours_passed
 	total_hours_passed += hours_passed
-	
-	# Check for day change
+
 	if current_hour >= HOURS_IN_DAY:
 		current_hour -= HOURS_IN_DAY
 		current_day += 1
 		day_started.emit(current_day)
-	
-	# Check for sunrise/sunset
-	if current_hour == DAY_START:
+
+	var now_day := is_daytime()
+	if previous_hour < DAY_START and current_hour >= DAY_START:
 		sunrise.emit()
-	elif current_hour == DAY_END:
+	if previous_hour < DAY_END and current_hour >= DAY_END:
 		sunset.emit()
-	
-	# Emit signals
-	time_changed.emit(current_hour, current_day)
-	
-	# Update ambient light
+		night_started.emit()
+	if now_day and not _was_daytime:
+		day_started.emit(current_day)
+	_was_daytime = now_day
+
 	ambient_light = get_ambient_light()
+	time_changed.emit(current_hour, current_day)
+	_apply_modulate()
+
+func _apply_modulate() -> void:
+	if modulate_node == null or not is_instance_valid(modulate_node):
+		return
+	var light := get_ambient_light()
+	var tint := get_celestial_color()
+	modulate_node.color = Color(tint.r * light, tint.g * light, tint.b * light, 1.0)
 
 ## Get daylight percentage (0.0 to 1.0).
 func get_daylight_percentage() -> float:

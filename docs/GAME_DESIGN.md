@@ -58,7 +58,7 @@ The player's world should gradually develop a history:
 
 ### Combat
 - Action RPG feel with responsive attacks
-- Melee plus mouse-aimed ranged weapons (face the cursor, fire with LMB)
+- Melee (E) plus mouse-aimed ranged weapons (face the cursor, fire with LMB)
 - Enemy variety with state-based AI
 - Boss encounters in persistent world
 
@@ -89,13 +89,17 @@ Movement is **screen-relative**: W always walks toward the top of the current vi
 |-----|--------|--------|
 | W A S D | Move (screen-relative) | Implemented |
 | Shift | Sprint | Implemented |
-| Mouse pointer | Aim ranged weapons | Planned |
-| Left mouse | Fire / use aimed weapon | Planned |
-| `,` / `.` | Rotate view 45° CCW / CW | Planned |
-| Middle-mouse drag | Free-rotate view | Planned |
-| Home | Reset view to world-north up | Planned |
-| E | Interact / harvest | Implemented |
+| Mouse pointer | Aim ranged weapons | Implemented |
+| Left mouse | Fire bow (consumes arrows) | Implemented |
+| `,` / `.` | Rotate view 45° CCW / CW | Implemented |
+| Middle-mouse drag | Free-rotate view | Implemented |
+| Home | Reset view to world-north up | Implemented |
+| E | Interact / harvest / melee | Implemented |
+| B | Toggle build mode | Implemented |
+| Mouse wheel (build mode) | Cycle placeable buildings | Implemented |
+| F | Demolish nearby building | Implemented |
 | I | Toggle inventory | Implemented |
+| C | Toggle crafting | Implemented |
 | F3 | Toggle debug | Implemented |
 | T | Change world seed | Implemented |
 

@@ -32,7 +32,12 @@ var _chunk_tile_ids: Dictionary = {}
 ## Set up the tile set.
 func _ready() -> void:
 	_create_tile_set()
+	collision_enabled = true
 	world_generator = get_node_or_null("../WorldGenerator")
+
+## True when the given world tile is currently drawn as water.
+func is_water_cell(world_tile: Vector2i) -> bool:
+	return _water_cells.has(world_tile)
 
 ## Create the tile set with proper sprites.
 func _create_tile_set() -> void:

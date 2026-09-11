@@ -67,7 +67,7 @@ func _generate_terrain_tiles(tile_set: TileSet) -> void:
 	_add_tile(tile_set, TILE_GRASS, _create_terrain_texture(TILE_GRASS))
 	_add_tile(tile_set, TILE_FOREST, _create_terrain_texture(TILE_FOREST))
 	_add_tile(tile_set, TILE_DIRT, _create_terrain_texture(TILE_DIRT))
-	_add_tile(tile_set, TILE_STONE, _create_terrain_texture(TILE_STONE))
+	_add_tile(tile_set, TILE_STONE, _create_terrain_texture(TILE_STONE), true)
 	_add_tile(tile_set, TILE_SNOW, _create_terrain_texture(TILE_SNOW))
 	_add_tile(tile_set, TILE_MUD, _create_terrain_texture(TILE_MUD))
 
@@ -200,9 +200,21 @@ func _create_fallback_texture() -> ImageTexture:
 	image.fill(Color(0.12, 0.22, 0.19, 1.0))
 	return ImageTexture.create_from_image(image)
 
-func _add_tile(tile_set: TileSet, tile_id: int, texture: ImageTexture) -> void:
+func _add_tile(tile_set: TileSet, tile_id: int, texture: ImageTexture, collide: bool = false) -> void:
 	var source := TileSetAtlasSource.new()
 	source.texture = texture
 	source.texture_region_size = Vector2i(TILE_SIZE, TILE_SIZE)
 	source.create_tile(Vector2i(0, 0))
 	tile_set.add_source(source, tile_id)
+	if not collide:
+		return
+	if tile_set.get_physics_layers_count() == 0:
+		tile_set.add_physics_layer()
+	var tile_data: TileData = source.get_tile_data(Vector2i(0, 0), 0)
+	if tile_data == null:
+		return
+	tile_data.add_collision_polygon(0)
+	var half := float(TILE_SIZE) * 0.5
+	tile_data.set_collision_polygon_points(0, 0, PackedVector2Array([
+		Vector2(-half, -half), Vector2(half, -half), Vector2(half, half), Vector2(-half, half)
+	]))

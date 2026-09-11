@@ -1,112 +1,198 @@
-## Manages building placement and lifecycle.
+## Player-driven building placement and demolition on the 32px grid.
 class_name BuildingManager
-extends Node
+extends Node2D
 
-# Dictionary of building_id -> Building
-var buildings: Dictionary = {}
+const TILE_SIZE: int = 32
 
-# Signals
+var buildings: Dictionary = {}  # Vector2i -> Building
+var build_mode: bool = false
+var selected_item_id: String = ""
+
+var player: Player = null
+var item_database: ItemDatabase = null
+
+var _ghost: Polygon2D = null
+var _owned: PackedStringArray = []
+var _select_index: int = 0
+
 signal building_placed(building_id: String, coords: Vector2i)
-signal building_removed(building_id: String)
-signal building_damaged(building_id: String, current_health: int, max_health: int)
+signal building_removed(building_id: String, coords: Vector2i)
+signal build_mode_changed(enabled: bool, selected_item_id: String)
 
-## Initialize the building manager.
-func initialize() -> void:
-	print("BuildingManager: Initialized")
+func _ready() -> void:
+	_ghost = Polygon2D.new()
+	_ghost.polygon = PackedVector2Array([
+		Vector2(2, 2), Vector2(30, 2), Vector2(30, 30), Vector2(2, 30)
+	])
+	_ghost.color = Color(0.4, 0.9, 0.4, 0.35)
+	_ghost.visible = false
+	_ghost.z_index = 20
+	add_child(_ghost)
 
-## Place a new building.
-func place_building(building: Building, coords: Vector2i) -> bool:
-	var building_id := building.get_building_id()
-	if buildings.has(building_id):
+func _process(_delta: float) -> void:
+	if not build_mode:
+		_ghost.visible = false
+		return
+	_refresh_owned()
+	if _owned.is_empty():
+		selected_item_id = ""
+		_ghost.visible = false
+		return
+	if selected_item_id == "" or not _owned.has(selected_item_id):
+		_select_index = 0
+		selected_item_id = _owned[0]
+		build_mode_changed.emit(true, selected_item_id)
+	var tile := _mouse_tile()
+	_ghost.position = Vector2(tile * TILE_SIZE)
+	_ghost.visible = true
+	_ghost.color = Color(0.3, 0.85, 0.35, 0.4) if can_place(tile) else Color(0.85, 0.25, 0.2, 0.4)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("toggle_build"):
+		set_build_mode(not build_mode)
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("demolish"):
+		_demolish_near_player()
+		get_viewport().set_input_as_handled()
+		return
+	if not build_mode:
+		return
+	if event is InputEventMouseButton:
+		var mouse := event as InputEventMouseButton
+		if not mouse.pressed:
+			return
+		if mouse.button_index == MOUSE_BUTTON_LEFT:
+			try_place_at(_mouse_tile())
+			get_viewport().set_input_as_handled()
+		elif mouse.button_index == MOUSE_BUTTON_RIGHT:
+			set_build_mode(false)
+			get_viewport().set_input_as_handled()
+		elif mouse.button_index == MOUSE_BUTTON_WHEEL_UP:
+			cycle_selection(-1)
+			get_viewport().set_input_as_handled()
+		elif mouse.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			cycle_selection(1)
+			get_viewport().set_input_as_handled()
+
+func set_build_mode(enabled: bool) -> void:
+	build_mode = enabled
+	if build_mode:
+		_refresh_owned()
+		if not _owned.is_empty():
+			_select_index = clampi(_select_index, 0, _owned.size() - 1)
+			selected_item_id = _owned[_select_index]
+		else:
+			selected_item_id = ""
+	else:
+		selected_item_id = ""
+		if _ghost:
+			_ghost.visible = false
+	build_mode_changed.emit(build_mode, selected_item_id)
+
+func cycle_selection(step: int) -> void:
+	_refresh_owned()
+	if _owned.is_empty():
+		selected_item_id = ""
+		return
+	_select_index = posmod(_select_index + step, _owned.size())
+	selected_item_id = _owned[_select_index]
+	build_mode_changed.emit(build_mode, selected_item_id)
+
+func can_place(tile: Vector2i) -> bool:
+	if selected_item_id == "":
 		return false
-	
-	buildings[building_id] = building
-	building.position = Vector2(coords)
+	if buildings.has(tile):
+		return false
+	if player == null or player.inventory == null:
+		return false
+	if not player.inventory.has_item(selected_item_id, 1):
+		return false
+	return true
+
+## Place the currently selected building, consuming one inventory item.
+func try_place_at(tile: Vector2i) -> bool:
+	if not can_place(tile):
+		return false
+	return place_building_item(selected_item_id, tile)
+
+## Test/API placement: consume `item_id` from the given inventory and spawn.
+func place_building_item(item_id: String, tile: Vector2i, inventory: InventoryComponent = null) -> bool:
+	var inv: InventoryComponent = inventory
+	if inv == null and player != null:
+		inv = player.inventory
+	if inv == null or item_id == "" or buildings.has(tile):
+		return false
+	if not inv.has_item(item_id, 1):
+		return false
+	inv.remove_item(item_id, 1)
+	var display: String = item_id
+	if item_database != null and item_database.has_item(item_id):
+		display = item_database.get_item_display_name(item_id)
+	var building := Building.new()
+	building.setup(item_id, display, tile, 50)
+	building.building_destroyed.connect(_on_building_destroyed.bind(building))
 	add_child(building)
-	building_placed.emit(building_id, coords)
+	buildings[tile] = building
+	building_placed.emit(item_id, tile)
 	return true
 
-## Remove a building.
-func remove_building(building_id: String) -> bool:
-	if not buildings.has(building_id):
+func demolish_at(tile: Vector2i) -> bool:
+	if not buildings.has(tile):
 		return false
-	
-	buildings[building_id].queue_free()
-	buildings.erase(building_id)
-	building_removed.emit(building_id)
+	var building: Building = buildings[tile]
+	_remove_building(building, true)
 	return true
 
-## Get a building by ID.
-func get_building(building_id: String) -> Building:
-	return buildings.get(building_id)
-
-## Get all buildings.
-func get_all_buildings() -> Array[Building]:
-	return buildings.values()
-
-## Get buildings near a position.
-func get_buildings_near(position: Vector2, range: float = 64.0) -> Array[Building]:
-	var nearby: Array[Building] = []
-	for building_id in buildings:
-		var building := buildings[building_id]
-		var dist := building.global_position.distance_to(position)
-		if dist <= range:
-			nearby.append(building)
-	return nearby
-
-## Damage a building.
-func damage_building(building_id: String, amount: int) -> bool:
-	var building := buildings.get(building_id)
-	if building:
-		var destroyed := building.take_damage(amount)
-		if destroyed:
-			buildings.erase(building_id)
-		return destroyed
-	return false
-
-## Get building count.
 func get_building_count() -> int:
 	return buildings.size()
 
-## Clear all buildings.
 func clear_all() -> void:
-	for building_id in buildings:
-		buildings[building_id].queue_free()
+	for tile in buildings.keys():
+		var building: Building = buildings[tile]
+		if is_instance_valid(building):
+			building.queue_free()
 	buildings.clear()
+	set_build_mode(false)
 
-## Serialize building data.
-func serialize_all() -> Dictionary:
-	var data := {}
-	for building_id in buildings:
-		var building := buildings[building_id]
-		data[building_id] = building.serialize()
-	return data
+func _demolish_near_player() -> void:
+	if player == null:
+		return
+	var nearest: Building = null
+	var best: float = 56.0
+	for building in buildings.values():
+		if not is_instance_valid(building):
+			continue
+		var dist: float = building.position.distance_to(player.global_position)
+		if dist < best:
+			best = dist
+			nearest = building
+	if nearest != null:
+		_remove_building(nearest, true)
 
-## Restore building positions from save data.
-func deserialize_all(data: Dictionary) -> void:
-	for building_id in data:
-		var building_data := data[building_id]
-		var building := _create_building_from_data(building_data)
-		if building:
-			building.deserialize(building_data)
-			buildings[building_id] = building
-			add_child(building)
+func _remove_building(building: Building, refund: bool) -> void:
+	var tile: Vector2i = building.tile_coords
+	var item_id: String = building.building_id
+	buildings.erase(tile)
+	if refund and player != null and player.inventory != null and item_id != "":
+		player.inventory.add_item(item_id, 1)
+	building_removed.emit(item_id, tile)
+	if is_instance_valid(building):
+		building.queue_free()
 
-## Create a building from serialized data.
-func _create_building_from_data(data: Dictionary) -> Building:
-	var building_type := data.get("building_type", 0)
-	var building_id := data.get("building_id", "")
-	var health := data.get("health", 50)
-	
-	var building := Building.new()
-	building.setup(building_type, building_id, building_id, health)
-	return building
+func _on_building_destroyed(building: Building) -> void:
+	_remove_building(building, false)
 
-## Get buildings of a specific type.
-func get_buildings_by_type(building_type: int) -> Array[Building]:
-	var result: Array[Building] = []
-	for building_id in buildings:
-		var building := buildings[building_id]
-		if building.get_building_type() == building_type:
-			result.append(building)
-	return result
+func _mouse_tile() -> Vector2i:
+	var world: Vector2 = player.get_global_mouse_position() if player != null else Vector2.ZERO
+	return Vector2i(int(floor(world.x / float(TILE_SIZE))), int(floor(world.y / float(TILE_SIZE))))
+
+func _refresh_owned() -> void:
+	_owned = PackedStringArray()
+	if player == null or player.inventory == null or item_database == null:
+		return
+	var items: Dictionary = player.inventory.get_all_items()
+	for item_id in items:
+		var def: ItemDefinition = item_database.get_item(str(item_id))
+		if def != null and def.category == "building" and int(items[item_id]) > 0:
+			_owned.append(str(item_id))

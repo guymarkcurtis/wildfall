@@ -1,193 +1,109 @@
-## Base class for all buildable structures.
+## Placeable structure with health, collision, and a colored placeholder.
 class_name Building
 extends StaticBody2D
 
-# Building types
-enum BuildingType {
-	WALL,
-	FLOOR,
-	DOOR,
-	ROOF,
-	TORCH,
-	CONTAINER,
-	WORKBENCH,
-	FURNACE,
-	FARM_TILE
-}
+const TILE_SIZE: float = 32.0
 
-# Building data
-var building_type: BuildingType = BuildingType.WALL
-var building_id: String = "wall"
-var display_name: String = "Wall"
+var building_id: String = ""
+var display_name: String = "Building"
 var health: int = 50
 var max_health: int = 50
-var is_locked: bool = false
-var is_interactable: bool = false
+var tile_coords: Vector2i = Vector2i.ZERO
+var blocks_movement: bool = true
 
-# Visual
-var _sprite: Sprite2D = null
-var _health_bar: ProgressBar = None
+var _body: Polygon2D = null
+var _label: Label = null
+var _health_bar: ProgressBar = null
 
-# Collision
-var _collision: CollisionShape2D = null
-
-# Signals
-signal building_placed(coords: Vector2i)
 signal building_destroyed
 signal building_damaged(current_health: int, max_health: int)
 
-## Initialize the building.
-func setup(building_type: BuildingType, building_id: String, display_name: String, health: int = 50) -> void:
-	self.building_type = building_type
-	self.building_id = building_id
-	self.display_name = display_name
-	self.health = health
-	self.max_health = health
+func setup(item_id: String, item_name: String, tile: Vector2i, hp: int = 50) -> void:
+	building_id = item_id
+	display_name = item_name
+	tile_coords = tile
+	health = hp
+	max_health = hp
+	position = Vector2(tile) * TILE_SIZE
+	blocks_movement = _id_blocks(item_id)
 	_setup_visuals()
 	_setup_collision()
-	building_placed.emit(Vector2i(position))
 
-## Set up visual representation.
+func _id_blocks(item_id: String) -> bool:
+	return item_id.ends_with("wall") or item_id == "fence" or item_id == "wooden_door"
+
 func _setup_visuals() -> void:
-	# Create sprite
-	_sprite = Sprite2D.new()
-	_sprite.position = Vector2(16, 16)
-	
-	var texture: ImageTexture = _get_building_texture()
-	if texture:
-		_sprite.texture = texture
-	else:
-		# Fallback colored sprite
-		var image := Image.create_empty(32, 32, false, Image.FORMAT_RGBA8)
-		var color := _get_building_color()
-		for y in range(32):
-			for x in range(32):
-				image.set_pixel(x, y, color)
-		_sprite.texture = ImageTexture.create_from_image(image)
-	
-	add_child(_sprite)
-	
-	# Create health bar
+	_body = Polygon2D.new()
+	var inset: float = 2.0
+	_body.polygon = PackedVector2Array([
+		Vector2(inset, inset),
+		Vector2(TILE_SIZE - inset, inset),
+		Vector2(TILE_SIZE - inset, TILE_SIZE - inset),
+		Vector2(inset, TILE_SIZE - inset)
+	])
+	_body.color = _color_for(building_id)
+	add_child(_body)
+
+	_label = Label.new()
+	_label.text = display_name
+	_label.position = Vector2(0.0, -16.0)
+	_label.add_theme_font_size_override("font_size", 10)
+	add_child(_label)
+
 	_health_bar = ProgressBar.new()
 	_health_bar.min_value = 0
 	_health_bar.max_value = max_health
 	_health_bar.value = health
-	_health_bar.custom_minimum_size = Vector2(32, 4)
-	_health_bar.position = Vector2(0, -20)
+	_health_bar.custom_minimum_size = Vector2(TILE_SIZE, 4)
+	_health_bar.position = Vector2(0.0, -6.0)
+	_health_bar.show_percentage = false
 	add_child(_health_bar)
 
-## Get texture for building type.
-func _get_building_texture() -> ImageTexture:
-	var image := Image.create_empty(32, 32, false, Image.FORMAT_RGBA8)
-	var color := _get_building_color()
-	
-	for y in range(32):
-		for x in range(32):
-			var pixel_color := color
-			# Add pattern based on building type
-			match building_type:
-				BuildingType.WALL:
-					# Brick pattern
-					if y % 8 == 0 or x % 16 == 0:
-						pixel_color = color.lerp(Color(0.8, 0.6, 0.4), 0.5)
-				BuildingType.FLOOR:
-					# Tile pattern
-					if (x + y) % 16 < 8:
-						pixel_color = color.lerp(Color(0.8, 0.7, 0.5), 0.3)
-				BuildingType.TORCH:
-					# Flame pattern
-					var dist := Vector2(float(x) - 16.0, float(y) - 12.0).length()
-					if dist < 8.0:
-						pixel_color = Color(0.9, 0.6, 0.2)
-				BuildingType.FARM_TILE:
-					# Soil pattern
-					if y > 16:
-						pixel_color = Color(0.4, 0.3, 0.2)
-			image.set_pixel(x, y, pixel_color)
-	
-	return ImageTexture.create_from_image(image)
-
-## Get color for building type.
-func _get_building_color() -> Color:
-	match building_type:
-		BuildingType.WALL:
-			return Color(0.5, 0.4, 0.3)  # Brown
-		BuildingType.FLOOR:
-			return Color(0.6, 0.5, 0.4)  # Tan
-		BuildingType.DOOR:
-			return Color(0.4, 0.3, 0.2)  # Dark brown
-		BuildingType.ROOF:
-			return Color(0.6, 0.3, 0.2)  # Red
-		BuildingType.TORCH:
-			return Color(0.8, 0.5, 0.2)  # Orange
-		BuildingType.CONTAINER:
-			return Color(0.5, 0.4, 0.3)  # Brown
-		BuildingType.WORKBENCH:
-			return Color(0.6, 0.5, 0.3)  # Light brown
-		BuildingType.FURNACE:
-			return Color(0.4, 0.4, 0.4)  # Gray
-		BuildingType.FARM_TILE:
-			return Color(0.4, 0.3, 0.2)  # Brown
+func _color_for(item_id: String) -> Color:
+	match item_id:
+		"wooden_wall", "wooden_door", "fence":
+			return Color(0.55, 0.35, 0.18, 0.95)
+		"stone_wall", "stone_floor":
+			return Color(0.55, 0.55, 0.58, 0.95)
+		"campfire":
+			return Color(0.85, 0.35, 0.1, 0.95)
+		"furnace", "anvil":
+			return Color(0.4, 0.4, 0.45, 0.95)
+		"workbench":
+			return Color(0.6, 0.45, 0.25, 0.95)
+		"chest":
+			return Color(0.7, 0.5, 0.2, 0.95)
+		"bed":
+			return Color(0.45, 0.35, 0.7, 0.95)
+		"torch":
+			return Color(1.0, 0.8, 0.3, 0.95)
 		_:
-			return Color(0.5, 0.5, 0.5)
+			return Color(0.5, 0.55, 0.4, 0.95)
 
-## Set up collision detection.
 func _setup_collision() -> void:
-	_collision = CollisionShape2D.new()
-	var shape := RectangleShape2D.new()
-	shape.size = Vector2(32, 32)
-	_collision.shape = shape
-	add_child(_collision)
-	
-	collision_layer = 4
+	var shape := CollisionShape2D.new()
+	var rect := RectangleShape2D.new()
+	rect.size = Vector2(TILE_SIZE - 4.0, TILE_SIZE - 4.0)
+	shape.shape = rect
+	shape.position = Vector2(TILE_SIZE, TILE_SIZE) * 0.5
+	add_child(shape)
+	collision_layer = 1
 	collision_mask = 0
+	if not blocks_movement:
+		# Stations occupy a tile but the player can walk through them.
+		collision_layer = 0
 
-## Damage the building.
-func take_damage(amount: int) -> bool:
-	if health <= 0:
+func take_damage(amount: float) -> bool:
+	if amount <= 0 or health <= 0:
 		return false
-	
-	health = max(0, health - amount)
-	building_damaged.emit(health, max_health)
-	
+	health = maxi(0, health - int(amount))
 	if _health_bar:
 		_health_bar.value = health
-	
+	building_damaged.emit(health, max_health)
 	if health <= 0:
 		building_destroyed.emit()
 		return true
-	
 	return false
 
-## Get building type.
-func get_building_type() -> BuildingType:
-	return building_type
-
-## Get building ID.
 func get_building_id() -> String:
 	return building_id
-
-## Get health ratio.
-func get_health_ratio() -> float:
-	return float(health) / float(max_health)
-
-## Check if building is destroyed.
-func is_destroyed() -> bool:
-	return health <= 0
-
-## Serialize building data.
-func serialize() -> Dictionary:
-	return {
-		"building_id": building_id,
-		"position": global_position,
-		"health": health,
-		"max_health": max_health,
-		"building_type": building_type
-	}
-
-## Deserialize building data.
-func deserialize(data: Dictionary) -> void:
-	global_position = data.get("position", Vector2.ZERO)
-	health = data.get("health", max_health)
-	if _health_bar:
-		_health_bar.value = health

@@ -30,6 +30,11 @@ const INITIAL_CHUNK_RADIUS: int = 3
 @onready var inventory_panel: InventoryPanel = $HUD/InventoryPanel
 @onready var crafting_panel: CraftingPanel = $HUD/CraftingPanel
 @onready var save_system: SaveSystem = $SaveSystem
+@onready var day_night: DayNightCycle = $DayNightCycle
+@onready var weather_system: WeatherSystem = $WeatherSystem
+@onready var status_effects: StatusEffectSystem = $StatusEffectSystem
+@onready var building_manager: BuildingManager = $BuildingManager
+@onready var world_modulate: CanvasModulate = $WorldModulate
 
 var _world_seed: int = 0
 var _debug_enabled: bool = false
@@ -66,6 +71,18 @@ func _ready() -> void:
 	# SaveSystem needs typed references (the project has no autoloads).
 	save_system.set_player(player)
 	save_system.set_world_generator(world_generator)
+
+	day_night.modulate_node = world_modulate
+	day_night.initialize()
+	weather_system.world_generator = world_generator
+	weather_system.initialize()
+	status_effects.initialize()
+	status_effects.target_health = player.health_component
+	player.status_effects = status_effects
+	building_manager.player = player
+	building_manager.item_database = item_database
+	building_manager.building_placed.connect(func(id: String, coords: Vector2i):
+		$GameEventBus.building_placed.emit(id, coords))
 
 	# HUD (health/hunger bars, seed label, optional debug readout).
 	hud.set_player(player)
@@ -123,6 +140,8 @@ func _generate_world(seed: int) -> void:
 			creature.queue_free()
 	_creature_nodes.clear()
 	_creatures_by_chunk.clear()
+	if building_manager:
+		building_manager.clear_all()
 
 	world_generator.initialize(seed)
 	resource_spawner.initialize(seed)
@@ -276,9 +295,12 @@ func _process(delta: float) -> void:
 	# this it never follows the player.
 	if camera_controller != null and is_instance_valid(player):
 		camera_controller.set_target(player.get_world_position())
+		if camera_controller.has_method("set_rotation_locked") and seed_input != null:
+			camera_controller.set_rotation_locked(seed_input.is_editing())
 	# Reflect the seed editor (T) state in the HUD seed label.
 	if hud != null and seed_input != null:
 		hud.set_seed_editing(seed_input.is_editing(), seed_input.get_input_buffer())
+	_update_world_presentation(delta)
 	_update_debug_overlay()
 
 	if Input.is_action_just_pressed("toggle_debug"):
@@ -287,6 +309,24 @@ func _process(delta: float) -> void:
 		save_game()
 	if Input.is_action_just_pressed("load"):
 		load_game()
+
+func _update_world_presentation(_delta: float) -> void:
+	if weather_system != null and status_effects != null:
+		if weather_system.is_wet() and not status_effects.has_effect("slow"):
+			status_effects.apply_effect("slow")
+		if weather_system.is_cold_weather() and not status_effects.has_effect("frozen"):
+			status_effects.apply_effect("frozen")
+		if day_night != null and day_night.is_nighttime():
+			var tile := Vector2i(int(floor(player.global_position.x / 32.0)), int(floor(player.global_position.y / 32.0)))
+			var biome: String = world_generator.get_biome_at_world(tile.x, tile.y)
+			if biome == "arctic" and not status_effects.has_effect("frozen"):
+				status_effects.apply_effect("frozen")
+	if hud != null and day_night != null and weather_system != null:
+		var extra: String = ""
+		if building_manager != null and building_manager.build_mode:
+			extra = "   Build: %s  (LMB place, wheel cycle, F demolish, B exit)" % building_manager.selected_item_id
+		hud.set_world_info(day_night.get_time_of_day(), weather_system.get_weather_name(),
+				status_effects.get_effect_names() if status_effects else PackedStringArray(), extra)
 
 ## Toggle the debug overlays (Main's DebugOverlay + the HUD debug label).
 func _toggle_debug() -> void:

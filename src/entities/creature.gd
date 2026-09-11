@@ -1,19 +1,16 @@
-## Passive creature entity with movement, health, and a wander/flee AI.
-## Phase 3 port of the legacy placeholder: creatures are bound to the chunk
-## they spawned in, wander within it, and flee when the player gets close.
-## All Phase 3 creatures are passive/neutral — hostile AI (chase/attack) is
-## a later phase, so the old CHASE/ATTACK states were dropped.
+## Creature entity with wander / flee / chase / attack AI.
+## Passive animals flee; hostile predators path toward the player and melee.
 class_name Creature
 extends CharacterBody2D
 
 const TILE_SIZE: float = 32.0
 
-# Creature states (no CHASE/ATTACK yet: no creature attacks the player in
-# Phase 3 — they all flee instead).
 enum State {
 	IDLE,
 	PATROL,
-	FLEE
+	FLEE,
+	CHASE,
+	ATTACK
 }
 
 # Creature data (filled in by setup from the CreatureDefinition)
@@ -31,6 +28,11 @@ var target_position: Vector2 = Vector2.ZERO
 var patrol_center: Vector2 = Vector2.ZERO
 var patrol_radius: float = 100.0
 var detection_range: float = 144.0  # pixels (tiles * TILE_SIZE)
+var aggression_range: float = 96.0
+var attack_damage: float = 4.0
+var attack_cooldown: float = 1.2
+var _attack_timer: float = 0.0
+var hit_status: String = ""
 var state_timer: float = 0.0
 
 # World generator reference (sibling under Main) for water queries.
@@ -68,6 +70,10 @@ func setup(ctype: String, def: CreatureDefinition, chunk_coords: Vector2i, world
 	is_hostile = def.hostile
 	is_fish = (ctype == "fish")
 	detection_range = def.detection_range * TILE_SIZE
+	aggression_range = def.aggression_range * TILE_SIZE
+	attack_damage = def.attack_damage
+	attack_cooldown = def.attack_cooldown
+	hit_status = str(def.custom_data.get("hit_status", ""))
 	patrol_radius = float(def.custom_data.get("patrol_radius", 100.0))
 	_loot_table = def.loot_table
 	world_generator = world_gen
@@ -88,6 +94,7 @@ func setup(ctype: String, def: CreatureDefinition, chunk_coords: Vector2i, world
 const CHUNK_PIXELS: int = 512
 
 func _ready() -> void:
+	motion_mode = MOTION_MODE_FLOATING
 	# The player is always a sibling under Main (works in the game and in
 	# the headless test harness, which adds main.tscn to the tree root).
 	var parent := get_parent()
@@ -166,6 +173,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	state_timer += delta
+	_attack_timer = maxf(0.0, _attack_timer - delta)
 	if _health_bar:
 		_health_bar.value = health
 
@@ -174,15 +182,15 @@ func _physics_process(delta: float) -> void:
 		_player_ref = null
 		player = null
 
-	var was_fleeing: bool = current_state == State.FLEE
 	if player != null:
 		var dist_to_player: float = global_position.distance_to(player.global_position)
 		if dist_to_player <= detection_range:
-			if not was_fleeing:
+			if is_hostile:
+				current_state = State.ATTACK if dist_to_player <= 28.0 else State.CHASE
+			elif current_state != State.FLEE:
 				current_state = State.FLEE
 				state_timer = 0.0
-		elif was_fleeing:
-			# Player is out of range again: resume wandering.
+		elif current_state == State.FLEE or current_state == State.CHASE or current_state == State.ATTACK:
 			current_state = State.PATROL
 			state_timer = 0.0
 			_patrol_duration = randf_range(3.0, 6.0)
@@ -195,6 +203,10 @@ func _physics_process(delta: float) -> void:
 			_patrol_behavior(delta)
 		State.FLEE:
 			_flee_behavior(delta, player)
+		State.CHASE:
+			_chase_behavior(delta, player)
+		State.ATTACK:
+			_attack_behavior(delta, player)
 
 ## Stay still for a while, then start a patrol leg.
 func _idle_behavior(_delta: float) -> void:
@@ -265,6 +277,53 @@ func _flee_behavior(_delta: float, player: Node) -> void:
 
 	velocity = direction * speed * 1.5 * TILE_SIZE
 	move_and_slide()
+
+## Steer toward the player, sidestepping water for land creatures.
+func _chase_behavior(_delta: float, player: Node) -> void:
+	if player == null or not is_instance_valid(player):
+		current_state = State.PATROL
+		return
+	var toward: Vector2 = player.global_position - global_position
+	if toward.length() < 1.0:
+		velocity = Vector2.ZERO
+		move_and_slide()
+		return
+	var direction: Vector2 = toward.normalized()
+	if not is_fish:
+		var step_point: Vector2 = global_position + direction * 24.0
+		if _is_water(step_point):
+			var sidestep: Array[Vector2] = [direction.rotated(0.8), direction.rotated(-0.8), direction.rotated(1.6)]
+			for option in sidestep:
+				if not _is_water(global_position + option.normalized() * 24.0):
+					direction = option.normalized()
+					break
+	else:
+		if not _is_water(global_position + direction * 24.0):
+			velocity = Vector2.ZERO
+			move_and_slide()
+			return
+	velocity = direction * speed * 1.15 * TILE_SIZE
+	move_and_slide()
+
+## Melee the player when close enough and the cooldown is ready.
+func _attack_behavior(_delta: float, player: Node) -> void:
+	velocity = Vector2.ZERO
+	move_and_slide()
+	if player == null or not is_instance_valid(player):
+		current_state = State.PATROL
+		return
+	var dist: float = global_position.distance_to(player.global_position)
+	if dist > 32.0:
+		current_state = State.CHASE
+		return
+	if _attack_timer > 0.0:
+		return
+	_attack_timer = attack_cooldown
+	var target := player as Player
+	if target != null and target.health_component != null:
+		target.health_component.take_damage(attack_damage)
+		if hit_status != "" and target.status_effects != null:
+			target.status_effects.apply_effect(hit_status)
 
 	if player != null and is_instance_valid(player):
 		if global_position.distance_to(player.global_position) > detection_range * 2.0:

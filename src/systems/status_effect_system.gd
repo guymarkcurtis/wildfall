@@ -13,12 +13,44 @@ signal effect_added(effect_id: String, stack_count: int)
 signal effect_removed(effect_id: String)
 signal effect_updated(effect_id: String, stack_count: int)
 signal effect_expired(effect_id: String)
+signal effect_stack_changed(effect_id: String, stack_count: int)
 signal effects_changed(effect_count: int)
+
+var target_health: HealthComponent = null
+var _tick_accum: float = 0.0
 
 ## Initialize the status effect system.
 func initialize() -> void:
 	_load_effect_definitions()
 	print("StatusEffectSystem: Initialized with %d effect definitions" % effect_definitions.size())
+
+func _process(delta: float) -> void:
+	if active_effects.is_empty():
+		return
+	update_effects(delta)
+	_tick_accum += delta
+	if _tick_accum < 1.0:
+		return
+	_tick_accum = 0.0
+	if target_health == null:
+		return
+	var mods: Dictionary = get_total_modifiers()
+	var heal: int = int(mods.get("heal_rate", 0))
+	var poison: int = int(mods.get("poison_rate", 0))
+	if heal > 0:
+		target_health.heal(float(heal))
+	if poison > 0:
+		target_health.take_damage(float(poison))
+
+func get_speed_bonus() -> float:
+	return float(get_total_modifiers().get("speed_bonus", 0.0))
+
+func get_effect_names() -> PackedStringArray:
+	var names := PackedStringArray()
+	for effect_id in active_effects:
+		var effect: StatusEffect = active_effects[effect_id]
+		names.append(effect.effect_name)
+	return names
 
 ## Load effect definitions.
 func _load_effect_definitions() -> void:
@@ -89,31 +121,31 @@ func _add_effect_definition(effect_id: String, effect_name: String, effect_type:
 
 ## Apply a status effect to an entity.
 func apply_effect(effect_id: String) -> StatusEffect:
-	var definition := effect_definitions.get(effect_id)
-	if not definition:
+	if not effect_definitions.has(effect_id):
 		return null
+	var definition: Dictionary = effect_definitions[effect_id]
 	
 	var effect := StatusEffect.new()
 	effect.initialize(
-		definition["effect_id"],
-		definition["effect_name"],
-		definition["effect_type"],
-		definition["effect_category"],
-		definition["duration"],
-		definition["stack_max"],
-		definition["icon"],
-		definition["health_bonus"],
-		definition["max_health_bonus"],
-		definition["speed_bonus"],
-		definition["damage_bonus"],
-		definition["resistance_bonus"],
-		definition["heal_rate"],
-		definition["poison_rate"]
+		str(definition["effect_id"]),
+		str(definition["effect_name"]),
+		definition["effect_type"] as StatusEffect.EffectType,
+		definition["effect_category"] as StatusEffect.EffectCategory,
+		float(definition["duration"]),
+		int(definition["stack_max"]),
+		str(definition["icon"]),
+		int(definition["health_bonus"]),
+		int(definition["max_health_bonus"]),
+		float(definition["speed_bonus"]),
+		int(definition["damage_bonus"]),
+		int(definition["resistance_bonus"]),
+		int(definition["heal_rate"]),
+		int(definition["poison_rate"])
 	)
 	
 	# Check if effect already exists
 	if active_effects.has(effect_id):
-		var existing := active_effects[effect_id]
+		var existing: StatusEffect = active_effects[effect_id]
 		if existing.stack_count < existing.stack_max:
 			existing.stack_count += 1
 			active_effects[effect_id] = existing
@@ -146,7 +178,7 @@ func clear_all_effects() -> void:
 func update_effects(delta: float) -> void:
 	var expired: Array = []
 	for effect_id in active_effects:
-		var effect := active_effects[effect_id]
+		var effect: StatusEffect = active_effects[effect_id]
 		effect.update(delta)
 		if effect.is_expired:
 			expired.append(effect_id)
@@ -158,7 +190,7 @@ func update_effects(delta: float) -> void:
 
 ## Get an active effect.
 func get_effect(effect_id: String) -> StatusEffect:
-	return active_effects.get(effect_id)
+	return active_effects.get(effect_id) as StatusEffect
 
 ## Get all active effects.
 func get_all_effects() -> Dictionary:
@@ -181,7 +213,7 @@ func get_total_modifiers() -> Dictionary:
 	}
 	
 	for effect_id in active_effects:
-		var effect := active_effects[effect_id]
+		var effect: StatusEffect = active_effects[effect_id]
 		modifiers["health_bonus"] += effect.health_bonus * effect.stack_count
 		modifiers["max_health_bonus"] += effect.max_health_bonus * effect.stack_count
 		modifiers["speed_bonus"] += effect.speed_bonus * effect.stack_count
@@ -207,7 +239,7 @@ func serialize_all() -> Dictionary:
 func deserialize_all(data: Dictionary) -> void:
 	clear_all_effects()
 	for effect_id in data:
-		var effect_data := data[effect_id]
+		var effect_data: Dictionary = data[effect_id]
 		var effect := StatusEffect.new()
 		effect.deserialize(effect_data)
 		active_effects[effect_id] = effect

@@ -33,7 +33,14 @@ signal recipe_failed(recipe_id: String, reason: String)
 signal toggle_debug
 signal toggle_inventory_ui
 signal toggle_crafting_ui
+signal toggle_build_ui
 
 # --- Combat Events ---
 signal entity_hit(entity_id: String, damage: float)
 signal entity_died(entity_id: String)
+signal projectile_fired(origin: Vector2, direction: Vector2)
+
+# --- World presentation ---
+signal time_changed(hour: float, day: int)
+signal weather_changed(weather_name: String)
+signal building_placed(building_id: String, coords: Vector2i)

@@ -53,6 +53,8 @@ func _load_items() -> void:
 	items["wooden_sword"] = _create_item("wooden_sword", "Wooden Sword", "weapon", 1, 1.5, "sword", 0, 0, 5, 50)
 	items["stone_sword"] = _create_item("stone_sword", "Stone Sword", "weapon", 1, 2.0, "sword", 0, 0, 8, 100)
 	items["iron_sword"] = _create_item("iron_sword", "Iron Sword", "weapon", 1, 2.5, "sword", 0, 0, 12, 200)
+	items["wooden_bow"] = _create_item("wooden_bow", "Wooden Bow", "weapon", 1, 1.5, "bow", 0, 0, 7, 80)
+	items["arrow"] = _create_item("arrow", "Arrow", "ammo", 64, 0.05)
 	items["stone_hoe"] = _create_item("stone_hoe", "Stone Hoe", "tool", 1, 2.0, "hoe", 0, 0, 2, 100)
 	items["wooden_hammer"] = _create_item("wooden_hammer", "Wooden Hammer", "tool", 1, 2.5, "hammer", 0, 0, 4, 50)
 	items["stone_hammer"] = _create_item("stone_hammer", "Stone Hammer", "tool", 1, 3.0, "hammer", 0, 0, 6, 100)
@@ -121,6 +123,14 @@ func _load_recipes() -> void:
 	}, 15.0)
 	
 	# Tools
+	recipes["wooden_bow"] = _create_recipe("wooden_bow", "wooden_bow", 1, "", {
+		"plank": 2,
+		"fibre": 3
+	})
+	recipes["arrow"] = _create_recipe("arrow", "arrow", 4, "", {
+		"wood": 1,
+		"fibre": 1
+	})
 	recipes["wooden_axe"] = _create_recipe("wooden_axe", "wooden_axe", 1, "", {
 		"plank": 3,
 		"fibre": 2

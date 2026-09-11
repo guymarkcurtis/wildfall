@@ -8,6 +8,8 @@ const MAX_HEALTH: int = 100
 const MAX_HUNGER: float = 100.0
 const HUNGER_RATE: float = 0.5
 const HARVEST_RANGE: float = 64.0
+const FIRE_COOLDOWN: float = 0.45
+const WATER_SPEED: float = 0.55
 
 # Components (real component instances, not bare nodes)
 var inventory: InventoryComponent = null
@@ -24,6 +26,11 @@ var event_bus: Node = null
 # Item database (sibling under Main); supplies tool/weapon damage bonuses
 # for creature attacks.
 var item_database: ItemDatabase = null
+var status_effects: StatusEffectSystem = null
+
+var _aim_dir: Vector2 = Vector2.RIGHT
+var _fire_cooldown: float = 0.0
+var _facing: Polygon2D = null
 
 # Signals
 signal position_changed(position: Vector2)
@@ -34,9 +41,13 @@ signal tool_changed(tool_id: String)
 signal resource_interacted(resource_type: String, item_id: String, quantity: int)
 
 func _ready() -> void:
+	motion_mode = MOTION_MODE_FLOATING
 	event_bus = get_parent().get_node("GameEventBus")
 	item_database = get_parent().get_node("ItemDatabase")
+	status_effects = get_parent().get_node_or_null("StatusEffectSystem")
 	_init_components()
+	_setup_collision()
+	_setup_facing()
 	_spawn_at(Vector2(0, 0))
 	_populate_initial_inventory()
 
@@ -67,13 +78,40 @@ func _spawn_at(position: Vector2) -> void:
 
 ## Handle input and movement.
 func _physics_process(delta: float) -> void:
-	var direction: Vector2 = Vector2.ZERO
+	_fire_cooldown = maxf(0.0, _fire_cooldown - delta)
+	_update_aim()
+
+	var direction: Vector2 = get_screen_move_vector()
 	var speed: float = MOVE_SPEED
-
-	# Sprint
-	if Input.is_action_pressed("sprint") and velocity.length() > 0:
+	if Input.is_action_pressed("sprint") and direction != Vector2.ZERO:
 		speed = SPRINT_SPEED
+	speed *= _speed_multiplier()
+	if direction != Vector2.ZERO:
+		direction = direction.normalized()
+	velocity = direction * speed
+	move_and_slide()
+	position_changed.emit(global_position)
 
+	if not _ui_blocks_world_input():
+		if Input.is_action_pressed("fire") and _fire_cooldown <= 0.0:
+			_fire_ranged()
+		if Input.is_action_just_pressed("interact"):
+			_handle_interaction()
+
+	for i in range(1, 10):
+		if Input.is_action_just_pressed("tool_%d" % i):
+			_equip_tool(i)
+
+	if Input.is_action_just_pressed("toggle_inventory"):
+		if event_bus:
+			event_bus.toggle_inventory_ui.emit()
+	if Input.is_action_just_pressed("toggle_crafting"):
+		if event_bus:
+			event_bus.toggle_crafting_ui.emit()
+
+## WASD in screen space, rotated into the world by the camera.
+func get_screen_move_vector() -> Vector2:
+	var direction: Vector2 = Vector2.ZERO
 	if Input.is_action_pressed("move_up"):
 		direction.y -= 1
 	if Input.is_action_pressed("move_down"):
@@ -82,31 +120,15 @@ func _physics_process(delta: float) -> void:
 		direction.x -= 1
 	if Input.is_action_pressed("move_right"):
 		direction.x += 1
+	if direction == Vector2.ZERO:
+		return direction
+	var camera := _get_camera()
+	if camera != null:
+		direction = direction.rotated(camera.rotation)
+	return direction
 
-	if direction != Vector2.ZERO:
-		direction = direction.normalized()
-
-	velocity = direction * speed
-	move_and_slide()
-
-	position_changed.emit(global_position)
-
-	# Handle interactions
-	if Input.is_action_just_pressed("interact"):
-		_handle_interaction()
-
-	# Handle tool switching (1-9 keys)
-	for i in range(1, 10):
-		if Input.is_action_just_pressed("tool_%d" % i):
-			_equip_tool(i)
-
-	# Handle UI toggles (the event bus is notified; Main performs the toggle)
-	if Input.is_action_just_pressed("toggle_inventory"):
-		if event_bus:
-			event_bus.toggle_inventory_ui.emit()
-	if Input.is_action_just_pressed("toggle_crafting"):
-		if event_bus:
-			event_bus.toggle_crafting_ui.emit()
+func get_aim_direction() -> Vector2:
+	return _aim_dir
 
 ## Update hunger over time.
 func _process(delta: float) -> void:
@@ -235,5 +257,99 @@ func _populate_initial_inventory() -> void:
 		inventory.add_item(item_data["item_id"], item_data.get("quantity", 1))
 	inventory.add_item("wooden_axe", 1)
 	inventory.add_item("stone_pickaxe", 1)
-	# Phase 3: the player also starts with a basic sword for hunting.
 	inventory.add_item("wooden_sword", 1)
+	inventory.add_item("wooden_bow", 1)
+	inventory.add_item("arrow", 24)
+	inventory.add_item("wooden_wall", 8)
+	inventory.add_item("campfire", 1)
+
+func _setup_collision() -> void:
+	var shape := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = 10.0
+	shape.shape = circle
+	add_child(shape)
+	collision_layer = 1
+	collision_mask = 1
+
+func _setup_facing() -> void:
+	_facing = Polygon2D.new()
+	_facing.polygon = PackedVector2Array([
+		Vector2(14.0, 0.0), Vector2(-8.0, -7.0), Vector2(-8.0, 7.0)
+	])
+	_facing.color = Color(0.95, 0.85, 0.35)
+	add_child(_facing)
+
+func _update_aim() -> void:
+	var mouse: Vector2 = get_global_mouse_position()
+	var to_mouse: Vector2 = mouse - global_position
+	if to_mouse.length() > 1.0:
+		_aim_dir = to_mouse.normalized()
+	if _facing:
+		_facing.rotation = _aim_dir.angle()
+
+func _fire_ranged() -> void:
+	if _ui_blocks_world_input():
+		return
+	var building_manager := get_parent().get_node_or_null("BuildingManager") as BuildingManager
+	if building_manager != null and building_manager.build_mode:
+		return
+	if inventory == null or not inventory.has_item("arrow", 1):
+		return
+	if not _is_holding_bow():
+		# Equip the bow automatically when firing if the player owns it.
+		if inventory.has_item("wooden_bow", 1):
+			equipped_tool = "wooden_bow"
+			tool_changed.emit(equipped_tool)
+		else:
+			return
+	inventory.remove_item("arrow", 1)
+	_fire_cooldown = FIRE_COOLDOWN
+	var damage: float = 7.0
+	if item_database != null:
+		var bow: ItemDefinition = item_database.get_item("wooden_bow")
+		if bow != null:
+			damage = float(bow.damage_bonus)
+	var bolt := Projectile.new()
+	get_parent().add_child(bolt)
+	bolt.setup(global_position + _aim_dir * 16.0, _aim_dir, damage)
+	if event_bus:
+		event_bus.projectile_fired.emit(global_position, _aim_dir)
+
+func _is_holding_bow() -> bool:
+	return equipped_tool.ends_with("bow")
+
+func _speed_multiplier() -> float:
+	var mult: float = 1.0
+	var terrain := get_parent().get_node_or_null("TerrainRenderer") as TerrainRenderer
+	if terrain != null:
+		var tile := Vector2i(int(floor(global_position.x / 32.0)), int(floor(global_position.y / 32.0)))
+		if terrain.is_water_cell(tile):
+			mult *= WATER_SPEED
+	if status_effects != null:
+		mult *= clampf(1.0 + status_effects.get_speed_bonus() * 0.08, 0.35, 1.6)
+	var weather := get_parent().get_node_or_null("WeatherSystem") as WeatherSystem
+	if weather != null:
+		mult *= weather.get_speed_multiplier()
+	return mult
+
+func _ui_blocks_world_input() -> bool:
+	var parent := get_parent()
+	if parent == null:
+		return false
+	var seed_input: Node = parent.get_node_or_null("SeedInput")
+	if seed_input != null and seed_input.has_method("is_editing") and seed_input.is_editing():
+		return true
+	var inv_panel: Node = parent.get_node_or_null("HUD/InventoryPanel")
+	if inv_panel != null and inv_panel.visible:
+		return true
+	var craft_panel: Node = parent.get_node_or_null("HUD/CraftingPanel")
+	if craft_panel != null and craft_panel.visible:
+		return true
+	return false
+
+func _get_camera() -> Camera2D:
+	var parent := get_parent()
+	if parent == null:
+		return null
+	return parent.get_node_or_null("CameraController") as Camera2D

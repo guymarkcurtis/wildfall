@@ -2,7 +2,7 @@
 
 ## CURRENT MILESTONE
 
-**Phase 2 (Resource Harvesting) COMPLETE, Phase 3 (Creatures) wired in.**
+**Phase 2 (Resource Harvesting) COMPLETE, Phase 3 Gameplay COMPLETE.**
 The full loop works end-to-end and is covered by the automated test suite:
 deterministic world generation with 6 biomes → chunk streaming (7×7
 viewport) → biome-aware resource spawning → E-key harvesting with tool
@@ -39,7 +39,7 @@ it (event bus → Main, same wiring as the I-key inventory). The harness grew
 
 ## TEST RESULTS (2026-09-10, updated after the post-push gameplay fixes)
 
-Automated headless run of the real main scene — **50/50 checks passed,
+Automated headless run of the real main scene — **76/76 checks passed,
 0 script errors, exit code 0**:
 
 | Test | Status |
@@ -67,9 +67,12 @@ A 30-second headless run of the actual game also completed with 0 errors,
 
 ## CURRENTLY WORKING (all verified by the test run above)
 
-- **Presentation**: Orthogonal 2D top-down (square 32px tiles, Camera2D). Not isometric. View rotation and mouse-aim are designed, not implemented yet.
-- **Player Movement**: WASD + Sprint (Shift), CharacterBody2D. Intended to stay screen-relative once view rotation lands.
-- **Camera**: Smooth follow (delta-based lerp) with configurable offset
+- **Presentation**: Orthogonal 2D top-down (square 32px tiles, Camera2D). Not isometric.
+- **Player Movement**: Screen-relative WASD + Sprint (Shift), CharacterBody2D. Water slows; stone cliffs collide.
+- **Camera**: Smooth follow; `,`/`.` snap-rotate, middle-mouse free rotate, Home resets north-up.
+- **Ranged combat**: Face the cursor; LMB fires the wooden bow (consumes arrows).
+- **Buildings**: B toggles place mode, LMB places an owned building item, F demolishes.
+- **World clock / weather / statuses**: DayNightCycle + WeatherSystem + StatusEffectSystem, shown on the HUD.
 - **World Generation**: Deterministic seed-based generation using 3 FastNoiseLite layers
 - **Chunk System**: 16×16 tile chunks, radius-3 (7×7) viewport streaming; reloads are deterministic (B3)
 - **Terrain Rendering**: TileMapLayer, 8 terrain types (water, sand, grass, forest, dirt, stone, snow, mud) with per-biome ground colors and per-tile biome lookup
@@ -96,7 +99,7 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - `src/systems/` — SaveSystem, ItemDatabase, CreatureSpawner (Phase 3)
 - `resources/` — ItemDefinition, RecipeDefinition, BiomeDefinition, CreatureDefinition (wired); TechnologyDefinition, BuildingDefinition (future phases)
 - `scenes/` — `main.tscn` is the only wired scene (see dead-code inventory in ARCHITECTURE.md)
-- `tests/` — `test_game.gd` headless harness (50 checks: 43 static + 7 live-input)
+- `tests/` — `test_game.gd` headless harness (76 checks)
 - `docs/` — Project documentation
 
 ## RECENTLY COMPLETED (2026-09-10 review)
@@ -131,14 +134,12 @@ A 30-second headless run of the actual game also completed with 0 errors,
 
 ## NEXT TASKS
 
-1. Replace placeholder tile colors with sprite tiles (tileset + art)
-2. Make crafting stations placeable and enforce station proximity in crafting
+1. Polish building/creature/player sprites (terrain/resource atlases already wired)
+2. Enforce crafting-station proximity now that stations are placeable
 3. Add a scroll view to the recipe list (panel currently overflows)
-4. Phase 3 creature system: hostile AI (chase/attack), creature persistence in saves, sprite visuals
+4. Persist destroyed resources, creatures, and buildings in saves
 5. Tool durability system
-6. Day/night cycle and weather
-7. Building placement
-8. Mission system
+6. Mission system
 
 ## KNOWN ISSUES
 
@@ -182,7 +183,7 @@ godot --headless --path . --script tests/test_game.gd
 ## IMPORTANT DECISIONS
 
 - **Graphics: orthogonal 2D top-down**, square tiles / Camera2D. Not isometric. A later 2.5D look is sprites + Y-sort on this same grid, not an iso or 3D rewrite.
-- **Controls: WASD to move** (screen-relative), **mouse pointer to aim** ranged weapons, **`,` / `.` and middle-mouse drag to rotate the view**, Home to reset north-up. Mouse-aim and view rotation are specified, not implemented yet.
+- **Controls: WASD to move** (screen-relative), **mouse pointer to aim** ranged weapons, **`,` / `.` and middle-mouse drag to rotate the view**, Home to reset north-up.
 - Project name is "Wildfall" (renamed from "2D Icarus")
 - HarvestableResource is an Area2D for proximity detection
 - Resource yields are configurable per type and biome
