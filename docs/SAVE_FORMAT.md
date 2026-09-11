@@ -43,18 +43,23 @@ Options / Return to Title / Quit). F5 save, F9 load still work.
 | 1 | Flat JSON: player, world.seed, unused game_time/day_number |
 | 2 | `format: wildfall-save`, `modules` map, migrations from v1 |
 | 3 | Added the `technology` module; missing research data safely uses starting unlocks |
+| 4 | Added `world_state`: destroyed resource and creature spawn tiles persist without serializing deterministic chunks |
 
-## Current format (v3)
+## Current format (v4)
 
 ```json
 {
   "format": "wildfall-save",
-  "version": 3,
+  "version": 4,
   "kind": "manual",
   "game_mode": "survival",
   "timestamp": 1730000000,
   "modules": {
     "world": { "seed": 12345 },
+    "world_state": {
+      "destroyed_resources": [{ "x": 4, "y": -2 }],
+      "destroyed_creatures": [{ "x": 7, "y": 1 }]
+    },
     "time": { "current_hour": 8.5, "current_day": 1 },
     "weather": { "weather": 0, "intensity": 0.0, "duration": 40.0, "next_change": 40.0 },
     "status": {},
@@ -76,7 +81,8 @@ Options / Return to Title / Quit). F5 save, F9 load still work.
 }
 ```
 
-Apply order on load: `world` (regenerates chunks) → `time` → `weather` →
+Apply order on load: `world` (regenerates chunks) → `world_state` (suppresses
+mutated deterministic spawns) → `time` → `weather` →
 `status` → `technology` → `buildings` → `player` → `camera`. World regen happens first so
 player position and buildings are restored after spawn reset.
 
@@ -89,8 +95,8 @@ save_system.register_module("quests", _collect_quests, _apply_quests)
 ```
 
 Collect returns JSON-safe Dictionary/Array. Apply must tolerate missing
-keys. Bump `SAVE_VERSION` only when the **shape of an existing module**
-changes; then add `_migrate_vN_to_vN+1()` and call it from `migrate()`.
+keys. Bump `SAVE_VERSION` whenever the persisted schema changes, then add
+the required migration defaults in `migrate()`.
 
 ## v1 → v2 migration
 

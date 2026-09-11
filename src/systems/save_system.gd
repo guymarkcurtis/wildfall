@@ -7,7 +7,7 @@
 class_name SaveSystem
 extends Node
 
-const SAVE_VERSION: int = 3
+const SAVE_VERSION: int = 4
 const FORMAT_ID: String = "wildfall-save"
 const SAVE_DIR: String = "user://saves"
 const SAVE_PATH: String = "user://saves/slot_1.json"
@@ -15,7 +15,7 @@ const SETTINGS_PATH: String = "user://settings.json"
 const AUTOSAVE_INTERVAL_SEC: float = 300.0
 const AUTOSAVE_KEEP: int = 2
 const APPLY_ORDER: PackedStringArray = [
-	"world", "time", "weather", "status", "technology", "buildings", "player", "camera"
+	"world", "world_state", "time", "weather", "status", "technology", "buildings", "player", "camera"
 ]
 
 static var _autosave_enabled: bool = true
@@ -140,7 +140,11 @@ func migrate(data: Dictionary) -> Dictionary:
 	if version <= 1 or not current.has("modules"):
 		current = _migrate_v1_to_v2(current)
 		version = 2
-	# Future: while version < SAVE_VERSION: current = _migrate_from(version, current)
+	if version < 4:
+		var modules: Dictionary = current.get("modules", {})
+		if not modules.has("world_state"):
+			modules["world_state"] = {"destroyed_resources": [], "destroyed_creatures": []}
+		current["modules"] = modules
 	current["version"] = SAVE_VERSION
 	current["format"] = FORMAT_ID
 	return current
@@ -307,6 +311,7 @@ func _migrate_v1_to_v2(data: Dictionary) -> Dictionary:
 		"modules": {
 			"player": player,
 			"world": {"seed": int(world.get("seed", 0))},
+			"world_state": {"destroyed_resources": [], "destroyed_creatures": []},
 			"time": {
 				"current_hour": float(data.get("game_time", 6.0)),
 				"current_day": int(data.get("day_number", 1))

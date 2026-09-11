@@ -7,8 +7,9 @@ class_name TileSetGenerator
 extends Node
 
 const TILE_SIZE: int = 32
-# Quiet ground can be composed at low material resolution and smoothly scaled.
-# This keeps chunk streaming light enough to avoid gameplay hitches.
+# Stock ground stays lightweight while streamed. An active texture pack takes
+# the full-resolution path below, so imported artwork is never reduced to this
+# low-detail stock sampling grid before it reaches the screen.
 const MATERIAL_PIXELS_PER_TILE: int = 4
 
 const TERRAIN_ATLAS_PATH := "res://assets/tiles/wildfall-terrain-atlas.png"
@@ -144,6 +145,8 @@ func get_ground_detail_texture(index: int) -> ImageTexture:
 ## repeating. Props, plants and rocks are rendered later as independent nodes.
 func create_contiguous_chunk_image(world_start: Vector2i, tile_ids: PackedInt32Array,
 		chunk_size: int, water_frame: int) -> Image:
+	if TexturePackManager.get_active_pack_id() != "stock":
+		return _create_full_resolution_pack_chunk(world_start, tile_ids, chunk_size)
 	var image := Image.create_empty(chunk_size * MATERIAL_PIXELS_PER_TILE,
 			chunk_size * MATERIAL_PIXELS_PER_TILE,
 			false, Image.FORMAT_RGBA8)
@@ -169,6 +172,63 @@ func create_contiguous_chunk_image(world_start: Vector2i, tile_ids: PackedInt32A
 			image.set_pixel(x, y, colour)
 	return image
 
+## Texture packs are authored at the game's native 32px tile density. Copy
+## their pixels directly into the chunk image instead of downsampling them to
+## the stock material grid; this is what keeps the in-world view as clear as
+## the Options preview. Image.blit_rect performs the bulk copy in engine code.
+func _create_full_resolution_pack_chunk(world_start: Vector2i, tile_ids: PackedInt32Array, chunk_size: int) -> Image:
+	var image := Image.create_empty(chunk_size * TILE_SIZE, chunk_size * TILE_SIZE, false, Image.FORMAT_RGBA8)
+	for tile_y in range(chunk_size):
+		for tile_x in range(chunk_size):
+			var tile_index := tile_y * chunk_size + tile_x
+			var tile_id: int = tile_ids[tile_index] if tile_index < tile_ids.size() else TILE_GRASS
+			var surface := _pack_surface_image(tile_id)
+			if surface == null or surface.is_empty():
+				continue
+			var world_x := (world_start.x + tile_x) * TILE_SIZE
+			var world_y := (world_start.y + tile_y) * TILE_SIZE
+			var source_x := posmod(world_x, surface.get_width())
+			var source_y := posmod(world_y, surface.get_height())
+			var destination := Vector2i(tile_x * TILE_SIZE, tile_y * TILE_SIZE)
+			if source_x + TILE_SIZE <= surface.get_width() and source_y + TILE_SIZE <= surface.get_height():
+				image.blit_rect(surface, Rect2i(source_x, source_y, TILE_SIZE, TILE_SIZE), destination)
+			else:
+				# Graceful fallback for a malformed custom surface: preserve the
+				# expected world-space wrapping rather than showing a blank tile.
+				for pixel_y in range(TILE_SIZE):
+					for pixel_x in range(TILE_SIZE):
+						image.set_pixel(destination.x + pixel_x, destination.y + pixel_y,
+							surface.get_pixel(posmod(source_x + pixel_x, surface.get_width()), posmod(source_y + pixel_y, surface.get_height())))
+	_feather_pack_tile_edges(image, tile_ids, chunk_size)
+	return image
+
+func _pack_surface_image(tile_id: int) -> Image:
+	if not _surface_images.has(tile_id):
+		var path := "res://assets/ground/%s.png" % TexturePackManager.GROUND_NAMES[clampi(tile_id, 0, 7)]
+		_surface_images[tile_id] = TexturePackManager.get_image(path)
+	return _surface_images[tile_id] as Image
+
+## Preserve a one-pixel soft boundary between neighbouring material types.
+func _feather_pack_tile_edges(image: Image, tile_ids: PackedInt32Array, chunk_size: int) -> void:
+	for tile_y in range(chunk_size):
+		for tile_x in range(1, chunk_size):
+			if tile_ids[tile_y * chunk_size + tile_x] == tile_ids[tile_y * chunk_size + tile_x - 1]:
+				continue
+			var edge_x := tile_x * TILE_SIZE
+			for pixel_y in range(tile_y * TILE_SIZE, (tile_y + 1) * TILE_SIZE):
+				var blend := image.get_pixel(edge_x - 1, pixel_y).lerp(image.get_pixel(edge_x, pixel_y), 0.5)
+				image.set_pixel(edge_x - 1, pixel_y, blend)
+				image.set_pixel(edge_x, pixel_y, blend)
+	for tile_y in range(1, chunk_size):
+		for tile_x in range(chunk_size):
+			if tile_ids[tile_y * chunk_size + tile_x] == tile_ids[(tile_y - 1) * chunk_size + tile_x]:
+				continue
+			var edge_y := tile_y * TILE_SIZE
+			for pixel_x in range(tile_x * TILE_SIZE, (tile_x + 1) * TILE_SIZE):
+				var blend := image.get_pixel(pixel_x, edge_y - 1).lerp(image.get_pixel(pixel_x, edge_y), 0.5)
+				image.set_pixel(pixel_x, edge_y - 1, blend)
+				image.set_pixel(pixel_x, edge_y, blend)
+
 func _nearest_different_neighbour(tile_ids: PackedInt32Array, chunk_size: int,
 		tile_x: int, tile_y: int, pixel_x: int, pixel_y: int, tile_id: int) -> int:
 	var candidates: Array[Vector2i] = []
@@ -188,10 +248,7 @@ func _nearest_different_neighbour(tile_ids: PackedInt32Array, chunk_size: int,
 
 func _material_colour(tile_id: int, world_x: int, world_y: int, water_frame: int) -> Color:
 	if TexturePackManager.get_active_pack_id() != "stock":
-		if not _surface_images.has(tile_id):
-			var path := "res://assets/ground/%s.png" % TexturePackManager.GROUND_NAMES[clampi(tile_id, 0, 7)]
-			_surface_images[tile_id] = TexturePackManager.get_image(path)
-		var surface: Image = _surface_images[tile_id]
+		var surface := _pack_surface_image(tile_id)
 		if surface != null and not surface.is_empty():
 			return surface.get_pixel(posmod(world_x, surface.get_width()), posmod(world_y, surface.get_height()))
 	return stock_material_colour(tile_id, world_x, world_y, water_frame)

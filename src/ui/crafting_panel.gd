@@ -2,19 +2,16 @@
 class_name CraftingPanel
 extends Control
 
-# Must be >= the recipe database size: smaller caps silently make recipes
-# unreachable in the panel (there is no scroll view on the list).
-const MAX_RECIPES: int = 64
-
-@onready var recipe_list: VBoxContainer = $MarginContainer/VBox/RecipeList
-@onready var recipe_template: Control = $MarginContainer/VBox/RecipeList/RecipeItem
+@onready var recipe_scroll: ScrollContainer = $MarginContainer/VBox/RecipeScroll
+@onready var recipe_list: VBoxContainer = $MarginContainer/VBox/RecipeScroll/RecipeList
+@onready var recipe_template: Control = $MarginContainer/VBox/RecipeScroll/RecipeList/RecipeItem
 @onready var result_label: Label = $MarginContainer/VBox/ResultLabel
 @onready var station_label: Label = $MarginContainer/VBox/StationLabel
 
 var recipes: Array[Dictionary] = []
 var inventory: Dictionary = {}
 var selected_recipe: int = -1
-var current_station: String = ""
+var nearby_stations := PackedStringArray()
 
 # Signals
 signal recipe_selected(recipe_index: int)
@@ -33,21 +30,25 @@ func _setup_ui() -> void:
 	recipe_template.visible = false
 
 ## Refresh the crafting panel.
-func refresh(recipe_data: Array[Dictionary], inv: Dictionary, station: String = "") -> void:
+func refresh(recipe_data: Array[Dictionary], inv: Dictionary, nearby: PackedStringArray = PackedStringArray()) -> void:
 	recipes = recipe_data
 	inventory = inv
-	current_station = station
+	nearby_stations = nearby
 	_refresh()
 
 ## Refresh the display.
 func _refresh() -> void:
+	var previous_scroll: int = recipe_scroll.scroll_vertical
 	# Clear existing recipes
 	for child in recipe_list.get_children():
 		if child != recipe_template:
-			child.queue_free()
+			# Refreshes can happen back-to-back when inventory or nearby-station
+			# state changes. Free immediately so duplicate rows never accumulate
+			# inside the scroll container before the next idle frame.
+			child.free()
 	
 	# Add recipe items
-	for i in range(min(recipes.size(), MAX_RECIPES)):
+	for i in range(recipes.size()):
 		var recipe: Dictionary = recipes[i]
 		var can_craft: bool = _can_craft(recipe)
 		var recipe_item: Control = recipe_template.duplicate()
@@ -61,18 +62,37 @@ func _refresh() -> void:
 		recipe_item.set_data(recipe, can_craft)
 		if recipe_item.has_signal("craft_requested"):
 			recipe_item.connect("craft_requested", _on_recipe_craft_requested)
+	# ScrollContainer needs an explicit content height because its child VBox
+	# is otherwise stretched to the viewport before it can report its rows.
+	# Every recipe row is a fixed 48 pixels in the scene.
+	recipe_list.custom_minimum_size = Vector2(450.0, float(recipes.size()) * 48.0)
+	if selected_recipe >= recipes.size():
+		selected_recipe = -1
+	if selected_recipe >= 0:
+		select_recipe(selected_recipe)
+	call_deferred("_restore_scroll_position", previous_scroll)
 	
 	# Update station label
 	if station_label:
-		if current_station == "":
-			station_label.text = "Crafting: Anywhere"
+		if nearby_stations.is_empty():
+			station_label.text = "Nearby stations: none"
 		else:
-			station_label.text = "Crafting: " + current_station.capitalize()
+			var names := PackedStringArray()
+			for station_id in nearby_stations:
+				names.append(station_id.capitalize())
+			station_label.text = "Nearby stations: " + " • ".join(names)
+
+func _restore_scroll_position(previous_scroll: int) -> void:
+	if recipe_scroll != null:
+		recipe_scroll.scroll_vertical = previous_scroll
 
 ## Check if recipe can be crafted.
 func _can_craft(recipe: Dictionary) -> bool:
 	if GameSession.is_creative():
 		return true
+	var required_station := str(recipe.get("crafting_station", ""))
+	if not required_station.is_empty() and not nearby_stations.has(required_station):
+		return false
 	var required: Dictionary = recipe.get("required_items", {})
 	for item_id in required:
 		var needed: int = required[item_id]
@@ -98,10 +118,14 @@ func select_recipe(recipe_index: int) -> void:
 	var can_craft: bool = _can_craft(recipe)
 	var result_item_id: String = recipe.get("result_item_id", "")
 	var result_qty: int = recipe.get("result_quantity", 1)
+	var required_station := str(recipe.get("crafting_station", ""))
 	
 	if can_craft:
 		result_label.text = "✓ Can craft %dx %s" % [result_qty, result_item_id]
 		result_label.modulate = Color(0.3, 0.8, 0.3)
+	elif not required_station.is_empty() and not nearby_stations.has(required_station):
+		result_label.text = "✗ Requires nearby %s" % required_station.capitalize()
+		result_label.modulate = Color(0.8, 0.55, 0.25)
 	else:
 		result_label.text = "✗ Missing materials"
 		result_label.modulate = Color(0.8, 0.3, 0.3)
@@ -116,7 +140,8 @@ func craft_recipe() -> bool:
 	
 	var recipe: Dictionary = recipes[selected_recipe]
 	if not _can_craft(recipe):
-		craft_failed.emit("Missing materials")
+		var required_station := str(recipe.get("crafting_station", ""))
+		craft_failed.emit("Requires nearby %s" % required_station.capitalize() if not required_station.is_empty() and not nearby_stations.has(required_station) else "Missing materials")
 		return false
 	
 	# Remove materials

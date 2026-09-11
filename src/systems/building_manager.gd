@@ -7,6 +7,8 @@ extends Node2D
 const TILE_SIZE := 32
 const STORY_RISE := 12.0
 const MAX_STORIES := 4
+const CRAFTING_STATION_IDS = ["campfire", "furnace", "workbench", "anvil"]
+const CRAFTING_STATION_RANGE := 72.0
 const BUILDING_DEFINITION_SCRIPT = preload("res://resources/building_definition.gd")
 
 var buildings: Dictionary = {} # Vector3i(x, y, story) -> Building
@@ -205,6 +207,29 @@ func get_building_at(tile: Vector2i, story: int = selected_story) -> Building:
 
 func get_building_count() -> int:
 	return buildings.size()
+
+## Ground-story stations are usable within this radius. Keeping this in the
+## building manager makes station craft checks follow placed/demolished/saved
+## buildings automatically instead of maintaining a second station registry.
+func get_nearby_station_ids(world_position: Vector2, interaction_range: float = CRAFTING_STATION_RANGE) -> PackedStringArray:
+	var nearby := PackedStringArray()
+	for candidate in buildings.values():
+		var building := candidate as Building
+		if building == null or not is_instance_valid(building) or building.story != 0 or not CRAFTING_STATION_IDS.has(building.building_id):
+			continue
+		var station_center: Vector2 = building.global_position + Vector2(TILE_SIZE, TILE_SIZE) * 0.5
+		if station_center.distance_to(world_position) <= interaction_range and not nearby.has(building.building_id):
+			nearby.append(building.building_id)
+	nearby.sort()
+	return nearby
+
+func has_station_near(station_id: String, world_position: Vector2, interaction_range: float = CRAFTING_STATION_RANGE) -> bool:
+	return get_nearby_station_ids(world_position, interaction_range).has(station_id)
+
+func refresh_texture_pack() -> void:
+	for building in buildings.values():
+		if is_instance_valid(building) and building.has_method("reload_visual_texture"):
+			building.reload_visual_texture()
 
 func serialize() -> Array:
 	var out: Array = []

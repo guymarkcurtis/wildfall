@@ -27,6 +27,7 @@ const PACK_ASSETS: PackedStringArray = [
 	"assets/tiles/wildfall-water-animation.png",
 	"assets/tiles/wildfall-resources-atlas.png",
 	"assets/tiles/wildfall-ground-details.png",
+	"assets/tiles/wildfall-crafting-stations.png",
 	"assets/resources/wildfall-forage-plants.png",
 	"assets/characters/explorer-base-walk.png",
 	"assets/characters/explorer-storm-walk.png",
@@ -109,8 +110,57 @@ static func get_stock_image(path: String) -> Image:
 					image.set_pixel(x, y, generator.stock_material_colour(index, x, y, 0))
 			generator.free()
 			return image
+	if path == "res://assets/tiles/wildfall-crafting-stations.png":
+		return _create_crafting_station_atlas()
 	var texture: Texture2D = load(path)
 	return texture.get_image() if texture != null else null
+
+## Stock source for the four placeable crafting stations. It is generated in
+## the same way as the stock ground sheets so it is always exportable and can
+## be replaced by a pack without adding an opaque procedural visual.
+static func _create_crafting_station_atlas() -> Image:
+	var image := Image.create_empty(128, 32, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0.0, 0.0, 0.0, 0.0))
+	for station in range(4):
+		var offset := station * 32
+		for y in range(32):
+			for x in range(32):
+				var color := Color(0.0, 0.0, 0.0, 0.0)
+				match station:
+					0: # Campfire: stone ring, crossed logs, and a layered flame.
+						if Vector2(x - 16, y - 21).length() < 10.5:
+							color = Color(0.28, 0.30, 0.31, 1.0)
+						if (y >= 20 and y <= 24 and abs(x - 16) < 10) or (x >= 12 and x <= 20 and y >= 18 and y <= 26):
+							color = Color(0.35, 0.17, 0.07, 1.0)
+						if y >= 7 and y <= 22 and abs(x - 16) <= int((y - 6) * 0.42):
+							color = Color(0.94, 0.29, 0.06, 1.0)
+						if y >= 11 and y <= 21 and abs(x - 16) <= int((y - 10) * 0.28):
+							color = Color(1.0, 0.73, 0.16, 1.0)
+					1: # Furnace: stone kiln with a glowing mouth.
+						if x >= 4 and x <= 27 and y >= 3 and y <= 28:
+							color = Color(0.34, 0.36, 0.39, 1.0)
+						if x >= 7 and x <= 24 and y >= 7 and y <= 25:
+							color = Color(0.23, 0.24, 0.26, 1.0)
+						if x >= 10 and x <= 21 and y >= 15 and y <= 25:
+							color = Color(0.88, 0.28, 0.06, 1.0)
+						if x >= 12 and x <= 19 and y >= 18 and y <= 24:
+							color = Color(1.0, 0.67, 0.13, 1.0)
+					2: # Workbench: timber top, legs, and a small tool strip.
+						if x >= 3 and x <= 28 and y >= 12 and y <= 18:
+							color = Color(0.57, 0.32, 0.12, 1.0)
+						if (x >= 6 and x <= 9 or x >= 22 and x <= 25) and y >= 18 and y <= 29:
+							color = Color(0.40, 0.21, 0.08, 1.0)
+						if x >= 8 and x <= 23 and y >= 9 and y <= 11:
+							color = Color(0.80, 0.56, 0.25, 1.0)
+					3: # Anvil: broad steel head over a narrow base.
+						if x >= 5 and x <= 26 and y >= 11 and y <= 16:
+							color = Color(0.43, 0.47, 0.52, 1.0)
+						if x >= 10 and x <= 21 and y >= 16 and y <= 23:
+							color = Color(0.32, 0.35, 0.39, 1.0)
+						if x >= 7 and x <= 24 and y >= 23 and y <= 27:
+							color = Color(0.25, 0.27, 0.30, 1.0)
+				image.set_pixel(offset + x, y, color)
+	return image
 
 ## Export an unchanged reference pack plus a contact card and JSON manifest.
 ## The reference stays safe to overwrite; the editable refinement pack is a
@@ -271,6 +321,14 @@ static func _asset_metadata() -> Array[Dictionary]:
 			"used_for": ["grass tufts", "pebbles", "ambient ground decoration"],
 			"layout": {"kind": "atlas", "columns": 4, "rows": 2, "cell_order": "eight decorative variants, read left to right then top to bottom"},
 			"editor_note": "Keep the 4 by 2 grid and transparent backgrounds."
+		},
+		{
+			"path": "assets/tiles/wildfall-crafting-stations.png",
+			"name": "Crafting-station atlas",
+			"purpose": "World visuals for placeable crafting stations that unlock nearby recipes.",
+			"used_for": ["campfire", "furnace", "workbench", "anvil"],
+			"layout": {"kind": "atlas", "columns": 4, "rows": 1, "cell_order": "campfire, furnace, workbench, anvil", "cell_size": "32 x 32 pixels"},
+			"editor_note": "Keep the four 32 x 32 cells in this exact left-to-right order and preserve transparency."
 		},
 		{
 			"path": "assets/resources/wildfall-forage-plants.png",

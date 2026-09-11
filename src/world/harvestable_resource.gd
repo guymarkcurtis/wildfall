@@ -24,6 +24,9 @@ static var _texture_cache: Dictionary = {}
 # Signals
 signal health_changed(current: float, max: float)
 signal resource_destroyed(item_id: String, quantity: int)
+## Emitted exactly once when this node is depleted, even if every optional
+## loot roll misses. World persistence listens to this rather than a drop.
+signal resource_depleted
 signal resource_hurt(amount: float)
 
 ## Initialize the resource.
@@ -212,10 +215,10 @@ func destroy() -> bool:
 		return false
 
 	is_destroyed = true
+	resource_depleted.emit()
 
-	# Emit yields first, then queue the node for freeing. (Godot 4 defers
-	# the actual free to the end of the frame, but this ordering keeps the
-	# node fully alive while handlers process its yields.)
+	# Queue only after the loot handlers run. Godot 4 defers the actual free
+	# to the end of the frame, keeping this node valid during those handlers.
 	for yield_entry in yield_items:
 		var item_id: String = yield_entry["item_id"]
 		var min_qty: int = yield_entry.get("min_qty", 1)

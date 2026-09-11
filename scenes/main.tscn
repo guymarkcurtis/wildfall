@@ -201,9 +201,9 @@ anchor_bottom = 0.5
 grow_horizontal = 2
 grow_vertical = 2
 offset_left = -250.0
-offset_top = 4.0
+offset_top = 36.0
 offset_right = 250.0
-offset_bottom = 200.0
+offset_bottom = 640.0
 visible = false
 script = ExtResource("11_craft")
 
@@ -220,50 +220,57 @@ layout_mode = 1
 offset_left = 4.0
 offset_top = 24.0
 offset_right = 496.0
-offset_bottom = 196.0
+offset_bottom = 636.0
 
 [node name="VBox" type="VBoxContainer" parent="HUD/CraftingPanel/MarginContainer"]
 layout_mode = 2
 
-[node name="RecipeList" type="VBoxContainer" parent="HUD/CraftingPanel/MarginContainer/VBox"]
+[node name="RecipeScroll" type="ScrollContainer" parent="HUD/CraftingPanel/MarginContainer/VBox"]
 layout_mode = 2
 size_flags_vertical = 3
+horizontal_scroll_mode = 0
 
-[node name="RecipeItem" type="Control" parent="HUD/CraftingPanel/MarginContainer/VBox/RecipeList"]
-custom_minimum_size = Vector2(240, 40)
+[node name="RecipeList" type="VBoxContainer" parent="HUD/CraftingPanel/MarginContainer/VBox/RecipeScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+
+[node name="RecipeItem" type="Control" parent="HUD/CraftingPanel/MarginContainer/VBox/RecipeScroll/RecipeList"]
+custom_minimum_size = Vector2(450, 48)
 layout_mode = 2
 visible = false
 script = ExtResource("17_recipe")
 
-[node name="Background" type="ColorRect" parent="HUD/CraftingPanel/MarginContainer/VBox/RecipeList/RecipeItem"]
+[node name="Background" type="ColorRect" parent="HUD/CraftingPanel/MarginContainer/VBox/RecipeScroll/RecipeList/RecipeItem"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 color = Color(0.25, 0.3, 0.4, 0.8)
 
-[node name="NameLabel" type="Label" parent="HUD/CraftingPanel/MarginContainer/VBox/RecipeList/RecipeItem"]
+[node name="NameLabel" type="Label" parent="HUD/CraftingPanel/MarginContainer/VBox/RecipeScroll/RecipeList/RecipeItem"]
 layout_mode = 1
 offset_left = 4.0
 offset_top = 2.0
-offset_right = 160.0
+offset_right = 370.0
 offset_bottom = 20.0
 text = "Recipe"
 
-[node name="CostLabel" type="Label" parent="HUD/CraftingPanel/MarginContainer/VBox/RecipeList/RecipeItem"]
+[node name="CostLabel" type="Label" parent="HUD/CraftingPanel/MarginContainer/VBox/RecipeScroll/RecipeList/RecipeItem"]
 layout_mode = 1
 offset_left = 4.0
 offset_top = 20.0
-offset_right = 160.0
-offset_bottom = 38.0
+offset_right = 370.0
+offset_bottom = 46.0
 text = "Cost"
+autowrap_mode = 2
 
-[node name="CraftButton" type="Button" parent="HUD/CraftingPanel/MarginContainer/VBox/RecipeList/RecipeItem"]
+[node name="CraftButton" type="Button" parent="HUD/CraftingPanel/MarginContainer/VBox/RecipeScroll/RecipeList/RecipeItem"]
 layout_mode = 1
-offset_left = 168.0
-offset_top = 8.0
-offset_right = 236.0
-offset_bottom = 32.0
+offset_left = 378.0
+offset_top = 12.0
+offset_right = 446.0
+offset_bottom = 36.0
 text = "Craft"
 
 [node name="ResultLabel" type="Label" parent="HUD/CraftingPanel/MarginContainer/VBox"]

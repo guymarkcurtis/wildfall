@@ -4,6 +4,8 @@ extends StaticBody2D
 
 const TILE_SIZE: float = 32.0
 const STORY_RISE: float = 12.0
+const STATION_TEXTURE_PATH := "res://assets/tiles/wildfall-crafting-stations.png"
+const STATION_CELL_INDEX := {"campfire": 0, "furnace": 1, "workbench": 2, "anvil": 3}
 
 var building_id: String = ""
 var display_name: String = "Building"
@@ -15,6 +17,7 @@ var part_type: String = "utility"
 var blocks_movement: bool = true
 
 var _body: Polygon2D = null
+var _station_sprite: Sprite2D = null
 var _label: Label = null
 var _health_bar: ProgressBar = null
 
@@ -49,6 +52,16 @@ func _setup_visuals() -> void:
 	])
 	_body.color = _color_for(building_id)
 	add_child(_body)
+	if STATION_CELL_INDEX.has(building_id):
+		# Station artwork always comes through the texture-pack manager. The
+		# matching 4x1 sheet is exported with every reference/refinement pack.
+		_body.color = Color(0.0, 0.0, 0.0, 0.0)
+		_station_sprite = Sprite2D.new()
+		_station_sprite.position = Vector2(TILE_SIZE, TILE_SIZE) * 0.5
+		_station_sprite.region_enabled = true
+		_station_sprite.region_rect = Rect2(float(STATION_CELL_INDEX[building_id]) * TILE_SIZE, 0.0, TILE_SIZE, TILE_SIZE)
+		_station_sprite.texture = TexturePackManager.get_texture(STATION_TEXTURE_PATH)
+		add_child(_station_sprite)
 
 	_label = Label.new()
 	_label.text = "%s  L%d" % [display_name, story + 1]
@@ -64,6 +77,10 @@ func _setup_visuals() -> void:
 	_health_bar.position = Vector2(0.0, -6.0)
 	_health_bar.show_percentage = false
 	add_child(_health_bar)
+
+func reload_visual_texture() -> void:
+	if _station_sprite != null:
+		_station_sprite.texture = TexturePackManager.get_texture(STATION_TEXTURE_PATH)
 
 func _color_for(item_id: String) -> Color:
 	match item_id:

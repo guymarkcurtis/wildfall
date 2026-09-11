@@ -1,9 +1,9 @@
 # Wildfall Test Results
 
 ## Test Run Summary
-- **Current verification**: 151 checks passed, 0 failures (macOS Godot 4.7.2 headless run)
+- **Current verification**: 178 checks passed, 0 failures (macOS Godot 4.7.2 headless run)
 - **Godot Version**: 4.7.2.stable (linux.x86_64, official) — the project was upgraded to Godot 4.7 on 2026-09-11 (editor config sync from the Mac) and the Linux verification binary was upgraded to match
-- **Test Script**: `tests/test_game.gd` (SceneTree harness that boots the real `main.tscn`, validates world, UI, inventory, building, technology progression, texture-pack export/live switching, saves, and resource accessibility, then exits with the failure count as its exit code)
+- **Test Script**: `tests/test_game.gd` (SceneTree harness that boots the real `main.tscn`, validates world, UI, inventory, building, technology progression, texture-pack export/live switching, save persistence of player-caused world mutations, and resource accessibility, then exits with the failure count as its exit code)
 
 ### Test command
 ```bash

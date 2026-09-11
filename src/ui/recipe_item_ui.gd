@@ -33,6 +33,9 @@ func set_data(recipe_data: Dictionary, can_craft: bool) -> void:
 	var cost_str: PackedStringArray = []
 	for item_id in cost:
 		cost_str.append("%dx %s" % [cost[item_id], item_id])
+	var required_station := str(recipe_data.get("crafting_station", ""))
+	if not required_station.is_empty():
+		cost_str.append("near %s" % required_station.capitalize())
 	recipe_cost_label.text = ", ".join(cost_str)
 	
 	craft_button.disabled = not can_craft

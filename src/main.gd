@@ -56,11 +56,17 @@ var _recipe_defs: Array = []
 var _creature_nodes: Array = []
 # chunk_coords (Vector2i) -> Array of that chunk's creature nodes.
 var _creatures_by_chunk: Dictionary = {}
+# Spawn tiles removed by the player. The world itself is deterministic, so
+# saves only need this small mutation ledger instead of serializing every
+# generated resource and creature in every visited chunk.
+var _destroyed_resource_tiles: Dictionary = {}
+var _destroyed_creature_tiles: Dictionary = {}
 # Terrain, resources and creatures are visual/gameplay-heavy to construct.
 # Queue generated chunk content so crossing a boundary never builds a whole
 # strip of chunks in one frame.
 var _pending_chunk_visuals: Array[Vector2i] = []
 var _world_info_elapsed := 0.0
+var _last_crafting_station_signature := ""
 
 func _ready() -> void:
 	# The game is designed around a smooth 60 Hz simulation. Running uncapped
@@ -103,8 +109,8 @@ func _ready() -> void:
 	player.status_effects = status_effects
 	building_manager.player = player
 	building_manager.item_database = item_database
-	building_manager.building_placed.connect(func(id: String, coords: Vector2i):
-		$GameEventBus.building_placed.emit(id, coords))
+	building_manager.building_placed.connect(_on_building_placed)
+	building_manager.building_removed.connect(_on_building_removed)
 	# HUD (health/hunger bars, seed label, optional debug readout).
 	hud.set_player(player)
 	hud.set_seed(_world_seed)
@@ -164,6 +170,10 @@ func _on_world_seed_set(seed: int) -> void:
 
 ## (Re)generate the world: noise, chunk loading, terrain, and resources.
 func _generate_world(seed: int) -> void:
+	# A seed change starts a fresh world. Loading restores its mutation ledger
+	# immediately after this reset through the world_state save module.
+	_destroyed_resource_tiles.clear()
+	_destroyed_creature_tiles.clear()
 	# Free the previous world's resource nodes and rendered terrain first.
 	for node in _resource_nodes:
 		if is_instance_valid(node):
@@ -266,6 +276,12 @@ func _spawn_resources_for_chunk(chunk_coords: Vector2i) -> void:
 	for res_data in resources:
 		var x_val: int = int(res_data.get("x", 0))
 		var y_val: int = int(res_data.get("y", 0))
+		var spawn_tile := Vector2i(x_val, y_val)
+		if _destroyed_resource_tiles.has(spawn_tile):
+			# The deterministic generator created a transient record before Main
+			# could apply the save ledger. Remove it as well as skipping the node.
+			resource_spawner.remove_resource(spawn_tile)
+			continue
 		var res_type: String = str(res_data.get("type", "rock"))
 
 		# Create a real HarvestableResource node (sibling of the player
@@ -275,6 +291,8 @@ func _spawn_resources_for_chunk(chunk_coords: Vector2i) -> void:
 		resource.setup(res_type, float(res_data.get("health", 100.0)), res_data.get("yields", []))
 		resource.set_meta("resource_type", res_type)
 		resource.set_meta("chunk_coords", chunk_coords)
+		resource.set_meta("spawn_tile", spawn_tile)
+		resource.resource_depleted.connect(_on_resource_depleted.bind(resource))
 		resource.resource_destroyed.connect(func(item_id: String, quantity: int):
 			_on_resource_destroyed(resource, item_id, quantity))
 		add_child(resource)
@@ -290,16 +308,20 @@ func _spawn_creatures_for_chunk(chunk_coords: Vector2i) -> void:
 	var creatures: Array = creature_spawner.generate_chunk_creatures(chunk_coords, _world_seed)
 	for creature_data in creatures:
 		var ctype: String = str(creature_data.get("type", "rabbit"))
+		var spawn_tile := Vector2i(int(creature_data.get("x", 0)), int(creature_data.get("y", 0)))
+		if _destroyed_creature_tiles.has(spawn_tile):
+			creature_spawner.remove_creature(spawn_tile)
+			continue
 		var def: CreatureDefinition = creature_spawner.get_definition(ctype)
 		if def == null:
 			continue
 
 		# Create a real Creature node (sibling of the player under Main).
 		var creature := Creature.new()
-		creature.position = Vector2(int(creature_data.get("x", 0)), int(creature_data.get("y", 0))) * float(TILE_SIZE)
+		creature.position = Vector2(spawn_tile) * float(TILE_SIZE)
 		creature.setup(ctype, def, chunk_coords, world_generator)
 		creature.set_meta("chunk_coords", chunk_coords)
-		creature.set_meta("spawn_tile", Vector2i(int(creature_data.get("x", 0)), int(creature_data.get("y", 0))))
+		creature.set_meta("spawn_tile", spawn_tile)
 		creature.creature_died.connect(_on_creature_died.bind(creature))
 		add_child(creature)
 		_creature_nodes.append(creature)
@@ -317,6 +339,9 @@ func _on_creature_died(creature_node: Node) -> void:
 	if chunk_list.has(creature_node):
 		chunk_list.erase(creature_node)
 	var creature := creature_node as Creature
+	var spawn_tile: Vector2i = creature_node.get_meta("spawn_tile", Vector2i.ZERO)
+	_destroyed_creature_tiles[spawn_tile] = true
+	creature_spawner.remove_creature(spawn_tile)
 	if creature != null:
 		if is_instance_valid(creature):
 			$GameEventBus.entity_died.emit(creature.creature_type)
@@ -331,14 +356,21 @@ func _on_creature_died(creature_node: Node) -> void:
 	if is_instance_valid(creature_node):
 		creature_node.queue_free()
 
-## A harvestable resource was destroyed: hand its yield to the player.
-func _on_resource_destroyed(resource_node: Node, item_id: String, quantity: int) -> void:
+## Record the depleted spawn before the node leaves the tree. This is kept
+## separate from loot because an unlucky resource can yield no optional drops.
+func _on_resource_depleted(resource_node: Node) -> void:
 	if _resource_nodes.has(resource_node):
 		_resource_nodes.erase(resource_node)
 	var chunk_key: Vector2i = resource_node.get_meta("chunk_coords", Vector2i(0, 0))
 	var chunk_list: Array = _resources_by_chunk.get(chunk_key, [])
 	if chunk_list.has(resource_node):
 		chunk_list.erase(resource_node)
+	var spawn_tile: Vector2i = resource_node.get_meta("spawn_tile", Vector2i.ZERO)
+	_destroyed_resource_tiles[spawn_tile] = true
+	resource_spawner.remove_resource(spawn_tile)
+
+## A harvestable resource yielded an item: hand it to the player.
+func _on_resource_destroyed(_resource_node: Node, item_id: String, quantity: int) -> void:
 	if player and player.inventory:
 		player.inventory.add_item(item_id, quantity)
 	$GameEventBus.item_added.emit(item_id, quantity)
@@ -372,6 +404,13 @@ func _on_build_part_selected(item_id: String) -> void:
 		if build_palette != null:
 			build_palette.show_status("Selected %s — click a clear tile to place it" % item_database.get_item_display_name(item_id))
 
+func _on_building_placed(item_id: String, coords: Vector2i) -> void:
+	$GameEventBus.building_placed.emit(item_id, coords)
+	_refresh_crafting_ui()
+
+func _on_building_removed(_item_id: String, _coords: Vector2i) -> void:
+	_refresh_crafting_ui()
+
 func _on_technology_unlock_requested(technology_id: String) -> void:
 	if technology_system != null:
 		technology_system.try_unlock(technology_id, player.inventory if player != null else null)
@@ -400,10 +439,14 @@ func _on_texture_pack_changed(_pack_id: String) -> void:
 	for creature in _creature_nodes:
 		if is_instance_valid(creature) and creature.has_method("reload_visual_texture"):
 			creature.reload_visual_texture()
+	if building_manager != null:
+		building_manager.refresh_texture_pack()
 
 ## Player toggled the crafting UI (C key, via the event bus).
 func _on_toggle_crafting_ui() -> void:
 	crafting_panel.visible = not crafting_panel.visible
+	if crafting_panel.visible:
+		_refresh_crafting_ui()
 
 ## Per-frame: keep chunk loading in sync with the player, move the camera, keep the HUD
 ## in step with the seed editor, and update the debug overlay.
@@ -427,6 +470,10 @@ func _process(delta: float) -> void:
 	if performance_overlay != null:
 		performance_overlay.update_frame(delta, chunk_system.get_loaded_chunk_count(),
 				_resource_nodes.size(), _creature_nodes.size())
+	if crafting_panel != null and crafting_panel.visible:
+		var station_signature := ",".join(_get_nearby_station_ids())
+		if station_signature != _last_crafting_station_signature:
+			_refresh_crafting_ui()
 
 	if pause_menu != null and pause_menu.visible:
 		return
@@ -535,7 +582,17 @@ func _refresh_crafting_ui() -> void:
 		_recipe_defs.append(def)
 		recipe_dicts.append(_recipe_to_dict(def))
 
-	crafting_panel.refresh(recipe_dicts, inv_data)
+	var nearby_stations := _get_nearby_station_ids()
+	_last_crafting_station_signature = ",".join(nearby_stations)
+	crafting_panel.refresh(recipe_dicts, inv_data, nearby_stations)
+
+func _get_nearby_station_ids() -> PackedStringArray:
+	if GameSession.is_creative() or building_manager == null or player == null:
+		return PackedStringArray()
+	return building_manager.get_nearby_station_ids(player.get_world_position())
+
+func _has_required_crafting_station(def: RecipeDefinition) -> bool:
+	return GameSession.is_creative() or def.crafting_station.is_empty() or _get_nearby_station_ids().has(def.crafting_station)
 
 ## Item ids the player can actually obtain in the current phase:
 ## everything the resource spawner and the creature spawner can drop,
@@ -603,6 +660,10 @@ func _on_craft_requested(index: int) -> void:
 	if not _is_recipe_unlocked(def):
 		$GameEventBus.recipe_failed.emit(def.recipe_id, "technology_locked")
 		return
+	if not _has_required_crafting_station(def):
+		$GameEventBus.recipe_failed.emit(def.recipe_id, "requires_nearby_%s" % def.crafting_station)
+		_refresh_crafting_ui()
+		return
 	if not GameSession.is_creative():
 		var inv_data: Dictionary = player.inventory.get_all_items()
 		if not def.can_craft(inv_data):
@@ -617,6 +678,7 @@ func _on_craft_requested(index: int) -> void:
 func _register_save_modules() -> void:
 	save_system.clear_modules()
 	save_system.register_module("world", _collect_world, _apply_world)
+	save_system.register_module("world_state", _collect_world_state, _apply_world_state)
 	save_system.register_module("time", _collect_time, _apply_time)
 	save_system.register_module("weather", _collect_weather, _apply_weather)
 	save_system.register_module("status", _collect_status, _apply_status)
@@ -632,6 +694,44 @@ func _apply_world(data: Variant) -> void:
 	var world: Dictionary = data if typeof(data) == TYPE_DICTIONARY else {}
 	var seed: int = int(world.get("seed", _world_seed))
 	seed_input.set_seed(seed)
+
+## JSON-safe mutation ledger. Spawn coordinates are stable across chunk
+## unload/reload and across future save format changes, unlike Node paths.
+func _collect_world_state() -> Dictionary:
+	return {
+		"destroyed_resources": _serialize_tiles(_destroyed_resource_tiles),
+		"destroyed_creatures": _serialize_tiles(_destroyed_creature_tiles)
+	}
+
+func _apply_world_state(data: Variant) -> void:
+	_destroyed_resource_tiles.clear()
+	_destroyed_creature_tiles.clear()
+	if typeof(data) != TYPE_DICTIONARY:
+		return
+	var state: Dictionary = data
+	_destroyed_resource_tiles = _deserialize_tiles(state.get("destroyed_resources", []))
+	_destroyed_creature_tiles = _deserialize_tiles(state.get("destroyed_creatures", []))
+
+func _serialize_tiles(tiles: Dictionary) -> Array:
+	var out: Array = []
+	for key in tiles:
+		var tile: Vector2i = key
+		out.append({"x": tile.x, "y": tile.y})
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var ay: int = int(a.get("y", 0))
+		var by: int = int(b.get("y", 0))
+		return int(a.get("x", 0)) < int(b.get("x", 0)) if ay == by else ay < by
+	)
+	return out
+
+func _deserialize_tiles(data: Variant) -> Dictionary:
+	var tiles: Dictionary = {}
+	if typeof(data) != TYPE_ARRAY:
+		return tiles
+	for entry in data:
+		if typeof(entry) == TYPE_DICTIONARY:
+			tiles[Vector2i(int(entry.get("x", 0)), int(entry.get("y", 0)))] = true
+	return tiles
 
 func _collect_time() -> Dictionary:
 	return day_night.serialize() if day_night else {}

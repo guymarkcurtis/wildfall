@@ -173,9 +173,8 @@ func _update_chunk_surface(chunk_coords: Vector2i, tile_ids: PackedInt32Array) -
 		return
 	var chunk_key := str(chunk_coords)
 	var world_start := _chunk_coords_to_world_start(chunk_coords)
-	var texture := ImageTexture.create_from_image(
-		_art_generator.create_contiguous_chunk_image(world_start, tile_ids, CHUNK_SIZE, _water_frame)
-	)
+	var chunk_image := _art_generator.create_contiguous_chunk_image(world_start, tile_ids, CHUNK_SIZE, _water_frame)
+	var texture := ImageTexture.create_from_image(chunk_image)
 	var sprite: Sprite2D = _chunk_art_sprites.get(chunk_key)
 	if sprite == null or not is_instance_valid(sprite):
 		sprite = Sprite2D.new()
@@ -186,8 +185,11 @@ func _update_chunk_surface(chunk_coords: Vector2i, tile_ids: PackedInt32Array) -
 		else:
 			add_child(sprite)
 		_chunk_art_sprites[chunk_key] = sprite
-		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-		sprite.scale = Vector2.ONE * (float(TILE_SIZE) / float(TileSetGenerator.MATERIAL_PIXELS_PER_TILE))
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	# Stock chunks use their compact material resolution; texture-pack chunks
+	# are already native 32px-per-tile. Scale from the generated image size so
+	# both paths occupy exactly the same world footprint.
+	sprite.scale = Vector2.ONE * (float(CHUNK_SIZE * TILE_SIZE) / float(chunk_image.get_width()))
 	sprite.texture = texture
 
 ## Add sparse, independently placed accents. They make the ground feel alive

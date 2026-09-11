@@ -190,6 +190,14 @@ func remove_chunk(chunk_coords: Vector2i) -> void:
 func get_creature(coords: Vector2i) -> Dictionary:
 	return _creatures.get(coords, {})
 
+## Remove a creature record after it dies. Main also stores the same tile in
+## its save mutation ledger so deterministic regeneration cannot restore it.
+func remove_creature(coords: Vector2i) -> bool:
+	if _creatures.has(coords):
+		_creatures.erase(coords)
+		return true
+	return false
+
 ## All creature records, keyed by world tile position.
 func get_all_creatures() -> Dictionary:
 	return _creatures.duplicate(true)
@@ -253,4 +261,3 @@ func _get_chunk_seed(chunk_coords: Vector2i, world_seed: int) -> int:
 	mixed = mixed + chunk_coords.y * 83492791
 	mixed = mixed + 734537
 	return abs(mixed)
-

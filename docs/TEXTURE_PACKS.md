@@ -16,7 +16,9 @@ menu; it applies immediately to the running world.
    `refinement/` as an editable copy of the stock assets and selects it.
 5. Replace only the PNGs you changed, keeping their paths, dimensions, and
    atlas cell ordering. Return to Options and switch to another pack or back
-   to Stock at any time.
+   to Stock at any time. Choose a pack in the selector, then press its
+   **Apply** button. The water/sand/grass preview confirms the active art in
+   both the title-screen and in-game Options menu.
 
 Packs live under `user://texture_packs/`. The menu’s folder button opens the
 actual platform folder, so this works in the editor and exported game builds.
@@ -31,7 +33,9 @@ Visible biome backgrounds are exported as eight 256×256 images under
 shared surfaces used by the six biomes (for example desert uses sand and
 stone; arctic uses snow). They are sampled in world space and repeated every
 256 world pixels. Keep opposite edges seamless when editing. Terrain blends
-still apply, and the current low-resolution ground renderer softens fine detail.
+still apply. Active texture packs are composed at the native 32px-per-tile
+source resolution, so pack detail remains crisp rather than being blurred into
+broad colour blocks.
 The stock contact card includes these backgrounds before the original sheets.
 Creating the refinement pack again adds missing files without replacing edits.
 
@@ -40,6 +44,7 @@ assets/tiles/wildfall-terrain-atlas.png
 assets/tiles/wildfall-water-animation.png
 assets/tiles/wildfall-resources-atlas.png
 assets/tiles/wildfall-ground-details.png
+assets/tiles/wildfall-crafting-stations.png
 assets/resources/wildfall-forage-plants.png
 assets/characters/explorer-base-walk.png
 assets/characters/explorer-storm-walk.png
@@ -60,8 +65,13 @@ forage 2×2. The game retains its TileSet cell IDs, water collision, and
 automatic terrain-edge/corner blending while the artwork changes, so a pack
 cannot accidentally change navigation or resource reachability.
 
+`wildfall-crafting-stations.png` is a 4×1 atlas of 32×32 cells in this exact
+order: **campfire, furnace, workbench, anvil**. These are the visuals for the
+placeable stations that enable nearby crafting recipes. The manifest repeats
+this ordering for image tools, and it must be preserved when refining the art.
+
 ## Live refresh scope
 
 Switching packs rebuilds the terrain TileSet and rendered ground details, and
-reloads live resources, the player, and streamed creatures. New chunks and
-entities use the same selected pack automatically.
+reloads live resources, the player, streamed creatures, and placed crafting
+stations. New chunks and entities use the same selected pack automatically.

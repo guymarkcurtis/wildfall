@@ -53,6 +53,9 @@ func _process(_delta: float) -> bool:
 			var panel: Node = _main.get_node("HUD/CraftingPanel")
 			if panel.visible == true:
 				_check(true, "C key opens the crafting panel")
+				var recipe_scroll: ScrollContainer = panel.get_node_or_null("MarginContainer/VBox/RecipeScroll") as ScrollContainer
+				_check(recipe_scroll != null and recipe_scroll.get_v_scroll_bar().max_value > 0.0,
+					"Crafting recipe list scrolls instead of overflowing the panel")
 				# Release here: a second action_press in the same frame
 				# would net out to "no state change" at the next flush, so
 				# the release and the closing press must be separate frames.
@@ -218,6 +221,7 @@ func _run_checks() -> void:
 
 	# --- 3. Terrain + resources --------------------------------------------
 	_check(terrain_renderer.get_used_cells().size() > 0, "Terrain rendered for initial chunks (%d tiles)" % terrain_renderer.get_used_cells().size())
+	_check(TileSetGenerator.MATERIAL_PIXELS_PER_TILE == 4, "Stock terrain keeps its lightweight streaming resolution")
 	_check(resource_spawner.get_all_resources().size() > 0, "Resources spawned in initial chunks")
 	var reachable_resources := true
 	for resource_tile in resource_spawner.get_all_resources().keys():
@@ -233,18 +237,52 @@ func _run_checks() -> void:
 	var reference_export := TexturePackManager.export_stock_reference()
 	_check(FileAccess.file_exists(TexturePackManager.CARD_PATH), "Stock texture contact card exports for external editing")
 	_check(FileAccess.file_exists("user://texture_packs/stock_reference/manifest.json"), "Stock reference pack includes its manifest")
+	_check(FileAccess.file_exists("user://texture_packs/stock_reference/assets/tiles/wildfall-crafting-stations.png"),
+		"Stock reference pack includes the crafting-station texture atlas")
+	var station_texture := TexturePackManager.get_texture("res://assets/tiles/wildfall-crafting-stations.png")
+	_check(station_texture != null and station_texture.get_width() == 128 and station_texture.get_height() == 32, "Crafting-station atlas has four 32px cells")
 	var refinement_export := TexturePackManager.create_refinement_pack()
 	_check(FileAccess.file_exists("user://texture_packs/refinement/manifest.json"), "Editable refinement pack is created with its manifest")
 	_check(TexturePackManager.get_available_pack_ids().has(TexturePackManager.REFINEMENT_PACK), "Editable refinement pack appears in the selector")
 	_check(TexturePackManager.set_active_pack_id(TexturePackManager.REFINEMENT_PACK), "Refinement texture pack can be selected live")
 	_check(TexturePackManager.get_active_pack_id() == TexturePackManager.REFINEMENT_PACK, "Selected texture pack is persisted as active")
+	var packed_tile_ids := PackedInt32Array()
+	packed_tile_ids.append(TerrainRenderer.TILE_GRASS)
+	var pack_generator := TileSetGenerator.new()
+	var packed_ground := pack_generator.create_contiguous_chunk_image(Vector2i.ZERO, packed_tile_ids, 1, 0)
+	var pack_grass := TexturePackManager.get_image("res://assets/ground/grass.png")
+	_check(packed_ground.get_size() == Vector2i(32, 32), "Active texture pack renders terrain at native tile resolution")
+	_check(packed_ground.get_pixel(7, 11).is_equal_approx(pack_grass.get_pixel(7, 11)), "Active texture-pack pixels reach the world without downsampling")
+	pack_generator.free()
 	_check(TexturePackManager.set_active_pack_id(original_pack), "Texture pack can switch back to the previous selection")
+	var options := OptionsPanel.new()
+	root.add_child(options)
+	options.open()
+	var refinement_index := -1
+	for index in range(options._pack_picker.item_count):
+		if str(options._pack_picker.get_item_metadata(index)) == TexturePackManager.REFINEMENT_PACK:
+			refinement_index = index
+			break
+	options._on_texture_pack_selected(refinement_index)
+	_check(options._pending_pack_id == TexturePackManager.REFINEMENT_PACK and TexturePackManager.get_active_pack_id() == original_pack,
+		"Texture picker stages a selection until Apply is pressed")
+	options._on_apply_texture_pack()
+	_check(TexturePackManager.get_active_pack_id() == TexturePackManager.REFINEMENT_PACK and not options._preview_tiles.is_empty() and options._preview_tiles[0].texture != null,
+		"Texture Apply button changes the active pack and refreshes its preview")
+	TexturePackManager.set_active_pack_id(original_pack)
+	options.queue_free()
 
 	# --- 4. Item database + crafting panel (B10/B13) -----------------------
 	_check(item_database.items.size() > 0, "Item database populated (%d items)" % item_database.items.size())
 	_check(item_database.recipes.size() > 0, "Recipe database populated (%d recipes)" % item_database.recipes.size())
 	var panel_recipes: Array = crafting_panel.recipes
 	_check(panel_recipes.size() > 0, "Crafting panel shows recipes (%d)" % panel_recipes.size())
+	var recipe_scroll: ScrollContainer = crafting_panel.get_node_or_null("MarginContainer/VBox/RecipeScroll") as ScrollContainer
+	var recipe_list: VBoxContainer = crafting_panel.get_node_or_null("MarginContainer/VBox/RecipeScroll/RecipeList") as VBoxContainer
+	_check(recipe_scroll != null and recipe_list != null and recipe_list.get_child_count() - 1 == panel_recipes.size(),
+		"Crafting panel renders every available recipe in its scroll list")
+	_check(recipe_list != null and recipe_list.custom_minimum_size.y >= float(panel_recipes.size()) * 48.0,
+		"Crafting recipe list reserves content height for every recipe")
 	var recipe_ids: Array = []
 	for r in panel_recipes:
 		recipe_ids.append(str(r.get("id", "")))
@@ -304,17 +342,83 @@ func _run_checks() -> void:
 	_check(seed_input.is_editing() == false, "cancel_editing() closes the editor")
 	_check(seed_input.get_seed() == boot_seed, "Cancel keeps the original seed")
 
-	# --- 7. Save / load roundtrip --------------------------------------------
+	# --- 7. Save / load roundtrip + persistent world mutations ---------------
+	# Ensure a few real chunk visuals have been constructed without forcing the
+	# complete 7×7 ring in one test frame.
+	var coverage_chunk_loads := 0
+	while (main.get("_resource_nodes") as Array).is_empty() or (main.get("_creature_nodes") as Array).is_empty():
+		if coverage_chunk_loads >= 12:
+			break
+		main.call("_process_one_chunk_visual")
+		coverage_chunk_loads += 1
+	var tracked_resources: Array = main.get("_resource_nodes")
+	var resource_to_destroy: HarvestableResource = tracked_resources[0] as HarvestableResource if not tracked_resources.is_empty() else null
+	_check(resource_to_destroy != null, "A spawned resource is available for persistence coverage")
+	var destroyed_resource_tile := Vector2i.ZERO
+	if resource_to_destroy != null:
+		destroyed_resource_tile = resource_to_destroy.get_meta("spawn_tile", Vector2i.ZERO)
+		resource_to_destroy.destroy()
+		_check((main.get("_destroyed_resource_tiles") as Dictionary).has(destroyed_resource_tile),
+			"Depleting a resource records its deterministic spawn tile")
+
+	var tracked_creatures: Array = main.get("_creature_nodes")
+	var creature_to_kill: Creature = tracked_creatures[0] as Creature if not tracked_creatures.is_empty() else null
+	_check(creature_to_kill != null, "A spawned creature is available for persistence coverage")
+	var destroyed_creature_tile := Vector2i.ZERO
+	if creature_to_kill != null:
+		destroyed_creature_tile = creature_to_kill.get_meta("spawn_tile", Vector2i.ZERO)
+		creature_to_kill.take_damage(creature_to_kill.health)
+		_check((main.get("_destroyed_creature_tiles") as Dictionary).has(destroyed_creature_tile),
+			"Killing a creature records its deterministic spawn tile")
+
+	var saved_building_tile := Vector2i(14, 14)
+	player.inventory.add_item("wooden_wall", 1)
+	_check(technology_buildings.place_building_item("wooden_wall", saved_building_tile, player.inventory),
+		"Placed building is ready for save/load coverage")
 	player.global_position = Vector2(123.0, -77.0)
 	var ok_save: bool = main.call("save_game")
 	_check(ok_save, "save_game() succeeds (player at %s)" % str(player.global_position))
 	player.global_position = Vector2(50.0, 50.0)  # simulate drift away from saved position
 	var ok_load: bool = main.call("load_game")
 	_check(ok_load, "load_game() succeeds")
+	# Reconstruct exactly the affected chunks. This verifies the saved ledger
+	# participates in deterministic spawning without eagerly building every
+	# queued visual chunk during this synchronous test step.
+	var destroyed_resource_chunk := Vector2i(
+		int(floor(float(destroyed_resource_tile.x) / 16.0)),
+		int(floor(float(destroyed_resource_tile.y) / 16.0))
+	)
+	var destroyed_creature_chunk := Vector2i(
+		int(floor(float(destroyed_creature_tile.x) / 16.0)),
+		int(floor(float(destroyed_creature_tile.y) / 16.0))
+	)
+	main.call("_spawn_resources_for_chunk", destroyed_resource_chunk)
+	main.call("_spawn_creatures_for_chunk", destroyed_creature_chunk)
 	_check(player.global_position.distance_to(Vector2(123.0, -77.0)) < 1.0, \
 		"Player position restored from save (%s)" % str(player.global_position))
 	_check(player.get_hotbar_items()[8] == "wood", "Saved quick-bar assignment is restored on load")
 	_check(technology_system.is_unlocked("stone_building"), "Saved technology research is restored on load")
+	_check(not resource_spawner.has_resource(destroyed_resource_tile),
+		"Destroyed resource stays absent after loading the same seed")
+	var resource_respawned := false
+	for candidate in main.get("_resource_nodes"):
+		if is_instance_valid(candidate) and not candidate.is_queued_for_deletion() \
+				and candidate.get_meta("spawn_tile", Vector2i.ZERO) == destroyed_resource_tile:
+			resource_respawned = true
+			break
+	_check(not resource_respawned, "Destroyed resource node is not recreated after load")
+	var save_creature_spawner: CreatureSpawner = main.get_node_or_null("CreatureSpawner") as CreatureSpawner
+	_check(save_creature_spawner != null and save_creature_spawner.get_creature(destroyed_creature_tile).is_empty(),
+		"Killed creature stays absent after loading the same seed")
+	var creature_respawned := false
+	for candidate in main.get("_creature_nodes"):
+		if is_instance_valid(candidate) and not candidate.is_queued_for_deletion() \
+				and candidate.get_meta("spawn_tile", Vector2i.ZERO) == destroyed_creature_tile:
+			creature_respawned = true
+			break
+	_check(not creature_respawned, "Killed creature node is not recreated after load")
+	_check(technology_buildings.get_building_at(saved_building_tile) != null,
+		"Placed building is restored after loading")
 
 	# --- 8. Chunk unload / re-enter cycle (B3) --------------------------------
 	# Full signal path: ChunkSystem.generate_chunk/unload_chunk -> Main handlers
@@ -433,6 +537,30 @@ func _run_checks() -> void:
 		buildings.set_selected_story(1)
 		_check(buildings.get_building_at(structure_tile, 1).visible and buildings.get_building_at(structure_tile, 0).visible,
 			"Cutaway keeps the selected story and its support visible")
+		buildings.set_selected_story(0)
+		player_ent.global_position = Vector2.ZERO
+		var cooked_meat: RecipeDefinition = item_database.get_recipe("cooked_meat")
+		_check(cooked_meat != null and not main._has_required_crafting_station(cooked_meat),
+			"Station recipe cannot be crafted away from its station")
+		player_ent.inventory.add_item("meat", 1)
+		var raw_meat_before := player_ent.inventory.get_item_quantity("meat")
+		var cooked_before := player_ent.inventory.get_item_quantity("cooked_meat")
+		var crafting_defs: Array = main.get("_recipe_defs")
+		var cooked_recipe_index := crafting_defs.find(cooked_meat)
+		main._on_craft_requested(cooked_recipe_index)
+		_check(player_ent.inventory.get_item_quantity("meat") == raw_meat_before and player_ent.inventory.get_item_quantity("cooked_meat") == cooked_before,
+			"Crafting rejects a station recipe without a nearby station")
+		player_ent.inventory.add_item("campfire", 1)
+		var campfire_tile := Vector2i(1, 0)
+		_check(buildings.place_building_item("campfire", campfire_tile, player_ent.inventory, 0), "Crafted campfire can be placed in the world")
+		var campfire: Building = buildings.get_building_at(campfire_tile, 0)
+		_check(campfire != null and campfire._station_sprite != null and campfire._station_sprite.texture != null,
+			"Placed campfire uses the exported texture-pack atlas")
+		_check(buildings.has_station_near("campfire", player_ent.global_position) and main._has_required_crafting_station(cooked_meat),
+			"Nearby campfire satisfies the cooking requirement")
+		main._on_craft_requested(cooked_recipe_index)
+		_check(player_ent.inventory.get_item_quantity("meat") == raw_meat_before - 1 and player_ent.inventory.get_item_quantity("cooked_meat") == cooked_before + 1,
+			"Nearby campfire enables its recipe and consumes ingredients")
 	_check(item_database.has_item("wooden_bow"), "Wooden bow exists for ranged combat")
 	_check(item_database.has_item("arrow"), "Arrows exist for ranged combat")
 
@@ -453,7 +581,7 @@ func _run_checks() -> void:
 	_check("Creative" in mode_buttons, "New Game offers Creative mode")
 	title.queue_free()
 	var ss: SaveSystem = main.get_node("SaveSystem") as SaveSystem
-	_check(SaveSystem.SAVE_VERSION >= 3, "Save format includes technology research (v3+)")
+	_check(SaveSystem.SAVE_VERSION >= 4, "Save format includes world mutation persistence (v4+)")
 	var v1: Dictionary = {
 		"version": 1,
 		"player": {"position": {"x": 9.0, "y": 4.0}},

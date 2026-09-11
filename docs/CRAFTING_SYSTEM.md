@@ -45,11 +45,14 @@ Stations used by the current 56 recipes:
 | anvil | bronze_ingot |
 | campfire | cooked_meat, cooked_fish, soup |
 
-**Current behaviour**: `CraftingComponent.craft_recipe()` checks only
-`can_craft()` — the station field is displayed in the panel but **not enforced**,
-because stations are not placeable in the world yet (all stations are
-craftable *items*, e.g. the `furnace` building). Enforcing proximity is
-a planned task (see PROJECT_STATE.md).
+**Current behaviour**: Stations are craftable, placeable utility buildings.
+Place them from the **B** build palette, then stand within 72 pixels of the
+matching ground-story station. Recipes with a station requirement remain
+visible but their Craft button is disabled until the player is close enough;
+the panel shows the nearby stations and the requirement beside the recipe
+cost. The crafting request is validated again by `Main`, so it cannot be
+bypassed through UI timing or a direct call. Creative mode intentionally
+bypasses station and ingredient requirements.
 
 ## Recipe Database (56 recipes)
 
@@ -99,17 +102,20 @@ ingredients no live system can provide.
 1. Player presses **C** to open the crafting UI — the panel starts
    hidden (it used to cover the HUD at startup with all 40 rows); C
    again closes it
-2. `Main` gathers obtainable recipes → `CraftingPanel.refresh(list)`
+2. `Main` gathers obtainable recipes and nearby placed stations →
+   `CraftingPanel.refresh(list, inventory, nearby_stations)`
 3. Panel builds one `RecipeItemUI` row per recipe (name, cost, station,
    result, Craft button)
-4. Player presses Craft → `CraftingComponent.craft_recipe(recipe_id, inventory)`
-5. `can_craft()` fails → `recipe_failed` signal with a reason; succeeds →
+4. Player presses Craft → `Main` verifies research, station proximity, and
+   ingredients against the real inventory
+5. A requirement fails → `recipe_failed` signal with a reason; succeeds →
    ingredients consumed, output added
 6. `result_crafted` signal emitted → Main adds items to the inventory
    (and refreshes the panel)
 
-The recipe panel is not yet scrollable, so long lists can overflow its
-visual bounds. `MAX_DISPLAYED = 15` is the cap for its compact preview rows.
+The recipe panel keeps its title, nearby-station status, and craft feedback
+fixed while the complete recipe list scrolls in its own viewport. There is no
+display cap: every currently available recipe is reachable.
 
 ## Creating New Recipes
 
