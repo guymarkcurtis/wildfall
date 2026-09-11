@@ -3,6 +3,7 @@ class_name HarvestableResource
 extends Area2D
 
 const DEFAULT_HITBOX_RADIUS: float = 16.0
+const FORAGE_PLANT_SHEET: Texture2D = preload("res://assets/resources/wildfall-forage-plants.png")
 
 # Resource data
 var resource_type: String = ""
@@ -62,7 +63,10 @@ func _setup_visuals() -> void:
 ## Get texture for resource type.
 func _get_resource_texture() -> ImageTexture:
 	if _texture_cache.has(resource_type):
-		return _texture_cache[resource_type]
+		if resource_type != "plant":
+			return _texture_cache[resource_type]
+	if resource_type == "plant":
+		return _get_forage_plant_texture()
 	var generator: Node = load("res://src/world/tile_set_generator.gd").new()
 	var texture: ImageTexture = null
 	
@@ -84,6 +88,31 @@ func _get_resource_texture() -> ImageTexture:
 	
 	if texture != null:
 		_texture_cache[resource_type] = texture
+	return texture
+
+## Plant is the one spawned resource that did not belong to the original
+## eight-cell resource atlas. Use the new 2x2 forage sheet and pick a stable
+## visual from its tile position so these no longer appear as colour boxes.
+func _get_forage_plant_texture() -> ImageTexture:
+	var tile_x := int(floor(position.x / 32.0))
+	var tile_y := int(floor(position.y / 32.0))
+	var variant := posmod(tile_x * 31 + tile_y * 17, 4)
+	var cache_key := "plant_%d" % variant
+	if _texture_cache.has(cache_key):
+		return _texture_cache[cache_key]
+	var sheet := FORAGE_PLANT_SHEET.get_image()
+	var cell_width := sheet.get_width() / 2
+	var cell_height := sheet.get_height() / 2
+	var cell := sheet.get_region(Rect2i(
+		(variant % 2) * cell_width, (variant / 2) * cell_height,
+		cell_width, cell_height
+	))
+	var used := cell.get_used_rect()
+	if used.size.x > 0 and used.size.y > 0:
+		cell = cell.get_region(used)
+	cell.resize(32, 32, Image.INTERPOLATE_LANCZOS)
+	var texture := ImageTexture.create_from_image(cell)
+	_texture_cache[cache_key] = texture
 	return texture
 
 ## Create a fallback colored sprite.
