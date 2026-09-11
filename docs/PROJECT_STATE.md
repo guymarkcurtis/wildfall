@@ -152,10 +152,13 @@ A 30-second headless run of the actual game also completed with 0 errors,
 
 ## TESTING
 
-Automated (recommended first):
+Automated (recommended first — Godot 4.7.2 headless, see TEST_RESULTS.md
+for the exact XDG-prefixed command this sandbox requires):
 ```bash
-HOME=/tmp/godot_home /tmp/godot/Godot_v4.6-stable_linux.x86_64 \
-  --headless --path /home/guy/2d-icarus --script tests/test_game.gd
+XDG_DATA_HOME=/tmp/godot-check/xdg XDG_CONFIG_HOME=/tmp/godot-check/xdg \
+XDG_CACHE_HOME=/tmp/godot-check/xdg \
+  /tmp/godot-check/Godot_v4.7.2-stable_linux.x86_64 \
+  --headless --path /home/guy/2d-icarus --script res://tests/test_game.gd
 ```
 Exit code = number of failed checks (0 = green). Also run
 `--headless --import` after any script change to refresh the class cache.

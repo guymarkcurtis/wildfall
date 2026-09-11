@@ -2,14 +2,30 @@
 
 ## Test Run Summary
 - **Date**: 2026-09-10
-- **Godot Version**: 4.6.stable (linux.x86_64, official)
+- **Godot Version**: 4.7.2.stable (linux.x86_64, official) — the project was upgraded to Godot 4.7 on 2026-09-11 (editor config sync from the Mac) and the Linux verification binary was upgraded to match
 - **Test Script**: `tests/test_game.gd` (SceneTree harness: boots the real `main.tscn`, runs 43 static assertions at frame 5, then a **live input phase** — C-key crafting-panel toggle, then a held 1050 px walk — and exits with the failure count as the exit code)
 
 ### Test command
 ```bash
-HOME=/tmp/godot_home /tmp/godot/Godot_v4.6-stable_linux.x86_64 \
-  --headless --path /home/guy/2d-icarus --script tests/test_game.gd
+# XDG overrides are required in this sandbox (the default ~/.local/share/godot
+# path is unwritable and makes Godot crash with signal 11).
+XDG_DATA_HOME=/tmp/godot-check/xdg XDG_CONFIG_HOME=/tmp/godot-check/xdg \
+XDG_CACHE_HOME=/tmp/godot-check/xdg \
+  /tmp/godot-check/Godot_v4.7.2-stable_linux.x86_64 \
+  --headless --path /home/guy/2d-icarus --script res://tests/test_game.gd
 ```
+
+## Engine upgrade: 4.6 → 4.7.2 (2026-09-11)
+
+The project was bumped to `config/features = "4.7"` by the editor config
+sync from the Mac (commit `dfe7324`, alongside the illustrated-terrain
+commit). The Linux verification binary was upgraded from
+`Godot_v4.6-stable` to `Godot_v4.7.2-stable` to match. Re-verified under
+4.7.2: `--import` clean (3 new atlases), harness **50/50, exit 0** (the
+TileMapLayer cell checks still hold — the renderer keeps TileMapLayer as
+its logical grid), and a 35 s live headless run with **0 errors**. The
+new rendering code uses only 4.0-era API, so nothing 4.7-specific was
+required.
 
 ## Baseline (before the 2026-09-10 review fixes)
 

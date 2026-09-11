@@ -102,7 +102,7 @@ Movement is **screen-relative**: W always walks toward the top of the current vi
 ## Development Phases
 
 ### Phase 0: Foundation
-- Godot 4.6 project
+- Godot project (created on 4.6, upgraded to 4.7 on 2026-09-11)
 - Player movement and camera
 - Basic test scene
 - Documentation
