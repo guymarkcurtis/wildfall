@@ -3,7 +3,7 @@
 ## Overview
 
 Crafting lets the player combine resources into new items using recipes
-defined by `RecipeDefinition` resources. All 40 recipes are created in
+defined by `RecipeDefinition` resources. All 56 recipes are created in
 code by `ItemDatabase._load_recipes()` (see `ITEM_SYSTEM.md` for the
 item side).
 
@@ -19,6 +19,7 @@ Exact fields of `resources/recipe_definition.gd`:
 | crafting_station | String | `""` (hand) / `campfire` / `furnace` / `anvil` |
 | required_items | Dictionary | `{item_id: quantity}` — e.g. `{"wood": 2}` |
 | craft_time | float | Seconds to craft (0 = instant) |
+| technology_id | String | Required research ID; empty means available without research |
 | unlocked | bool | Unlocked by default |
 
 Helper methods on the resource:
@@ -31,15 +32,15 @@ Helper methods on the resource:
 > The older version of this table listed `station_id`, `tech_id`,
 > `ingredients[]`, `outputs[]` and `consume_ingredients`. Those do not
 > exist — the schema above is the real one. Stations are stored in
-> `crafting_station`; there is no technology gating yet.
+> `crafting_station`; research is stored in `technology_id`.
 
 ## Crafting Stations
 
-Stations used by the current 40 recipes:
+Stations used by the current 56 recipes:
 
 | Station | Recipes |
 |---------|---------|
-| hand (empty string) | 30 recipes — all tools, planks, charcoal, torch, building parts, chest, fence, farm_soil, stone_brick, flour, and crafting the stations themselves (campfire, furnace, workbench, anvil) |
+| hand (empty string) | 46 recipes — all tools, planks, charcoal, torch, all wood and stone structural parts, chest, fence, farm_soil, stone_brick, flour, and crafting the stations themselves (campfire, furnace, workbench, anvil) |
 | furnace | glass, iron_ingot, gold_ingot, copper_ingot, potion_health, potion_mana |
 | anvil | bronze_ingot |
 | campfire | cooked_meat, cooked_fish, soup |
@@ -50,7 +51,7 @@ because stations are not placeable in the world yet (all stations are
 craftable *items*, e.g. the `furnace` building). Enforcing proximity is
 a planned task (see PROJECT_STATE.md).
 
-## Recipe Database (40 recipes)
+## Recipe Database (56 recipes)
 
 | Recipe | Result (qty) | Station | Costs |
 |--------|--------------|---------|-------|
@@ -67,8 +68,8 @@ a planned task (see PROJECT_STATE.md).
 | stone_hoe | ×1 | hand | plank 2, stone 3, fibre 2 |
 | wooden_hammer / stone_hammer | ×1 | hand | plank + stone |
 | torch | torch ×4 | hand | plank, charcoal, fibre |
-| wooden_wall / wooden_door / chest / fence | ×1 | hand | plank |
-| stone_floor | ×4 | hand | stone |
+| wooden foundation / floor / wall / window / door / roof / stairs / ramp / pillar | ×1 | hand | plank |
+| stone foundation / floor / wall / window / door / roof / stairs / ramp / pillar | ×1 (floor ×4) | hand | stone_brick |
 | stone_brick | ×2 | hand | stone 2 |
 | flour | ×2 | hand | wheat 1 (grassland plant drop) |
 | stone_wall | ×1 | hand | stone_brick |
@@ -88,10 +89,10 @@ from the current world (resource spawner drops across all biomes +
 **creature spawner loot tables** + starting inventory + recursive craft
 results). Phase 3 closed the last gaps — creature drops (meat, fish,
 hide, feather, bone), plant drops (wheat, herb, mushroom), and the new
-`stone_brick`/`flour` recipes — so with the current data **0 of 40
-recipes are hidden**: the panel shows the entire database. The filter
-stays in place as a safety net: any future recipe whose ingredients no
-live system can provide is hidden automatically.
+`stone_brick`/`flour` recipes — so unlocked recipes have complete ingredient
+chains. The panel intentionally hides recipes behind unresearched technology
+(stone construction, then metalworking), as well as any future recipe whose
+ingredients no live system can provide.
 
 ## Crafting Flow
 
@@ -107,10 +108,8 @@ live system can provide is hidden automatically.
 6. `result_crafted` signal emitted → Main adds items to the inventory
    (and refreshes the panel)
 
-Panel limits: `MAX_RECIPES = 40` rows (raised from 20 on 2026-09-10 —
-the old cap made 10 obtainable recipes unreachable, see B19 in
-TEST_RESULTS.md). `MAX_DISPLAYED = 15` is the cap for the small
-preview rows when the panel is in compact mode.
+The recipe panel is not yet scrollable, so long lists can overflow its
+visual bounds. `MAX_DISPLAYED = 15` is the cap for its compact preview rows.
 
 ## Creating New Recipes
 

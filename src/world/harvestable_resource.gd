@@ -3,7 +3,7 @@ class_name HarvestableResource
 extends Area2D
 
 const DEFAULT_HITBOX_RADIUS: float = 16.0
-const FORAGE_PLANT_SHEET: Texture2D = preload("res://assets/resources/wildfall-forage-plants.png")
+const FORAGE_PLANT_SHEET_PATH := "res://assets/resources/wildfall-forage-plants.png"
 
 # Resource data
 var resource_type: String = ""
@@ -18,6 +18,7 @@ var is_highlighted: bool = false
 
 # Visual
 var _sprite: Sprite2D = null
+var _health_display: ProgressBar = null
 static var _texture_cache: Dictionary = {}
 
 # Signals
@@ -49,6 +50,13 @@ func _setup_visuals() -> void:
 		_sprite = _create_fallback_sprite()
 	
 	add_child(_sprite)
+	_health_display = ProgressBar.new()
+	_health_display.position = Vector2(0, -8)
+	_health_display.size = Vector2(32, 5)
+	_health_display.show_percentage = false
+	_health_display.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_health_display.visible = false
+	add_child(_health_display)
 	
 	# Add collision shape
 	var collision := CollisionShape2D.new()
@@ -90,6 +98,11 @@ func _get_resource_texture() -> ImageTexture:
 		_texture_cache[resource_type] = texture
 	return texture
 
+func reload_visual_texture() -> void:
+	_texture_cache.clear()
+	if _sprite != null:
+		_sprite.texture = _get_resource_texture()
+
 ## Plant is the one spawned resource that did not belong to the original
 ## eight-cell resource atlas. Use the new 2x2 forage sheet and pick a stable
 ## visual from its tile position so these no longer appear as colour boxes.
@@ -100,7 +113,9 @@ func _get_forage_plant_texture() -> ImageTexture:
 	var cache_key := "plant_%d" % variant
 	if _texture_cache.has(cache_key):
 		return _texture_cache[cache_key]
-	var sheet := FORAGE_PLANT_SHEET.get_image()
+	var sheet := TexturePackManager.get_image(FORAGE_PLANT_SHEET_PATH)
+	if sheet == null or sheet.is_empty():
+		return null
 	var cell_width := sheet.get_width() / 2
 	var cell_height := sheet.get_height() / 2
 	var cell := sheet.get_region(Rect2i(
@@ -178,6 +193,12 @@ func damage(amount: float, tool: String = "") -> bool:
 		return false
 
 	current_health = max(0.0, current_health - amount)
+	if _health_display != null:
+		_health_display.visible = true
+		_health_display.value = get_health_ratio() * 100.0
+	if _sprite != null and is_inside_tree():
+		_sprite.modulate = Color(1.8, 1.5, 1.0)
+		create_tween().tween_property(_sprite, "modulate", Color.WHITE, 0.18)
 	resource_hurt.emit(amount)
 	health_changed.emit(current_health, max_health)
 

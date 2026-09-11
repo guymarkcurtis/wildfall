@@ -16,6 +16,7 @@ const TILE_SNOW: int = 6
 const TILE_MUD: int = 7
 
 var _chunk_data: Dictionary = {}
+var _chunk_coords: Dictionary = {}
 var _tile_set: TileSet = null
 # Sibling under Main; provides per-tile biome ids for smooth biome borders.
 var world_generator: Node = null
@@ -67,11 +68,28 @@ func _create_tile_set() -> void:
 ## Update terrain for a chunk.
 func update_chunk(chunk_coords: Vector2i, data: Dictionary) -> void:
 	_chunk_data[str(chunk_coords)] = data
+	_chunk_coords[str(chunk_coords)] = chunk_coords
 	_render_chunk(chunk_coords, data)
+
+## Rebuild visual and TileSet textures without changing generated terrain,
+## tile IDs, collisions, or the player's world state. This preserves Godot's
+## TileSet handling while allowing an active texture pack to change live.
+func refresh_texture_pack() -> void:
+	TileSetGenerator.clear_texture_caches()
+	if is_instance_valid(_art_generator):
+		_art_generator.queue_free()
+	_art_generator = TileSetGenerator.new()
+	add_child(_art_generator)
+	_tile_set = _art_generator.generate_tile_set()
+	tile_set = _tile_set
+	for chunk_key in _chunk_data:
+		var coords: Vector2i = _chunk_coords.get(chunk_key, Vector2i.ZERO)
+		_render_chunk(coords, _chunk_data[chunk_key])
 
 ## Clear all terrain.
 func clear_all() -> void:
 	_chunk_data.clear()
+	_chunk_coords.clear()
 	_water_cells.clear()
 	_chunk_tile_ids.clear()
 	for sprite in _chunk_art_sprites.values():
@@ -92,6 +110,7 @@ func clear_all() -> void:
 func clear_chunk(chunk_coords: Vector2i) -> void:
 	var chunk_key := str(chunk_coords)
 	_chunk_data.erase(chunk_key)
+	_chunk_coords.erase(chunk_key)
 	_chunk_tile_ids.erase(chunk_key)
 	if _chunk_art_sprites.has(chunk_key):
 		var sprite: Sprite2D = _chunk_art_sprites[chunk_key]

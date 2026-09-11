@@ -69,10 +69,24 @@ func _load_items() -> void:
 	
 	# Building materials
 	items["torch"] = _create_item("torch", "Torch", "building", 32, 0.2)
+	items["wooden_foundation"] = _create_item("wooden_foundation", "Wood Foundation", "building", 32, 2.0)
+	items["wooden_floor"] = _create_item("wooden_floor", "Wood Floor", "building", 32, 1.5)
 	items["wooden_wall"] = _create_item("wooden_wall", "Wooden Wall", "building", 16, 2.0)
+	items["wooden_window"] = _create_item("wooden_window", "Wood Window", "building", 16, 1.8)
 	items["wooden_door"] = _create_item("wooden_door", "Wooden Door", "building", 8, 1.5)
+	items["wooden_roof"] = _create_item("wooden_roof", "Wood Roof", "building", 24, 1.8)
+	items["wooden_stairs"] = _create_item("wooden_stairs", "Wood Stairs", "building", 16, 2.0)
+	items["wooden_ramp"] = _create_item("wooden_ramp", "Wood Ramp", "building", 16, 1.8)
+	items["wooden_pillar"] = _create_item("wooden_pillar", "Wood Pillar", "building", 16, 2.2)
+	items["stone_foundation"] = _create_item("stone_foundation", "Stone Foundation", "building", 32, 3.0)
 	items["stone_wall"] = _create_item("stone_wall", "Stone Wall", "building", 16, 3.0)
 	items["stone_floor"] = _create_item("stone_floor", "Stone Floor", "building", 32, 2.0)
+	items["stone_window"] = _create_item("stone_window", "Stone Window", "building", 16, 2.8)
+	items["stone_door"] = _create_item("stone_door", "Stone Door", "building", 8, 3.0)
+	items["stone_roof"] = _create_item("stone_roof", "Stone Roof", "building", 24, 2.8)
+	items["stone_stairs"] = _create_item("stone_stairs", "Stone Stairs", "building", 16, 3.2)
+	items["stone_ramp"] = _create_item("stone_ramp", "Stone Ramp", "building", 16, 3.0)
+	items["stone_pillar"] = _create_item("stone_pillar", "Stone Pillar", "building", 16, 3.5)
 	items["campfire"] = _create_item("campfire", "Campfire", "building", 4, 1.0)
 	items["furnace"] = _create_item("furnace", "Furnace", "building", 1, 10.0)
 	items["workbench"] = _create_item("workbench", "Workbench", "building", 1, 5.0)
@@ -210,14 +224,58 @@ func _load_recipes() -> void:
 	recipes["wooden_wall"] = _create_recipe("wooden_wall", "wooden_wall", 1, "", {
 		"plank": 5
 	})
+	recipes["wooden_foundation"] = _create_recipe("wooden_foundation", "wooden_foundation", 1, "", {
+		"plank": 2
+	})
+	recipes["wooden_floor"] = _create_recipe("wooden_floor", "wooden_floor", 1, "", {
+		"plank": 1
+	})
+	recipes["wooden_window"] = _create_recipe("wooden_window", "wooden_window", 1, "", {
+		"plank": 2,
+		"glass": 1
+	})
 	recipes["wooden_door"] = _create_recipe("wooden_door", "wooden_door", 1, "", {
 		"plank": 4
+	})
+	recipes["wooden_roof"] = _create_recipe("wooden_roof", "wooden_roof", 1, "", {
+		"plank": 2
+	})
+	recipes["wooden_stairs"] = _create_recipe("wooden_stairs", "wooden_stairs", 1, "", {
+		"plank": 3
+	})
+	recipes["wooden_ramp"] = _create_recipe("wooden_ramp", "wooden_ramp", 1, "", {
+		"plank": 2
+	})
+	recipes["wooden_pillar"] = _create_recipe("wooden_pillar", "wooden_pillar", 1, "", {
+		"plank": 2
+	})
+	recipes["stone_foundation"] = _create_recipe("stone_foundation", "stone_foundation", 1, "", {
+		"stone_brick": 2
 	})
 	recipes["stone_wall"] = _create_recipe("stone_wall", "stone_wall", 1, "", {
 		"stone_brick": 5
 	})
 	recipes["stone_floor"] = _create_recipe("stone_floor", "stone_floor", 4, "", {
-		"stone": 4
+		"stone_brick": 1
+	})
+	recipes["stone_window"] = _create_recipe("stone_window", "stone_window", 1, "", {
+		"stone_brick": 2,
+		"glass": 1
+	})
+	recipes["stone_door"] = _create_recipe("stone_door", "stone_door", 1, "", {
+		"stone_brick": 3
+	})
+	recipes["stone_roof"] = _create_recipe("stone_roof", "stone_roof", 1, "", {
+		"stone_brick": 2
+	})
+	recipes["stone_stairs"] = _create_recipe("stone_stairs", "stone_stairs", 1, "", {
+		"stone_brick": 3
+	})
+	recipes["stone_ramp"] = _create_recipe("stone_ramp", "stone_ramp", 1, "", {
+		"stone_brick": 2
+	})
+	recipes["stone_pillar"] = _create_recipe("stone_pillar", "stone_pillar", 1, "", {
+		"stone_brick": 2
 	})
 	recipes["campfire"] = _create_recipe("campfire", "campfire", 1, "", {
 		"stone": 5,
@@ -277,6 +335,23 @@ func _load_recipes() -> void:
 		"wheat": 1
 	})
 
+	# Research gates are assigned after recipe construction to keep the recipe
+	# definitions readable above. Wood construction is a free starting unlock;
+	# stone and metal work are earned through the technology panel.
+	_set_recipe_technology([
+		"wooden_foundation", "wooden_floor", "wooden_wall", "wooden_window",
+		"wooden_door", "wooden_roof", "wooden_stairs", "wooden_ramp", "wooden_pillar"
+	], "wood_building")
+	_set_recipe_technology([
+		"stone_brick", "stone_axe", "stone_pickaxe", "stone_sword", "stone_hoe", "stone_hammer",
+		"stone_foundation", "stone_floor", "stone_wall", "stone_window", "stone_door",
+		"stone_roof", "stone_stairs", "stone_ramp", "stone_pillar", "furnace", "workbench"
+	], "stone_building")
+	_set_recipe_technology([
+		"iron_ingot", "copper_ingot", "bronze_ingot", "iron_axe", "iron_pickaxe",
+		"iron_sword", "anvil"
+	], "metalworking")
+
 ## Create a basic item.
 func _create_item(item_id: String, display_name: String, category: String, stack_size: int, weight: float, 
 				 tool_type: String = "", health_bonus: int = 0, hunger_bonus: int = 0, 
@@ -305,6 +380,12 @@ func _create_recipe(recipe_id: String, result_item_id: String, result_quantity: 
 	recipe.required_items = required_items
 	recipe.craft_time = craft_time
 	return recipe
+
+func _set_recipe_technology(recipe_ids: Array[String], technology_id: String) -> void:
+	for recipe_id in recipe_ids:
+		var recipe: RecipeDefinition = get_recipe(recipe_id)
+		if recipe != null:
+			recipe.technology_id = technology_id
 
 ## Get an item by ID.
 func get_item(item_id: String) -> ItemDefinition:

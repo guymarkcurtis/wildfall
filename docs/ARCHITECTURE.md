@@ -54,7 +54,7 @@ reference and passes it into the systems it creates.
 CharacterBody2D with:
 - Mouse-relative WASD: W toward cursor, S away, A/D orbit; Sprint (Shift)
 - Faces the mouse pointer (orientation does not follow movement); LMB fires bow projectiles (arrows)
-- Collides with stone tiles and blocking buildings; water slows movement
+- Rocky ground is walkable; water retains terrain collision and blocking buildings collide
 - Health, hunger, and status-effect components
 - Inventory management
 - Position tracking
@@ -140,7 +140,12 @@ Fish stay in water. Placeholder visual is a filled `Polygon2D` circle
 plus a name label and a mini health bar. Loot rolls on death.
 
 ### Buildings / weather / day-night / statuses
-`BuildingManager` places inventory `building` items on the 32px grid.
+`BuildingManager` places data-driven structural items on the 32px grid. A
+map tile can hold one item per story across four construction stories. In
+build mode, `[` / `]` selects the active story; the cutaway hides stories
+above it and fades stories below it. Upper stories require structural support
+directly below. `BuildPalette` exposes owned parts, selection, story controls,
+and placement-failure feedback; it is wired under the HUD.
 `DayNightCycle` drives a `CanvasModulate`. `WeatherSystem` tints a
 overlay and can apply wet/cold statuses. `StatusEffectSystem` ticks
 poison/heal/slow on the player.
@@ -151,12 +156,23 @@ All game content uses Resource subclasses:
 
 | Resource | Purpose | Key Fields (actual) |
 |----------|---------|------------|
-| ItemDefinition | Item data (64 items) | item_id, display_name, category, stack_size, weight, rarity, health_bonus, hunger_bonus, damage_bonus, durability, tool_type |
-| RecipeDefinition | Crafting recipe (42 recipes) | recipe_id, result_item_id, result_quantity, crafting_station, required_items {id: qty}, craft_time, unlocked |
+| ItemDefinition | Item data (78 items) | item_id, display_name, category, stack_size, weight, rarity, health_bonus, hunger_bonus, damage_bonus, durability, tool_type |
+| RecipeDefinition | Crafting recipe (56 recipes) | recipe_id, result_item_id, result_quantity, crafting_station, required_items {id: qty}, craft_time, technology_id, unlocked |
 | BiomeDefinition | Biome config (6 biomes) | id, display_name, elevation_range, moisture_range, temperature_range, ground_color, rain_chance, snow_chance, resource_types, creature_types, vegetation_types |
 | CreatureDefinition | Creature data — **wired (Phase 3)** | id, type, health, speed, detection_range, hostile, allowed_biomes, loot_table, custom_data |
-| TechnologyDefinition | Tech unlock — **future phase, not wired** | id, prerequisites[], unlock_cost[] |
-| BuildingDefinition | Building data — **future phase, not wired** | id, width, height, build_cost[] |
+| TechnologyDefinition | Research unlock — **wired** | id, prerequisites[], unlock_cost[], unlocks_recipes[] |
+| BuildingDefinition | Modular structural-part data — **wired** | id, width, height, part_type, tier, technology_id, build_cost[] |
+
+`TechnologySystem` owns the three-tier research state (free wood
+construction → stone construction → metalworking), validates prerequisites
+and costs, and serializes unlocked IDs. `TechnologyPanel` is the `U`-key HUD
+panel. `Main` filters research-locked crafting recipes, and `BuildingManager`
+uses the same technology IDs to prevent placement of locked structural parts.
+
+`TexturePackManager` owns the active presentation pack and caches override
+textures from `user://texture_packs/`. It exports the stock sheets and a
+contact card, then signals `Main` to rebuild live terrain, resources, player,
+and creature art. See `TEXTURE_PACKS.md` for the pack contract.
 
 ## Unwired future-phase code (known, intentional)
 

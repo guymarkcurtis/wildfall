@@ -3,12 +3,15 @@ class_name Building
 extends StaticBody2D
 
 const TILE_SIZE: float = 32.0
+const STORY_RISE: float = 12.0
 
 var building_id: String = ""
 var display_name: String = "Building"
 var health: int = 50
 var max_health: int = 50
 var tile_coords: Vector2i = Vector2i.ZERO
+var story: int = 0
+var part_type: String = "utility"
 var blocks_movement: bool = true
 
 var _body: Polygon2D = null
@@ -18,14 +21,17 @@ var _health_bar: ProgressBar = null
 signal building_destroyed
 signal building_damaged(current_health: int, max_health: int)
 
-func setup(item_id: String, item_name: String, tile: Vector2i, hp: int = 50) -> void:
+func setup(item_id: String, item_name: String, tile: Vector2i, hp: int = 50, story_level: int = 0, definition: Variant = null) -> void:
 	building_id = item_id
 	display_name = item_name
 	tile_coords = tile
+	story = story_level
 	health = hp
 	max_health = hp
-	position = Vector2(tile) * TILE_SIZE
-	blocks_movement = _id_blocks(item_id)
+	position = Vector2(tile) * TILE_SIZE + Vector2(0.0, -story * STORY_RISE)
+	part_type = str(definition.get("part_type")) if definition != null else "utility"
+	blocks_movement = bool(definition.get("blocks_movement")) if definition != null else _id_blocks(item_id)
+	z_index = story * 2
 	_setup_visuals()
 	_setup_collision()
 
@@ -45,7 +51,7 @@ func _setup_visuals() -> void:
 	add_child(_body)
 
 	_label = Label.new()
-	_label.text = display_name
+	_label.text = "%s  L%d" % [display_name, story + 1]
 	_label.position = Vector2(0.0, -16.0)
 	_label.add_theme_font_size_override("font_size", 10)
 	add_child(_label)
@@ -89,9 +95,16 @@ func _setup_collision() -> void:
 	add_child(shape)
 	collision_layer = 1
 	collision_mask = 0
-	if not blocks_movement:
-		# Stations occupy a tile but the player can walk through them.
+	if not blocks_movement or story > 0:
+		# Upper stories are a cutaway construction plane; they should not block
+		# the player moving on the ground layer.
 		collision_layer = 0
+
+## Top-down cutaway: keep the current construction story crisp, fade the
+## stories beneath it, and hide the stories above it.
+func set_cutaway_story(active_story: int) -> void:
+	visible = story <= active_story
+	modulate = Color(1.0, 1.0, 1.0, 1.0 if story == active_story else 0.48)
 
 func take_damage(amount: float) -> bool:
 	if amount <= 0 or health <= 0:

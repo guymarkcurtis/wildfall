@@ -61,6 +61,9 @@ The player's world should gradually develop a history:
 ### Building
 - Persistent structures (foundations, walls, roofs, doors)
 - Multiple building tiers (primitive → wood → stone → metal)
+- Story-aware 2D cutaway construction: build on up to four stackable levels,
+  select levels with `[` / `]` in build mode, and hide higher stories while
+  working on a lower one.
 - Buildings remain after missions
 
 ### Combat
@@ -99,16 +102,18 @@ Movement is **mouse-relative**. The character sprite **always faces the cursor**
 | A / D | Strafe / orbit around the pointer | Implemented |
 | Shift | Sprint | Implemented |
 | Mouse pointer | Aim ranged weapons | Implemented |
-| Left mouse | Fire bow (consumes arrows) | Implemented |
+| Left mouse (hold) | Use selected tool; fire when bow is selected | Implemented |
 | `,` / `.` | Rotate view 45° CCW / CW | Implemented |
 | Middle-mouse drag | Free-rotate view | Implemented |
 | Home | Reset view to world-north up | Implemented |
-| E | Interact / harvest / melee | Implemented |
+| E (hold) | Harvest resources in front of player / melee | Implemented |
 | B | Toggle build mode | Implemented |
+| `[` / `]` (build mode) | Select lower / upper construction story | Implemented |
 | Mouse wheel (build mode) | Cycle placeable buildings | Implemented |
 | F | Demolish nearby building | Implemented |
 | I | Toggle inventory | Implemented |
 | C | Toggle crafting | Implemented |
+| U | Toggle technology / research | Implemented |
 | F3 | Toggle debug | Implemented |
 | T | Change world seed | Implemented |
 | Esc | Pause menu (save / load / title / quit) | Implemented |

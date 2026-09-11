@@ -48,7 +48,9 @@ Biomes also drive:
   then biome-flavoured ground tiles up to snow)
 - **resource placement** — each biome has a `resource_types` list
   (e.g. desert: rock×2 + coal; mountain: rock, iron_ore, coal,
-  gold_ore; arctic: rock, iron_ore)
+  gold_ore; arctic: rock, iron_ore). Candidate water tiles are rejected,
+  so every spawned resource is on reachable terrain; rocky ground itself is
+  intentionally walkable.
 - **resource yields** — rock yields add sand in desert, copper_ore in
   mountain, tin_ore in arctic
 

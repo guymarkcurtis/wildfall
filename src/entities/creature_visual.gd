@@ -2,7 +2,7 @@
 class_name CreatureVisual
 extends Node2D
 
-const ROSTER_SHEET: Texture2D = preload("res://assets/creatures/alien-creature-roster.png")
+const ROSTER_SHEET_PATH := "res://assets/creatures/alien-creature-roster.png"
 const COLUMNS := 4
 const ROWS := 2
 const FRAME_SECONDS := 0.22
@@ -24,6 +24,7 @@ static var _texture_cache: Dictionary = {}
 
 var _sprite: Sprite2D
 var _species: String = "rabbit"
+var _visual_size: float = 10.0
 var _frame: int = 0
 var _elapsed: float = 0.0
 var _idle_texture: Texture2D
@@ -37,6 +38,7 @@ func _ready() -> void:
 
 func configure(species: String, visual_size: float) -> void:
 	_species = species
+	_visual_size = visual_size
 	var cache_key := "%s_%.1f" % [_species, visual_size]
 	if _texture_cache.has(cache_key):
 		var frames: Array = _texture_cache[cache_key]
@@ -44,7 +46,10 @@ func configure(species: String, visual_size: float) -> void:
 		_move_texture = frames[1]
 		_apply_texture()
 		return
-	var sheet := ROSTER_SHEET.get_image()
+	var source: Texture2D = TexturePackManager.get_texture(ROSTER_SHEET_PATH)
+	if source == null:
+		return
+	var sheet := source.get_image()
 	var cell_width: int = sheet.get_width() / COLUMNS
 	var cell_height: int = sheet.get_height() / ROWS
 	var column: int = int(SPECIES_COLUMNS.get(_species, 0))
@@ -52,6 +57,10 @@ func configure(species: String, visual_size: float) -> void:
 	_move_texture = _make_texture(sheet, Rect2i(column * cell_width, cell_height, cell_width, cell_height), visual_size)
 	_texture_cache[cache_key] = [_idle_texture, _move_texture]
 	_apply_texture()
+
+func reload_texture_pack() -> void:
+	_texture_cache.clear()
+	configure(_species, _visual_size)
 
 func update_animation(motion: Vector2, delta: float) -> void:
 	if motion.length() < 1.0:

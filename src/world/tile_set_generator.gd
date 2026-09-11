@@ -15,10 +15,6 @@ const TERRAIN_ATLAS_PATH := "res://assets/tiles/wildfall-terrain-atlas.png"
 const RESOURCE_ATLAS_PATH := "res://assets/tiles/wildfall-resources-atlas.png"
 const WATER_ANIMATION_PATH := "res://assets/tiles/wildfall-water-animation.png"
 const GROUND_DETAILS_PATH := "res://assets/tiles/wildfall-ground-details.png"
-const TERRAIN_ATLAS: Texture2D = preload("res://assets/tiles/wildfall-terrain-atlas.png")
-const RESOURCE_ATLAS: Texture2D = preload("res://assets/tiles/wildfall-resources-atlas.png")
-const WATER_ANIMATION: Texture2D = preload("res://assets/tiles/wildfall-water-animation.png")
-const GROUND_DETAILS: Texture2D = preload("res://assets/tiles/wildfall-ground-details.png")
 
 const WATER_FRAME_SOURCE_IDS := [100, 101, 102, 103]
 
@@ -27,6 +23,12 @@ const WATER_FRAME_SOURCE_IDS := [100, 101, 102, 103]
 # atlas for every tree, rock, and bush.
 static var _resource_texture_cache: Dictionary = {}
 static var _ground_detail_texture_cache: Dictionary = {}
+static var _surface_images: Dictionary = {}
+
+static func clear_texture_caches() -> void:
+	_resource_texture_cache.clear()
+	_ground_detail_texture_cache.clear()
+	_surface_images.clear()
 
 # Terrain tile IDs
 const TILE_WATER: int = 0
@@ -70,7 +72,9 @@ func _generate_terrain_tiles(tile_set: TileSet) -> void:
 	_add_tile(tile_set, TILE_GRASS, _create_terrain_texture(TILE_GRASS))
 	_add_tile(tile_set, TILE_FOREST, _create_terrain_texture(TILE_FOREST))
 	_add_tile(tile_set, TILE_DIRT, _create_terrain_texture(TILE_DIRT))
-	_add_tile(tile_set, TILE_STONE, _create_terrain_texture(TILE_STONE), true)
+	# Stone is rough, mineable ground rather than a cliff wall. Keeping it
+	# walkable lets players reach rock and ore nodes in mountain regions.
+	_add_tile(tile_set, TILE_STONE, _create_terrain_texture(TILE_STONE))
 	_add_tile(tile_set, TILE_SNOW, _create_terrain_texture(TILE_SNOW))
 	_add_tile(tile_set, TILE_MUD, _create_terrain_texture(TILE_MUD))
 
@@ -183,6 +187,16 @@ func _nearest_different_neighbour(tile_ids: PackedInt32Array, chunk_size: int,
 	return -1
 
 func _material_colour(tile_id: int, world_x: int, world_y: int, water_frame: int) -> Color:
+	if TexturePackManager.get_active_pack_id() != "stock":
+		if not _surface_images.has(tile_id):
+			var path := "res://assets/ground/%s.png" % TexturePackManager.GROUND_NAMES[clampi(tile_id, 0, 7)]
+			_surface_images[tile_id] = TexturePackManager.get_image(path)
+		var surface: Image = _surface_images[tile_id]
+		if surface != null and not surface.is_empty():
+			return surface.get_pixel(posmod(world_x, surface.get_width()), posmod(world_y, surface.get_height()))
+	return stock_material_colour(tile_id, world_x, world_y, water_frame)
+
+func stock_material_colour(tile_id: int, world_x: int, world_y: int, water_frame: int) -> Color:
 	var base := _base_colour(tile_id)
 	# Continuous value-noise gives each biome a real surface character: broad
 	# soil shifts plus fine mineral grain. It is world-space sampled, so it
@@ -242,16 +256,7 @@ func _base_colour(tile_id: int) -> Color:
 ## Crops a source module, smooths it to the current world tile size, and
 ## preserves alpha for resource sprites.
 func _load_atlas_cell(path: String, columns: int, rows: int, index: int) -> ImageTexture:
-	var atlas: Texture2D = null
-	match path:
-		TERRAIN_ATLAS_PATH:
-			atlas = TERRAIN_ATLAS
-		RESOURCE_ATLAS_PATH:
-			atlas = RESOURCE_ATLAS
-		WATER_ANIMATION_PATH:
-			atlas = WATER_ANIMATION
-		GROUND_DETAILS_PATH:
-			atlas = GROUND_DETAILS
+	var atlas: Texture2D = TexturePackManager.get_texture(path)
 	var sheet: Image = atlas.get_image() if atlas != null else null
 	if sheet == null or sheet.is_empty() or columns <= 0 or rows <= 0:
 		push_warning("Wildfall art atlas could not be loaded: %s" % path)

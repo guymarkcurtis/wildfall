@@ -4,8 +4,8 @@
 class_name CharacterVisual
 extends Node2D
 
-const BASE_SHEET: Texture2D = preload("res://assets/characters/explorer-base-walk.png")
-const STORM_SHEET: Texture2D = preload("res://assets/characters/explorer-storm-walk.png")
+const BASE_SHEET_PATH := "res://assets/characters/explorer-base-walk.png"
+const STORM_SHEET_PATH := "res://assets/characters/explorer-storm-walk.png"
 const COLUMNS := 4
 const ROWS := 2
 const FRAME_SIZE := Vector2i(72, 96)
@@ -17,6 +17,31 @@ var _outfit: String = "base"
 var _frame: int = 0
 var _walk_time: float = 0.0
 var _frame_textures: Array[Texture2D] = []
+var _tool_id := "hand"
+var _swing_remaining := 0.0
+
+func set_equipped_tool(tool_id: String) -> void:
+	_tool_id = tool_id
+	queue_redraw()
+
+func play_tool_swing() -> void:
+	_swing_remaining = 0.32
+	queue_redraw()
+
+func _draw() -> void:
+	if not (_tool_id.ends_with("axe") or _tool_id.ends_with("sword")):
+		return
+	var angle := lerpf(-1.2, 1.0, 1.0 - _swing_remaining / 0.32) if _swing_remaining > 0.0 else -0.35
+	var grip := Vector2(18, 10)
+	var tip := grip + Vector2(0, 28).rotated(angle)
+	draw_line(grip, tip, Color("98683e"), 4.0, true)
+	var cross := Vector2(10, 0).rotated(angle)
+	if _tool_id.ends_with("pickaxe"):
+		draw_line(tip - cross, tip + cross, Color("c0c9d1"), 5.0, true)
+	elif _tool_id.ends_with("axe"):
+		draw_colored_polygon(PackedVector2Array([tip - cross * 0.3, tip + cross, tip + cross + Vector2(0, 10).rotated(angle), tip + Vector2(0, 6).rotated(angle)]), Color("bbc5cf"))
+	else:
+		draw_line(grip, tip, Color("c0c9d1"), 5.0, true)
 
 func _ready() -> void:
 	_sprite = Sprite2D.new()
@@ -31,7 +56,9 @@ func set_appearance(gender: String, outfit: String) -> void:
 	_gender = gender if gender in ["male", "female"] else "female"
 	_outfit = outfit if outfit in ["base", "storm"] else "base"
 	_frame_textures.clear()
-	var source: Texture2D = STORM_SHEET if _outfit == "storm" else BASE_SHEET
+	var source: Texture2D = TexturePackManager.get_texture(STORM_SHEET_PATH if _outfit == "storm" else BASE_SHEET_PATH)
+	if source == null:
+		return
 	var sheet := source.get_image()
 	var cell_width: int = sheet.get_width() / COLUMNS
 	var cell_height: int = sheet.get_height() / ROWS
@@ -48,9 +75,15 @@ func set_appearance(gender: String, outfit: String) -> void:
 func set_outfit(outfit: String) -> void:
 	set_appearance(_gender, outfit)
 
+func reload_texture_pack() -> void:
+	set_appearance(_gender, _outfit)
+
 ## `facing` is the aim direction (mouse). The sprite always turns to that,
 ## independent of travel. Walk frames still follow `motion`.
 func update_animation(motion: Vector2, delta: float, facing: Vector2 = Vector2.ZERO) -> void:
+	if _swing_remaining > 0.0:
+		_swing_remaining = maxf(0.0, _swing_remaining - delta)
+		queue_redraw()
 	if motion.length() < 1.0:
 		_walk_time = 0.0
 		_frame = 0

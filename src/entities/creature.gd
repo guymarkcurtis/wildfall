@@ -123,6 +123,10 @@ func _setup_visuals(def: CreatureDefinition) -> void:
 	_health_bar.position = Vector2(-14.0, -size - 10.0)
 	add_child(_health_bar)
 
+func reload_visual_texture() -> void:
+	if _visual != null:
+		_visual.reload_texture_pack()
+
 ## Build the point list for a filled circle of the given radius.
 func _circle_points(radius: float, segments: int = 16) -> PackedVector2Array:
 	var points: PackedVector2Array = PackedVector2Array()

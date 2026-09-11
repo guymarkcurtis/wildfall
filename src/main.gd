@@ -28,12 +28,16 @@ const INITIAL_CHUNK_RADIUS: int = 3
 @onready var seed_input: SeedInput = $SeedInput
 @onready var hud: HUD = $HUD
 @onready var inventory_panel: InventoryPanel = $HUD/InventoryPanel
+@onready var build_palette: Variant = $HUD/BuildPalette
+@onready var technology_panel: Variant = $HUD/TechnologyPanel
 @onready var crafting_panel: CraftingPanel = $HUD/CraftingPanel
 @onready var save_system: SaveSystem = $SaveSystem
 @onready var day_night: DayNightCycle = $DayNightCycle
 @onready var weather_system: WeatherSystem = $WeatherSystem
 @onready var status_effects: StatusEffectSystem = $StatusEffectSystem
 @onready var building_manager: BuildingManager = $BuildingManager
+@onready var technology_system: TechnologySystem = $TechnologySystem
+@onready var texture_pack_manager: TexturePackManager = $TexturePackManager
 @onready var world_modulate: CanvasModulate = $WorldModulate
 @onready var pause_menu: PauseMenu = $PauseMenu
 @onready var performance_overlay: PerformanceOverlay = $PerformanceOverlay
@@ -77,6 +81,10 @@ func _ready() -> void:
 	chunk_system.chunk_unloaded.connect(_on_chunk_unloaded)
 	crafting_panel.recipe_craft_requested.connect(_on_craft_requested)
 	player.died.connect(_on_player_died)
+	inventory_panel.hotbar_assignment_changed.connect(_on_hotbar_assignment_changed)
+	inventory_panel.hotbar_slot_requested.connect(_on_hotbar_slot_requested)
+	player.hotbar_changed.connect(_on_hotbar_changed)
+	player.hotbar_slot_changed.connect(inventory_panel.set_active_hotbar_slot)
 
 	# SaveSystem needs typed references (the project has no autoloads).
 	save_system.set_player(player)
@@ -97,7 +105,6 @@ func _ready() -> void:
 	building_manager.item_database = item_database
 	building_manager.building_placed.connect(func(id: String, coords: Vector2i):
 		$GameEventBus.building_placed.emit(id, coords))
-
 	# HUD (health/hunger bars, seed label, optional debug readout).
 	hud.set_player(player)
 	hud.set_seed(_world_seed)
@@ -106,6 +113,18 @@ func _ready() -> void:
 	# panel is filled from item_database.recipes, and nothing else in the
 	# project calls initialize() (without this the panel shows 0 recipes).
 	item_database.initialize()
+	technology_system.initialize(player)
+	building_manager.technology_system = technology_system
+	technology_system.technology_unlocked.connect(_on_technology_unlocked)
+	technology_system.technology_unlock_failed.connect(_on_technology_unlock_failed)
+	if texture_pack_manager != null:
+		texture_pack_manager.texture_pack_changed.connect(_on_texture_pack_changed)
+	if build_palette != null:
+		build_palette.configure(building_manager, item_database)
+		build_palette.part_selected.connect(_on_build_part_selected)
+	if technology_panel != null:
+		technology_panel.configure(technology_system, item_database, player)
+		technology_panel.unlock_requested.connect(_on_technology_unlock_requested)
 
 	# Tell the player's inventory the real per-item stack sizes from the
 	# database (the component defaults to 64 for everything without this).
@@ -334,7 +353,53 @@ func _on_inventory_changed() -> void:
 
 ## Player toggled the inventory UI (I key, via the event bus).
 func _on_toggle_inventory_ui() -> void:
-	inventory_panel.visible = not inventory_panel.visible
+	inventory_panel.toggle()
+
+func _on_hotbar_assignment_changed(assignments: Array[String]) -> void:
+	if player != null:
+		player.set_hotbar_items(assignments)
+	_refresh_ui()
+
+func _on_hotbar_slot_requested(slot_index: int) -> void:
+	if player != null:
+		player.select_hotbar_slot(slot_index)
+
+func _on_hotbar_changed(_assignments: Array[String]) -> void:
+	_refresh_ui()
+
+func _on_build_part_selected(item_id: String) -> void:
+	if building_manager != null and building_manager.select_item(item_id):
+		if build_palette != null:
+			build_palette.show_status("Selected %s — click a clear tile to place it" % item_database.get_item_display_name(item_id))
+
+func _on_technology_unlock_requested(technology_id: String) -> void:
+	if technology_system != null:
+		technology_system.try_unlock(technology_id, player.inventory if player != null else null)
+
+func _on_technology_unlocked(technology_id: String) -> void:
+	var definition := technology_system.get_definition(technology_id) if technology_system != null else null
+	if technology_panel != null:
+		technology_panel.show_status("%s researched" % (definition.display_name if definition != null else technology_id))
+	_refresh_ui()
+
+func _on_technology_unlock_failed(_technology_id: String, reason: String) -> void:
+	if technology_panel != null:
+		technology_panel.show_status(reason)
+
+## Texture packs are presentation-only. Rebuild live visual layers while
+## leaving generated chunks, terrain collision, inventory, and save state
+## completely intact so a visual refinement can be tested mid-session.
+func _on_texture_pack_changed(_pack_id: String) -> void:
+	if terrain_renderer != null:
+		terrain_renderer.refresh_texture_pack()
+	if player != null:
+		player.reload_visual_texture()
+	for resource in _resource_nodes:
+		if is_instance_valid(resource) and resource.has_method("reload_visual_texture"):
+			resource.reload_visual_texture()
+	for creature in _creature_nodes:
+		if is_instance_valid(creature) and creature.has_method("reload_visual_texture"):
+			creature.reload_visual_texture()
 
 ## Player toggled the crafting UI (C key, via the event bus).
 func _on_toggle_crafting_ui() -> void:
@@ -371,6 +436,9 @@ func _process(delta: float) -> void:
 		save_game()
 	if Input.is_action_just_pressed("load"):
 		load_game()
+	if Input.is_action_just_pressed("toggle_technology"):
+		if technology_panel != null:
+			technology_panel.toggle()
 
 func _update_world_presentation(_delta: float) -> void:
 	if weather_system != null and status_effects != null:
@@ -386,7 +454,7 @@ func _update_world_presentation(_delta: float) -> void:
 	if hud != null and day_night != null and weather_system != null:
 		var extra: String = ""
 		if building_manager != null and building_manager.build_mode:
-			extra = "   Build: %s  (LMB place, wheel cycle, F demolish, B exit)" % building_manager.selected_item_id
+			extra = "   Build L%d: %s  (LMB place, wheel cycle, [ / ] story, F demolish, B exit)" % [building_manager.selected_story + 1, building_manager.selected_item_id]
 		hud.set_world_info(day_night.get_time_of_day(), weather_system.get_weather_name(),
 				status_effects.get_effect_names() if status_effects else PackedStringArray(),
 				extra, GameSession.mode_label())
@@ -432,19 +500,11 @@ func load_game(path: String = "") -> bool:
 func _refresh_ui() -> void:
 	if not player or not player.inventory:
 		return
-	# The inventory panel keeps a slot-indexed display model
-	# ({slot_index: {item_id, quantity}}); adapt the component's
-	# item-id-keyed counts into that shape.
 	var items: Dictionary = player.inventory.get_all_items()
-	var slot_data: Dictionary = {}
-	var index: int = 0
-	for item_id in items:
-		if index >= InventoryPanel.MAX_SLOTS:
-			break
-		slot_data[index] = {"item_id": str(item_id), "quantity": int(items[item_id])}
-		index += 1
-	inventory_panel.refresh(slot_data)
+	inventory_panel.refresh(items, player.get_hotbar_items())
 	_refresh_crafting_ui()
+	if technology_panel != null:
+		technology_panel.refresh()
 
 ## Refresh the crafting UI.
 ## The panel consumes plain-dict recipes (with item-id-keyed required_items);
@@ -469,6 +529,8 @@ func _refresh_crafting_ui() -> void:
 		# After Phase 3 every recipe in the database is obtainable, so this
 		# filter is a safety net for future recipe additions.
 		if not _recipe_is_obtainable(def, obtainable):
+			continue
+		if not _is_recipe_unlocked(def):
 			continue
 		_recipe_defs.append(def)
 		recipe_dicts.append(_recipe_to_dict(def))
@@ -512,6 +574,9 @@ func _recipe_is_obtainable(def: RecipeDefinition, obtainable: Dictionary) -> boo
 			return false
 	return true
 
+func _is_recipe_unlocked(def: RecipeDefinition) -> bool:
+	return GameSession.is_creative() or technology_system == null or technology_system.is_unlocked(def.technology_id)
+
 ## Adapt a RecipeDefinition into the panel's plain-dict schema.
 func _recipe_to_dict(def: RecipeDefinition) -> Dictionary:
 	var display_name: String = def.result_item_id
@@ -535,6 +600,9 @@ func _on_craft_requested(index: int) -> void:
 		$GameEventBus.recipe_failed.emit("unknown", "invalid_recipe_index")
 		return
 	var def: RecipeDefinition = _recipe_defs[index]
+	if not _is_recipe_unlocked(def):
+		$GameEventBus.recipe_failed.emit(def.recipe_id, "technology_locked")
+		return
 	if not GameSession.is_creative():
 		var inv_data: Dictionary = player.inventory.get_all_items()
 		if not def.can_craft(inv_data):
@@ -552,6 +620,7 @@ func _register_save_modules() -> void:
 	save_system.register_module("time", _collect_time, _apply_time)
 	save_system.register_module("weather", _collect_weather, _apply_weather)
 	save_system.register_module("status", _collect_status, _apply_status)
+	save_system.register_module("technology", _collect_technology, _apply_technology)
 	save_system.register_module("buildings", _collect_buildings, _apply_buildings)
 	save_system.register_module("player", _collect_player, _apply_player)
 	save_system.register_module("camera", _collect_camera, _apply_camera)
@@ -585,6 +654,13 @@ func _apply_status(data: Variant) -> void:
 	if status_effects and typeof(data) == TYPE_DICTIONARY:
 		status_effects.deserialize_all(data)
 
+func _collect_technology() -> Dictionary:
+	return technology_system.serialize() if technology_system else {}
+
+func _apply_technology(data: Variant) -> void:
+	if technology_system:
+		technology_system.deserialize(data)
+
 func _collect_buildings() -> Array:
 	return building_manager.serialize() if building_manager else []
 
@@ -598,7 +674,9 @@ func _collect_player() -> Dictionary:
 		"health": {},
 		"hunger": {},
 		"inventory": {},
-		"equipped_tool": "hand"
+		"equipped_tool": "hand",
+		"hotbar": [],
+		"active_hotbar_slot": -1
 	}
 	if player == null:
 		return payload
@@ -611,6 +689,8 @@ func _collect_player() -> Dictionary:
 	if player.inventory:
 		payload["inventory"] = player.inventory.serialize()
 	payload["equipped_tool"] = player.equipped_tool
+	payload["hotbar"] = player.get_hotbar_items()
+	payload["active_hotbar_slot"] = player.active_hotbar_slot
 	return payload
 
 func _apply_player(data: Variant) -> void:
@@ -625,8 +705,20 @@ func _apply_player(data: Variant) -> void:
 		player.hunger_component.deserialize(player_data["hunger"])
 	if player.inventory != null and player_data.has("inventory"):
 		player.inventory.deserialize(player_data["inventory"])
+	if player_data.has("hotbar"):
+		var stored_hotbar: Array[String] = []
+		for item_id in player_data.get("hotbar", []):
+			stored_hotbar.append(str(item_id))
+		player.set_hotbar_items(stored_hotbar)
+	else:
+		# Older saves did not have quick-bar assignments; create a useful
+		# initial layout once rather than discarding their inventory ordering.
+		player.populate_hotbar_from_inventory()
+	if player_data.has("active_hotbar_slot"):
+		player.select_hotbar_slot(int(player_data.get("active_hotbar_slot", -1)))
 	if player_data.has("equipped_tool"):
 		player.equipped_tool = str(player_data.get("equipped_tool", "hand"))
+		player.tool_changed.emit(player.equipped_tool)
 
 func _collect_camera() -> Dictionary:
 	if camera_controller == null:

@@ -42,13 +42,14 @@ Options / Return to Title / Quit). F5 save, F9 load still work.
 |---------|---------|
 | 1 | Flat JSON: player, world.seed, unused game_time/day_number |
 | 2 | `format: wildfall-save`, `modules` map, migrations from v1 |
+| 3 | Added the `technology` module; missing research data safely uses starting unlocks |
 
-## Current format (v2)
+## Current format (v3)
 
 ```json
 {
   "format": "wildfall-save",
-  "version": 2,
+  "version": 3,
   "kind": "manual",
   "game_mode": "survival",
   "timestamp": 1730000000,
@@ -57,15 +58,18 @@ Options / Return to Title / Quit). F5 save, F9 load still work.
     "time": { "current_hour": 8.5, "current_day": 1 },
     "weather": { "weather": 0, "intensity": 0.0, "duration": 40.0, "next_change": 40.0 },
     "status": {},
+    "technology": { "unlocked": ["wood_building", "stone_building"] },
     "buildings": [
-      { "item_id": "wooden_wall", "x": 3, "y": 3, "health": 50 }
+      { "item_id": "wooden_wall", "x": 3, "y": 3, "story": 0, "health": 100 }
     ],
     "player": {
       "position": { "x": 0.0, "y": 0.0 },
       "health": { "max_health": 100, "current_health": 100.0, "is_dead": false },
       "hunger": { "max_hunger": 100.0, "current_hunger": 100.0 },
       "inventory": { "slots": {}, "max_weight": 100.0, "max_slots": 50 },
-      "equipped_tool": "wooden_bow"
+      "equipped_tool": "wooden_bow",
+      "hotbar": ["wooden_axe", "wooden_pickaxe", "wooden_sword", "wooden_bow", "arrow", "", "", "", ""],
+      "active_hotbar_slot": 0
     },
     "camera": { "rotation": 0.0 }
   }
@@ -73,7 +77,7 @@ Options / Return to Title / Quit). F5 save, F9 load still work.
 ```
 
 Apply order on load: `world` (regenerates chunks) → `time` → `weather` →
-`status` → `buildings` → `player` → `camera`. World regen happens first so
+`status` → `technology` → `buildings` → `player` → `camera`. World regen happens first so
 player position and buildings are restored after spawn reset.
 
 ## Adding a new system later

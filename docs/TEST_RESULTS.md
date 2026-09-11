@@ -1,9 +1,9 @@
 # Wildfall Test Results
 
 ## Test Run Summary
-- **Date**: 2026-09-10
+- **Current verification**: 151 checks passed, 0 failures (macOS Godot 4.7.2 headless run)
 - **Godot Version**: 4.7.2.stable (linux.x86_64, official) — the project was upgraded to Godot 4.7 on 2026-09-11 (editor config sync from the Mac) and the Linux verification binary was upgraded to match
-- **Test Script**: `tests/test_game.gd` (SceneTree harness: boots the real `main.tscn`, runs 43 static assertions at frame 5, then a **live input phase** — C-key crafting-panel toggle, then a held 1050 px walk — and exits with the failure count as the exit code)
+- **Test Script**: `tests/test_game.gd` (SceneTree harness that boots the real `main.tscn`, validates world, UI, inventory, building, technology progression, texture-pack export/live switching, saves, and resource accessibility, then exits with the failure count as its exit code)
 
 ### Test command
 ```bash
@@ -27,7 +27,13 @@ its logical grid), and a 35 s live headless run with **0 errors**. The
 new rendering code uses only 4.0-era API, so nothing 4.7-specific was
 required.
 
-## Baseline (before the 2026-09-10 review fixes)
+## Historical verification record (2026-09-10)
+
+The sections below preserve the earlier 2026-09-10 verification checkpoint.
+Its feature counts (including 62 items and 40 recipes) are historical; use
+the current summary above for the present project state.
+
+### Baseline (before the 2026-09-10 review fixes)
 
 The earlier "all tests pass" report was not accurate. A clean run of the
 pre-fix code produced:
@@ -45,7 +51,7 @@ pre-fix code produced:
 - The crafting panel threw per-recipe errors during refresh.
 - 6 scripts failed to parse at all (A1–A6), aborting the old test harness.
 
-## Result (after fixes, 2026-09-10)
+### Result (after fixes, 2026-09-10)
 
 **50/50 checks passed, 0 script errors, exit code 0.**
 

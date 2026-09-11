@@ -7,7 +7,7 @@
 class_name SaveSystem
 extends Node
 
-const SAVE_VERSION: int = 2
+const SAVE_VERSION: int = 3
 const FORMAT_ID: String = "wildfall-save"
 const SAVE_DIR: String = "user://saves"
 const SAVE_PATH: String = "user://saves/slot_1.json"
@@ -15,7 +15,7 @@ const SETTINGS_PATH: String = "user://settings.json"
 const AUTOSAVE_INTERVAL_SEC: float = 300.0
 const AUTOSAVE_KEEP: int = 2
 const APPLY_ORDER: PackedStringArray = [
-	"world", "time", "weather", "status", "buildings", "player", "camera"
+	"world", "time", "weather", "status", "technology", "buildings", "player", "camera"
 ]
 
 static var _autosave_enabled: bool = true

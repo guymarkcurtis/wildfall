@@ -10,6 +10,7 @@ const HUNGER_RATE: float = 0.5
 const HARVEST_RANGE: float = 64.0
 const FIRE_COOLDOWN: float = 0.45
 const WATER_SPEED: float = 0.55
+const HOTBAR_SIZE := 9
 
 # Components (real component instances, not bare nodes)
 var inventory: InventoryComponent = null
@@ -21,6 +22,8 @@ var hunger_component: HungerComponent = null
 @export_enum("male", "female") var character_gender: String = "female"
 @export_enum("base", "storm") var character_outfit: String = "base"
 var equipped_tool: String = "hand"
+var hotbar_items: Array[String] = ["", "", "", "", "", "", "", "", ""]
+var active_hotbar_slot := -1
 var nearby_resources: Array = []
 var character_visual: CharacterVisual = null
 
@@ -42,6 +45,8 @@ signal health_changed(current: float, max: int)
 signal hunger_changed(current: float, max: float)
 signal died
 signal tool_changed(tool_id: String)
+signal hotbar_changed(items: Array[String])
+signal hotbar_slot_changed(slot_index: int)
 signal resource_interacted(resource_type: String, item_id: String, quantity: int)
 
 func _ready() -> void:
@@ -55,6 +60,7 @@ func _ready() -> void:
 	_setup_character_visual()
 	_spawn_at(Vector2(0, 0))
 	_populate_initial_inventory()
+	populate_hotbar_from_inventory()
 
 ## Initialize components with the real component implementations.
 func _init_components() -> void:
@@ -101,8 +107,11 @@ func _physics_process(delta: float) -> void:
 
 	if not _ui_blocks_world_input():
 		if Input.is_action_pressed("fire") and _fire_cooldown <= 0.0:
-			_fire_ranged()
-		if Input.is_action_just_pressed("interact"):
+			if _is_holding_bow():
+				_fire_ranged()
+			else:
+				_handle_interaction()
+		if Input.is_action_pressed("interact") and _fire_cooldown <= 0.0:
 			_handle_interaction()
 
 	for i in range(1, 10):
@@ -155,13 +164,17 @@ func _process(delta: float) -> void:
 ## Handle interaction: attack the nearest creature in range (hunting takes
 ## priority over harvesting), otherwise harvest the nearest resource.
 func _handle_interaction() -> void:
-	var nearby_creatures := _get_nearby_creatures()
-	if not nearby_creatures.is_empty():
-		_attack_creature(nearby_creatures[0])
+	var manager := get_parent().get_node_or_null("BuildingManager") as BuildingManager
+	if _ui_blocks_world_input() or (manager != null and manager.build_mode) or _fire_cooldown > 0.0:
 		return
-
+	_fire_cooldown = FIRE_COOLDOWN
+	if character_visual != null:
+		character_visual.play_tool_swing()
 	var nearby := _get_nearby_resources()
 	if nearby.is_empty():
+		var creatures := _get_nearby_creatures()
+		if not creatures.is_empty():
+			_attack_creature(creatures[0])
 		return
 
 	var closest: HarvestableResource = nearby[0]
@@ -169,13 +182,15 @@ func _handle_interaction() -> void:
 		return
 
 	# Tools grant a bonus against the matching resource type.
-	var damage_amount: float = 1.0
+	var damage_amount: float = 5.0
 	var resource_type: String = closest.resource_type
-	if equipped_tool != "hand" and equipped_tool != "":
-		if equipped_tool.ends_with("axe") and resource_type == "tree":
-			damage_amount = 2.0
-		elif equipped_tool.ends_with("pickaxe") and ["rock", "iron_ore", "coal", "gold_ore"].has(resource_type):
-			damage_amount = 2.0
+	var tool: ItemDefinition = item_database.get_item(equipped_tool) if item_database != null else null
+	if tool != null and inventory.has_item(equipped_tool):
+		var matches: bool = (tool.tool_type == "axe" and resource_type == "tree") or (tool.tool_type == "pickaxe" and resource_type in ["rock", "iron_ore", "coal", "gold_ore"])
+		if matches:
+			damage_amount = maxf(10.0, float(tool.damage_bonus) * 5.0)
+	if resource_type in ["plant", "fibre", "berry_bush"]:
+		damage_amount = maxf(damage_amount, 25.0)
 
 	# Yields are granted by Main through the resource's resource_destroyed
 	# signal; here we only report the interaction for HUD/audio purposes.
@@ -190,8 +205,9 @@ func _get_nearby_resources() -> Array[HarvestableResource]:
 	if parent:
 		for child in parent.get_children():
 			if child is HarvestableResource and not child.is_destroyed:
-				var dist: float = child.position.distance_to(global_position)
-				if dist <= HARVEST_RANGE:
+				var offset: Vector2 = child.global_position + Vector2(16, 16) - global_position
+				var dist: float = offset.length()
+				if dist <= HARVEST_RANGE and (dist < 20.0 or offset.normalized().dot(_aim_dir) > 0.25):
 					nearby.append(child)
 	nearby.sort_custom(func(a, b): return a.position.distance_to(global_position) < b.position.distance_to(global_position))
 	return nearby
@@ -224,17 +240,65 @@ func _attack_creature(creature: Creature) -> void:
 		event_bus.entity_hit.emit(creature.creature_type, damage_amount)
 	creature.take_damage(damage_amount)
 
-## Equip the tool for a hotbar slot. Only tools the player actually owns
-## can be equipped — iron tools must be crafted first (progression).
+## Select the item assigned to the numbered quick-bar slot. Tools and weapons
+## become the equipped item; other selected items remain ready for their game
+## action once that action is available.
 func _equip_tool(slot: int) -> void:
-	var tools: PackedStringArray = ["hand", "wooden_axe", "stone_pickaxe", "wooden_sword", "iron_axe", "iron_pickaxe"]
-	if slot < 1 or slot > tools.size():
+	select_hotbar_slot(slot - 1)
+
+func select_hotbar_slot(slot_index: int) -> void:
+	if slot_index < 0 or slot_index >= HOTBAR_SIZE:
 		return
-	var tool_id: String = tools[slot - 1]
-	if tool_id == "hand" or (inventory != null and inventory.has_item(tool_id)):
-		if equipped_tool != tool_id:
-			equipped_tool = tool_id
-			tool_changed.emit(equipped_tool)
+	active_hotbar_slot = slot_index
+	var item_id := hotbar_items[slot_index]
+	equipped_tool = item_id if item_id != "" and inventory != null and inventory.has_item(item_id) else "hand"
+	hotbar_slot_changed.emit(active_hotbar_slot)
+	tool_changed.emit(equipped_tool)
+
+func get_hotbar_items() -> Array[String]:
+	return hotbar_items.duplicate()
+
+func set_hotbar_items(items: Array[String]) -> void:
+	var normalised := _normalise_hotbar(items)
+	if normalised == hotbar_items:
+		return
+	hotbar_items = normalised
+	if active_hotbar_slot >= 0 and hotbar_items[active_hotbar_slot] == "":
+		equipped_tool = "hand"
+		tool_changed.emit(equipped_tool)
+	hotbar_changed.emit(get_hotbar_items())
+
+## New games start with useful equipment in the bar. Existing assignments are
+## retained, which lets a loaded save preserve intentional empty slots.
+func populate_hotbar_from_inventory() -> void:
+	if inventory == null:
+		return
+	var preferred: Array[String] = ["wooden_axe", "stone_pickaxe", "wooden_sword", "wooden_bow", "arrow"]
+	var available: Dictionary = inventory.get_all_items()
+	for item_id in available.keys():
+		var id := str(item_id)
+		if not preferred.has(id):
+			preferred.append(id)
+	var next_slot := 0
+	for item_id in preferred:
+		if not available.has(item_id) or hotbar_items.has(item_id):
+			continue
+		while next_slot < HOTBAR_SIZE and hotbar_items[next_slot] != "":
+			next_slot += 1
+		if next_slot >= HOTBAR_SIZE:
+			break
+		hotbar_items[next_slot] = item_id
+	hotbar_changed.emit(get_hotbar_items())
+
+func _normalise_hotbar(items: Array[String]) -> Array[String]:
+	var result: Array[String] = ["", "", "", "", "", "", "", "", ""]
+	var seen: Dictionary = {}
+	for index in range(min(items.size(), HOTBAR_SIZE)):
+		var item_id := str(items[index])
+		if item_id != "" and inventory != null and inventory.has_item(item_id) and not seen.has(item_id):
+			result[index] = item_id
+			seen[item_id] = true
+	return result
 
 ## Get player's world position.
 func get_world_position() -> Vector2:
@@ -259,6 +323,10 @@ func _on_hunger_changed(current: float, max: float) -> void:
 	hunger_changed.emit(current, max)
 
 func _on_inventory_changed() -> void:
+	var normalised := _normalise_hotbar(hotbar_items)
+	if normalised != hotbar_items:
+		hotbar_items = normalised
+		hotbar_changed.emit(get_hotbar_items())
 	if event_bus:
 		event_bus.inventory_changed.emit()
 
@@ -302,11 +370,17 @@ func _setup_character_visual() -> void:
 	character_visual.name = "CharacterVisual"
 	add_child(character_visual)
 	character_visual.set_appearance(character_gender, character_outfit)
+	tool_changed.connect(character_visual.set_equipped_tool)
+	character_visual.set_equipped_tool(equipped_tool)
 
 func set_character_outfit(outfit: String) -> void:
 	character_outfit = outfit
 	if character_visual != null:
 		character_visual.set_outfit(outfit)
+
+func reload_visual_texture() -> void:
+	if character_visual != null:
+		character_visual.reload_texture_pack()
 
 func _update_aim() -> void:
 	if not _aim_locked:
@@ -369,9 +443,15 @@ func _ui_blocks_world_input() -> bool:
 	if seed_input != null and seed_input.has_method("is_editing") and seed_input.is_editing():
 		return true
 	var inv_panel: Node = parent.get_node_or_null("HUD/InventoryPanel")
-	if inv_panel != null and inv_panel.visible:
+	if inv_panel != null and inv_panel.has_method("is_open") and inv_panel.is_open():
 		return true
 	var craft_panel: Node = parent.get_node_or_null("HUD/CraftingPanel")
 	if craft_panel != null and craft_panel.visible:
+		return true
+	var tech_panel: Node = parent.get_node_or_null("HUD/TechnologyPanel")
+	if tech_panel != null and tech_panel.visible:
+		return true
+	var hovered := get_viewport().gui_get_hovered_control()
+	if hovered != null and hovered.mouse_filter != Control.MOUSE_FILTER_IGNORE:
 		return true
 	return false

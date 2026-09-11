@@ -9,6 +9,9 @@ extends Resource
 @export var required_items: Dictionary = {}  # {item_id: quantity}
 @export var craft_time: float = 0.0  # seconds, 0 = instant
 @export var unlocked: bool = true
+## Empty means the recipe is available without research. Otherwise this must
+## match a TechnologyDefinition.id that the player has unlocked.
+@export var technology_id: String = ""
 
 ## Check if recipe can be crafted with given inventory.
 func can_craft(inventory: Dictionary) -> bool:

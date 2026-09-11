@@ -1,4 +1,4 @@
-[gd_scene load_steps=25 format=3]
+[gd_scene load_steps=29 format=3]
 
 [ext_resource type="Script" path="res://src/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://src/core/game_event_bus.gd" id="2_eventbus"]
@@ -24,6 +24,10 @@
 [ext_resource type="Script" path="res://src/systems/building_manager.gd" id="22_build"]
 [ext_resource type="Script" path="res://src/ui/pause_menu.gd" id="23_pause"]
 [ext_resource type="Script" path="res://src/ui/performance_overlay.gd" id="24_perf"]
+[ext_resource type="Script" path="res://src/ui/build_palette.gd" id="25_build_palette"]
+[ext_resource type="Script" path="res://src/systems/technology_system.gd" id="26_technology"]
+[ext_resource type="Script" path="res://src/ui/technology_panel.gd" id="27_technology_panel"]
+[ext_resource type="Script" path="res://src/systems/texture_pack_manager.gd" id="28_texture_packs"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -75,6 +79,12 @@ script = ExtResource("21_status")
 [node name="BuildingManager" type="Node2D" parent="."]
 script = ExtResource("22_build")
 
+[node name="TechnologySystem" type="Node" parent="."]
+script = ExtResource("26_technology")
+
+[node name="TexturePackManager" type="Node" parent="."]
+script = ExtResource("28_texture_packs")
+
 [node name="WorldModulate" type="CanvasModulate" parent="."]
 color = Color(1, 1, 1, 1)
 
@@ -112,6 +122,7 @@ layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+mouse_filter = 2
 
 [node name="HealthBar" type="ProgressBar" parent="HUD/Overlay"]
 layout_mode = 1
@@ -155,87 +166,30 @@ visible = false
 
 [node name="InventoryPanel" type="Control" parent="HUD"]
 layout_mode = 3
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
+anchors_preset = 15
+anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
-grow_vertical = 0
-offset_left = -300.0
-offset_top = -140.0
-offset_right = 300.0
-offset_bottom = 0.0
+grow_vertical = 2
 script = ExtResource("10_inv")
 
-[node name="Title" type="Label" parent="HUD/InventoryPanel"]
-layout_mode = 1
-offset_left = 8.0
-offset_top = 4.0
-offset_right = 592.0
-offset_bottom = 24.0
-text = "Inventory"
-
-[node name="MarginContainer" type="MarginContainer" parent="HUD/InventoryPanel"]
-layout_mode = 1
-offset_left = 4.0
-offset_top = 24.0
-offset_right = 596.0
-offset_bottom = 136.0
-
-[node name="VBox" type="VBoxContainer" parent="HUD/InventoryPanel/MarginContainer"]
-layout_mode = 2
-
-[node name="Slots" type="GridContainer" parent="HUD/InventoryPanel/MarginContainer/VBox"]
-layout_mode = 2
-columns = 9
-
-[node name="Slot" type="Control" parent="HUD/InventoryPanel/MarginContainer/VBox/Slots"]
-custom_minimum_size = Vector2(48, 48)
-layout_mode = 2
-visible = false
-script = ExtResource("16_slot")
-
-[node name="Background" type="ColorRect" parent="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot"]
+[node name="BuildPalette" type="Control" parent="HUD"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0.25, 0.25, 0.35, 0.8)
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("25_build_palette")
 
-[node name="SelectedOverlay" type="ColorRect" parent="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot"]
-layout_mode = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-visible = false
-color = Color(1, 1, 0.3, 0.25)
-
-[node name="ItemLabel" type="Label" parent="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot"]
-layout_mode = 1
-offset_left = 4.0
-offset_top = 4.0
-offset_right = 44.0
-offset_bottom = 30.0
-horizontal_alignment = 1
-
-[node name="QuantityLabel" type="Label" parent="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot"]
-layout_mode = 1
-offset_left = 24.0
-offset_top = 28.0
-offset_right = 44.0
-offset_bottom = 44.0
-horizontal_alignment = 1
-
-[node name="SlotButton" type="Button" parent="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot"]
+[node name="TechnologyPanel" type="Control" parent="HUD"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-flat = true
-
-[node name="CraftResult" type="Label" parent="HUD/InventoryPanel/MarginContainer/VBox"]
-layout_mode = 2
-text = "Craft result"
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("27_technology_panel")
 
 [node name="CraftingPanel" type="Control" parent="HUD"]
 layout_mode = 3
@@ -322,6 +276,3 @@ text = "Station: "
 
 [node name="SaveSystem" type="Node" parent="."]
 script = ExtResource("15_save")
-
-[connection signal="gui_input" from="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot" to="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot" method="_on_gui_input"]
-[connection signal="pressed" from="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot/SlotButton" to="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot" method="_on_button_pressed"]

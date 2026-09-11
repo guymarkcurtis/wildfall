@@ -13,11 +13,11 @@
 
 ## Phase 2: Content
 - [x] Tile set and terrain rendering (placeholder 32px orthogonal colors)
-- [x] 20+ item definitions (62 items)
-- [x] 15+ recipe definitions (40 recipes, all obtainable)
+- [x] 20+ item definitions (78 items)
+- [x] 15+ recipe definitions (56 recipes, all obtainable)
 - [x] Creature definitions (7 types, wired)
-- [ ] Building definitions (data exists, not wired)
-- [ ] Technology tree (data exists, not wired)
+- [x] Modular building definitions and stackable story cutaway (wood + stone structural kits)
+- [x] Technology tree (U-panel research, costs, prerequisites, recipe/build-tier gates, saved unlocks)
 - [ ] Placeholder art assets (colored shapes only; no sprites)
 
 ## Phase 3: Gameplay
@@ -25,17 +25,19 @@
 - [x] Tile-based terrain rendering (orthogonal 32px top-down tiles)
 - [x] Resource node placement and pickup
 - [x] Creature spawn + wander/flee AI (7 types, biome-gated, E-to-kill, loot)
-- [x] Player collision with terrain (stone cliffs solid; water slows)
+- [x] Player collision with terrain (water blocks; rocky ground is walkable)
 - [x] Mouse-aimed ranged combat (face cursor, LMB fires bow/arrows)
 - [x] View rotation while moving (`,` / `.` 45° snaps, middle-mouse free rotate, Home reset)
 - [x] Mouse-relative WASD (W toward pointer, S away, A/D orbit)
 - [x] Creature AI (pathfinding, aggression / chase-attack for wolf, boar, polar bear)
-- [x] Building placement and destruction (B to build, LMB place, F demolish)
+- [x] Build palette, placement, demolition, and four-story cutaway (`B`, LMB, `F`, `[` / `]`)
 - [x] Weather system
 - [x] Day/night cycle
 - [x] Status effects
 
 ## Phase 4: Polish
+- [x] Expandable inventory window with persistent, movable (click or drag) 1–9 quick bar
+- [x] Runtime texture-pack system (stock card export, editable overrides, live Options/Pause switching)
 - [ ] Sound effects
 - [ ] Music
 - [ ] Particle effects

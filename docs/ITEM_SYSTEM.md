@@ -2,7 +2,7 @@
 
 ## Overview
 
-All items in the game are defined by `ItemDefinition` resources. The 62
+All items in the game are defined by `ItemDefinition` resources. The 78
 items currently in the game are created **in code** by
 `src/systems/item_database.gd` (`ItemDatabase` is a Node in `main.tscn`,
 not a .tres file). Items define stack size, weight, category, bonuses and
@@ -37,7 +37,7 @@ Exact fields of `resources/item_definition.gd`:
 | Category | Count | Items |
 |----------|-------|-------|
 | resource | 18 | wood, stone, fibre, clay, sand, leaf, bone, hide, feather, coal, iron_ore, gold_ore, copper_ore, tin_ore, charcoal, seed_wheat, wheat, herb |
-| building | 13 | torch, wooden_wall, wooden_door, stone_wall, stone_floor, campfire, furnace, workbench, anvil, chest, bed, farm_soil, fence |
+| building | 27 | torch; wood foundation, floor, wall, window, door, roof, stairs, ramp, pillar; stone foundation, floor, wall, window, door, roof, stairs, ramp, pillar; campfire, furnace, workbench, anvil, chest, bed, farm_soil, fence |
 | food | 9 | berry, cooked_meat, cooked_fish, bread, soup, fish, meat, apple, mushroom |
 | material | 8 | plank, stone_brick, iron_ingot, gold_ingot, copper_ingot, bronze_ingot, glass, flour |
 | tool | 9 | wooden/stone/iron axe, wooden/stone/iron pickaxe, stone_hoe, wooden/stone hammer |
@@ -62,6 +62,15 @@ plus per-stack `max_stack` tracking. Operations:
 - Signals: `inventory_changed`, `item_added`, `inventory_full`
 
 Constraints: `max_slots = 50`, `max_weight = 100`.
+
+The player also has a saved nine-slot quick bar. Its assignments point at
+owned inventory stacks: `1`–`9` select the matching slot during play, while
+the expandable inventory supports click or drag-and-drop assignment.
+
+Some recipes are research-gated. Wood construction is a free starting
+technology; stone construction costs 20 wood and 30 stone, and metalworking
+follows stone construction. Open the technology panel with `U` to research
+these tiers; the same unlocks also control placeable building parts.
 
 ## Creating New Items
 

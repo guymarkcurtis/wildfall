@@ -118,13 +118,18 @@ func generate_chunk_resources(chunk_coords: Vector2i, seed: int) -> Array[Dictio
 	var random := RandomNumberGenerator.new()
 	random.seed = _get_chunk_seed(chunk_coords, seed)
 
-	# Generate 5-15 resources per chunk.
+	# Generate 5-15 resources per chunk. Candidate attempts are capped so a
+	# water-heavy chunk cannot loop forever while still placing its resources on
+	# terrain the player can actually stand on.
 	var count: int = int(random.randf_range(5, 15))
-	for i in range(count):
+	var placed: int = 0
+	var attempts: int = 0
+	while placed < count and attempts < count * 8:
+		attempts += 1
 		var x: int = chunk_coords.x * CHUNK_SIZE + int(random.randf_range(0, 16))
 		var y: int = chunk_coords.y * CHUNK_SIZE + int(random.randf_range(0, 16))
 		var tile: Vector2i = Vector2i(x, y)
-		if _resources.has(tile):
+		if _resources.has(tile) or not is_walkable_spawn_tile(tile):
 			continue
 
 		var biome_id: String = ""
@@ -144,8 +149,19 @@ func generate_chunk_resources(chunk_coords: Vector2i, seed: int) -> Array[Dictio
 		}
 		resource_placed.emit("%d,%d" % [x, y], resource_type)
 		results.append(_resources[tile])
+		placed += 1
 
 	return results
+
+## Resource nodes only appear where the player can stand. Stone remains valid
+## (it is rough but walkable); the only generated impassable terrain is water.
+func is_walkable_spawn_tile(tile: Vector2i) -> bool:
+	if world_generator == null or not is_instance_valid(world_generator):
+		return true
+	if not world_generator.has_method("get_noise_values"):
+		return true
+	var noise: Dictionary = world_generator.get_noise_values(tile.x, tile.y)
+	return float(noise.get("elevation", 0.5)) >= 0.3
 
 ## Pick a resource type that fits the given biome (fallback: default set).
 func _pick_resource_type(biome_id: String, random: RandomNumberGenerator) -> String:

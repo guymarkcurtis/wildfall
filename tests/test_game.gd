@@ -145,6 +145,11 @@ func _run_checks() -> void:
 	var seed_input: Node = main.get_node_or_null("SeedInput")
 	var hud: Node = main.get_node_or_null("HUD")
 	var crafting_panel: Node = main.get_node_or_null("HUD/CraftingPanel")
+	var inventory_panel: InventoryPanel = main.get_node_or_null("HUD/InventoryPanel")
+	var build_palette: Node = main.get_node_or_null("HUD/BuildPalette")
+	var technology_panel: Node = main.get_node_or_null("HUD/TechnologyPanel")
+	var technology_system: TechnologySystem = main.get_node_or_null("TechnologySystem") as TechnologySystem
+	var texture_pack_manager: TexturePackManager = main.get_node_or_null("TexturePackManager") as TexturePackManager
 
 	# --- 1. Required scene nodes -------------------------------------------
 	_check(world_gen != null, "WorldGenerator node present")
@@ -156,8 +161,40 @@ func _run_checks() -> void:
 	_check(camera_controller != null, "CameraController node present")
 	_check(seed_input != null, "SeedInput node present")
 	_check(hud != null, "HUD node present")
+	_check((hud.get_node("Overlay") as Control).mouse_filter == Control.MOUSE_FILTER_IGNORE,
+		"Passive HUD lets world clicks reach building placement")
+	_check(inventory_panel != null, "Inventory panel node present")
+	_check(build_palette != null, "Build palette node present")
+	_check(technology_panel != null, "Technology panel node present")
+	_check(technology_system != null, "TechnologySystem node present")
+	_check(texture_pack_manager != null, "TexturePackManager node present")
 	if _failed > 0:
 		return
+
+	# --- 1b. Persistent quick bar + expandable inventory -------------------
+	_check(not inventory_panel.is_open(), "Inventory starts collapsed to its quick bar")
+	_check(player.get_hotbar_items().size() == 9, "Player owns nine saved quick-bar assignments")
+	player.select_hotbar_slot(0)
+	_check(player.active_hotbar_slot == 0, "Numbered quick-bar slot can be selected")
+	_check(player.equipped_tool == player.get_hotbar_items()[0], "Selecting a quick-bar slot equips its assigned item")
+	player.inventory.add_item("wood", 3)
+	inventory_panel.open()
+	_check(inventory_panel.is_open(), "Inventory expands above the quick bar")
+	var backpack_bottom := inventory_panel._backpack_grid.position.y + InventoryPanel.SLOT_SIZE * 3.0 + InventoryPanel.GRID_GAP * 2.0
+	_check(is_equal_approx(inventory_panel._hotbar_grid.position.y - backpack_bottom, InventoryPanel.GRID_GAP),
+		"Expanded quick bar uses the same gap as backpack rows")
+	# Wood is not in the initial quick bar. Select it in the backpack, then
+	# assign it to slot 9 — the same two-click move used by the player UI.
+	inventory_panel._on_slot_pressed(false, 0)
+	inventory_panel._on_slot_pressed(true, 8)
+	_check(player.get_hotbar_items()[8] == "wood", "Backpack item can be assigned to a quick-bar slot")
+	var first_hotbar_item: String = player.get_hotbar_items()[0]
+	var second_hotbar_item: String = player.get_hotbar_items()[1]
+	inventory_panel._on_slot_dropped(true, 0, true, 1)
+	_check(player.get_hotbar_items()[0] == second_hotbar_item and player.get_hotbar_items()[1] == first_hotbar_item,
+		"Dragging between quick-bar slots swaps their assignments")
+	inventory_panel.close()
+	_check(not inventory_panel.is_open(), "Closing inventory leaves the quick bar visible")
 
 	# --- 2. World generation -----------------------------------------------
 	var chunk0: Dictionary = chunk_system.get_chunk(Vector2i(0, 0))
@@ -182,6 +219,26 @@ func _run_checks() -> void:
 	# --- 3. Terrain + resources --------------------------------------------
 	_check(terrain_renderer.get_used_cells().size() > 0, "Terrain rendered for initial chunks (%d tiles)" % terrain_renderer.get_used_cells().size())
 	_check(resource_spawner.get_all_resources().size() > 0, "Resources spawned in initial chunks")
+	var reachable_resources := true
+	for resource_tile in resource_spawner.get_all_resources().keys():
+		if not resource_spawner.is_walkable_spawn_tile(resource_tile):
+			reachable_resources = false
+			break
+	_check(reachable_resources, "Every spawned resource is on reachable terrain")
+
+	# --- 3b. Texture pack export + live selection --------------------------
+	var original_pack := TexturePackManager.get_active_pack_id()
+	var stock_texture := TexturePackManager.get_texture("res://assets/tiles/wildfall-terrain-atlas.png")
+	_check(stock_texture != null and stock_texture.get_width() > 0, "Stock terrain texture resolves through TexturePackManager")
+	var reference_export := TexturePackManager.export_stock_reference()
+	_check(FileAccess.file_exists(TexturePackManager.CARD_PATH), "Stock texture contact card exports for external editing")
+	_check(FileAccess.file_exists("user://texture_packs/stock_reference/manifest.json"), "Stock reference pack includes its manifest")
+	var refinement_export := TexturePackManager.create_refinement_pack()
+	_check(FileAccess.file_exists("user://texture_packs/refinement/manifest.json"), "Editable refinement pack is created with its manifest")
+	_check(TexturePackManager.get_available_pack_ids().has(TexturePackManager.REFINEMENT_PACK), "Editable refinement pack appears in the selector")
+	_check(TexturePackManager.set_active_pack_id(TexturePackManager.REFINEMENT_PACK), "Refinement texture pack can be selected live")
+	_check(TexturePackManager.get_active_pack_id() == TexturePackManager.REFINEMENT_PACK, "Selected texture pack is persisted as active")
+	_check(TexturePackManager.set_active_pack_id(original_pack), "Texture pack can switch back to the previous selection")
 
 	# --- 4. Item database + crafting panel (B10/B13) -----------------------
 	_check(item_database.items.size() > 0, "Item database populated (%d items)" % item_database.items.size())
@@ -193,14 +250,41 @@ func _run_checks() -> void:
 		recipe_ids.append(str(r.get("id", "")))
 	_check("plank" in recipe_ids, "Live recipe 'plank' visible in crafting panel")
 	_check("wooden_axe" in recipe_ids, "Live recipe 'wooden_axe' visible in crafting panel")
-	# Phase 3 (creatures & hunting): creature drops (meat/fish/hide/feather/
-	# bone) and plant drops (wheat/herb/mushroom), plus the new stone_brick
-	# and flour recipes, close every obtainability gap — the panel must now
-	# show the ENTIRE recipe database. Any recipe hidden from here on is a
-	# new ghost (Main's obtainability filter is a safety net only).
-	var total_recipes: int = item_database.recipes.size()
-	_check(panel_recipes.size() == total_recipes,
-		"Panel shows all %d recipes (no ghost recipes left in Phase 3)" % total_recipes)
+	# --- 4b. Technology tree gates higher tiers, then unlocks them ---------
+	_check(InputMap.has_action("toggle_technology"), "toggle_technology input action exists (U key)")
+	_check(technology_system.is_unlocked("wood_building"), "Wood construction is available from the start")
+	_check(not technology_system.is_unlocked("stone_building"), "Stone construction starts research-locked")
+	_check("wooden_foundation" in recipe_ids, "Starting wood building recipe is visible")
+	_check(not ("stone_foundation" in recipe_ids), "Stone building recipe stays hidden before research")
+	var technology_buildings: BuildingManager = main.get_node_or_null("BuildingManager") as BuildingManager
+	player.inventory.add_item("stone_foundation", 1)
+	_check(not technology_buildings.place_building_item("stone_foundation", Vector2i(12, 12), player.inventory),
+		"Owned stone parts cannot be placed before their technology is researched")
+	technology_panel.call("toggle")
+	_check(technology_panel.visible, "Technology panel opens")
+	technology_panel.call("toggle")
+	_check(not technology_panel.visible, "Technology panel closes")
+	var stone_cost: int = 30
+	var wood_cost: int = 20
+	player.inventory.add_item("stone", stone_cost)
+	player.inventory.add_item("wood", wood_cost)
+	var stone_before: int = player.inventory.get_item_quantity("stone")
+	var wood_before_research: int = player.inventory.get_item_quantity("wood")
+	_check(technology_system.try_unlock("stone_building", player.inventory), "Stone construction can be researched with its resource cost")
+	_check(technology_system.is_unlocked("stone_building"), "Stone construction becomes unlocked")
+	_check(player.inventory.get_item_quantity("stone") == stone_before - stone_cost and player.inventory.get_item_quantity("wood") == wood_before_research - wood_cost,
+		"Research consumes the configured wood and stone cost")
+	panel_recipes = crafting_panel.recipes
+	recipe_ids.clear()
+	for r in panel_recipes:
+		recipe_ids.append(str(r.get("id", "")))
+	_check("stone_foundation" in recipe_ids, "Stone building recipe appears after research")
+	var technology_save: Dictionary = technology_system.serialize()
+	technology_system.deserialize({})
+	_check(not technology_system.is_unlocked("stone_building"), "Missing save technology data falls back to starting research")
+	technology_system.deserialize(technology_save)
+	_check(technology_system.is_unlocked("stone_building"), "Saved technology unlock is restored")
+	main.call("_refresh_ui")
 
 	# --- 5. Camera follows the player (B2) ----------------------------------
 	var cam_target: Vector2 = camera_controller.get_target()
@@ -228,7 +312,9 @@ func _run_checks() -> void:
 	var ok_load: bool = main.call("load_game")
 	_check(ok_load, "load_game() succeeds")
 	_check(player.global_position.distance_to(Vector2(123.0, -77.0)) < 1.0, \
-			"Player position restored from save (%s)" % str(player.global_position))
+		"Player position restored from save (%s)" % str(player.global_position))
+	_check(player.get_hotbar_items()[8] == "wood", "Saved quick-bar assignment is restored on load")
+	_check(technology_system.is_unlocked("stone_building"), "Saved technology research is restored on load")
 
 	# --- 8. Chunk unload / re-enter cycle (B3) --------------------------------
 	# Full signal path: ChunkSystem.generate_chunk/unload_chunk -> Main handlers
@@ -289,7 +375,11 @@ func _run_checks() -> void:
 	_check(_player_has_shape(player_ent), "Player has a collision shape for terrain")
 	var tileset: TileSet = (terrain_renderer as TerrainRenderer).tile_set
 	_check(tileset != null and tileset.get_physics_layers_count() > 0,
-			"Terrain TileSet has a physics layer (stone collision)")
+			"Terrain TileSet keeps a physics layer for water")
+	var stone_source: TileSetAtlasSource = tileset.get_source(TerrainRenderer.TILE_STONE) as TileSetAtlasSource
+	var stone_data: TileData = stone_source.get_tile_data(Vector2i.ZERO, 0) if stone_source != null else null
+	_check(stone_data != null and stone_data.get_collision_polygons_count(0) == 0,
+			"Rocky terrain is walkable so mineable nodes remain reachable")
 	var creature_spawner: Node = main.get_node_or_null("CreatureSpawner")
 	_check(creature_spawner != null, "CreatureSpawner node present")
 	if creature_spawner != null:
@@ -320,11 +410,29 @@ func _run_checks() -> void:
 	var buildings: BuildingManager = main.get_node_or_null("BuildingManager") as BuildingManager
 	_check(buildings != null, "BuildingManager node present")
 	if buildings != null and player_ent.inventory != null:
+		buildings.set_build_mode(true)
+		_check(build_palette.visible, "Build mode opens the selectable build palette")
+		_check(buildings.selected_item_id != "", "Build palette has an owned structural part selected")
+		buildings.set_build_mode(false)
 		player_ent.inventory.add_item("wooden_wall", 1)
 		var placed: bool = buildings.place_building_item("wooden_wall", Vector2i(3, 3), player_ent.inventory)
 		_check(placed, "BuildingManager places a wooden wall")
 		_check(buildings.get_building_count() >= 1, "BuildingManager tracks placed buildings")
 		buildings.demolish_at(Vector2i(3, 3))
+		var structure_tile := Vector2i(7, 7)
+		player_ent.inventory.add_item("wooden_foundation", 1)
+		player_ent.inventory.add_item("wooden_floor", 2)
+		_check(buildings.place_building_item("wooden_foundation", structure_tile, player_ent.inventory, 0),
+			"Foundation can be placed on the ground story")
+		_check(buildings.place_building_item("wooden_floor", structure_tile, player_ent.inventory, 1),
+			"Supported floor can be placed on the story above")
+		_check(buildings.get_building_at(structure_tile, 0) != null and buildings.get_building_at(structure_tile, 1) != null,
+			"One map tile can hold structural parts on separate stories")
+		_check(not buildings.place_building_item("wooden_floor", Vector2i(9, 9), player_ent.inventory, 1),
+			"Upper-story placement needs structure directly below it")
+		buildings.set_selected_story(1)
+		_check(buildings.get_building_at(structure_tile, 1).visible and buildings.get_building_at(structure_tile, 0).visible,
+			"Cutaway keeps the selected story and its support visible")
 	_check(item_database.has_item("wooden_bow"), "Wooden bow exists for ranged combat")
 	_check(item_database.has_item("arrow"), "Arrows exist for ranged combat")
 
@@ -345,7 +453,7 @@ func _run_checks() -> void:
 	_check("Creative" in mode_buttons, "New Game offers Creative mode")
 	title.queue_free()
 	var ss: SaveSystem = main.get_node("SaveSystem") as SaveSystem
-	_check(SaveSystem.SAVE_VERSION >= 2, "Save format is versioned (v2+)")
+	_check(SaveSystem.SAVE_VERSION >= 3, "Save format includes technology research (v3+)")
 	var v1: Dictionary = {
 		"version": 1,
 		"player": {"position": {"x": 9.0, "y": 4.0}},

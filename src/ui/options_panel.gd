@@ -5,6 +5,8 @@ extends ColorRect
 signal closed
 
 var _checkbox: CheckButton = null
+var _pack_picker: OptionButton = null
+var _texture_status: Label = null
 
 func _ready() -> void:
 	color = Color(0.0, 0.0, 0.0, 0.55)
@@ -19,6 +21,7 @@ func open() -> void:
 	visible = true
 	if _checkbox:
 		_checkbox.set_pressed_no_signal(SaveSystem.is_autosave_enabled())
+	_refresh_texture_packs()
 
 func _build() -> void:
 	var center := CenterContainer.new()
@@ -28,7 +31,7 @@ func _build() -> void:
 	add_child(center)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(440.0, 260.0)
+	panel.custom_minimum_size = Vector2(520.0, 500.0)
 	var style := StyleBoxFlat.new()
 	style.bg_color = MenuStyle.PANEL
 	style.corner_radius_top_left = 6
@@ -57,12 +60,67 @@ func _build() -> void:
 
 	box.add_child(MenuStyle.make_label("Keeps the last 2 autosaves. Manual saves are unlimited.", 13, MenuStyle.MUTED))
 
+	var divider := HSeparator.new()
+	box.add_child(divider)
+	box.add_child(MenuStyle.make_label("Texture Packs", 20, MenuStyle.TITLE))
+	box.add_child(MenuStyle.make_label("Swap visual packs live. Packs only change art, never collisions or saves.", 13, MenuStyle.MUTED))
+	_pack_picker = OptionButton.new()
+	_pack_picker.custom_minimum_size = Vector2(360.0, 34.0)
+	_pack_picker.item_selected.connect(_on_texture_pack_selected)
+	box.add_child(_pack_picker)
+
+	var export_btn := MenuStyle.make_button("Export Stock Texture Card + Reference", 300.0)
+	export_btn.pressed.connect(_on_export_stock_reference)
+	box.add_child(export_btn)
+	var refinement_btn := MenuStyle.make_button("Create / Open Editable Refinement Pack", 300.0)
+	refinement_btn.pressed.connect(_on_create_refinement_pack)
+	box.add_child(refinement_btn)
+	var folder_btn := MenuStyle.make_button("Open Texture Pack Folder", 300.0)
+	folder_btn.pressed.connect(TexturePackManager.open_pack_folder)
+	box.add_child(folder_btn)
+	_texture_status = MenuStyle.make_label("", 12, MenuStyle.MUTED)
+	_texture_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_texture_status)
+
 	var back := MenuStyle.make_button("Back", 160.0)
 	back.pressed.connect(_on_back)
 	box.add_child(back)
 
 func _on_autosave_toggled(enabled: bool) -> void:
 	SaveSystem.set_autosave_enabled(enabled)
+
+func _refresh_texture_packs() -> void:
+	if _pack_picker == null:
+		return
+	var active := TexturePackManager.get_active_pack_id()
+	_pack_picker.clear()
+	for pack_id in TexturePackManager.get_available_pack_ids():
+		_pack_picker.add_item(pack_id.capitalize().replace("_", " "))
+		_pack_picker.set_item_metadata(_pack_picker.item_count - 1, pack_id)
+		if pack_id == active:
+			_pack_picker.select(_pack_picker.item_count - 1)
+	if _texture_status != null:
+		_texture_status.text = "Active pack: %s" % active.capitalize().replace("_", " ")
+
+func _on_texture_pack_selected(index: int) -> void:
+	if _pack_picker == null:
+		return
+	var pack_id := str(_pack_picker.get_item_metadata(index))
+	if TexturePackManager.set_active_pack_id(pack_id) and _texture_status != null:
+		_texture_status.text = "Applied %s. World visuals refreshed." % pack_id.capitalize().replace("_", " ")
+
+func _on_export_stock_reference() -> void:
+	var result := TexturePackManager.export_stock_reference()
+	_refresh_texture_packs()
+	if _texture_status != null:
+		_texture_status.text = "Exported reference pack and texture card to %s" % str(result.get("pack_path", "texture_packs"))
+
+func _on_create_refinement_pack() -> void:
+	var result := TexturePackManager.create_refinement_pack()
+	TexturePackManager.set_active_pack_id(TexturePackManager.REFINEMENT_PACK)
+	_refresh_texture_packs()
+	if _texture_status != null:
+		_texture_status.text = "Editable pack ready at %s" % str(result.get("pack_path", "texture_packs"))
 
 func _on_back() -> void:
 	visible = false
