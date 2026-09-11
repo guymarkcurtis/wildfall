@@ -9,7 +9,7 @@ extends Node
 const TILE_SIZE: int = 32
 # Quiet ground can be composed at low material resolution and smoothly scaled.
 # This keeps chunk streaming light enough to avoid gameplay hitches.
-const MATERIAL_PIXELS_PER_TILE: int = 8
+const MATERIAL_PIXELS_PER_TILE: int = 4
 
 const TERRAIN_ATLAS_PATH := "res://assets/tiles/wildfall-terrain-atlas.png"
 const RESOURCE_ATLAS_PATH := "res://assets/tiles/wildfall-resources-atlas.png"
@@ -188,7 +188,10 @@ func _material_colour(tile_id: int, world_x: int, world_y: int, water_frame: int
 	# soil shifts plus fine mineral grain. It is world-space sampled, so it
 	# never repeats as a tile or accidentally becomes a baked prop layer.
 	var broad: float = _value_noise(world_x, world_y, 96)
-	var grain: float = _value_noise(world_x, world_y, 14)
+	# Fine grain is analytic rather than another four-corner noise lookup.
+	# It keeps the material tactile while halving chunk composition work.
+	var grain: float = 0.5 + 0.5 * sin(float(world_x) * 0.167 + float(world_y) * 0.113) \
+			* sin(float(world_x) * -0.071 + float(world_y) * 0.149)
 	var variation := (broad - 0.5) * 0.095 + (grain - 0.5) * 0.050
 	variation += sin(float(world_x) * 0.022 + float(world_y) * 0.013) * 0.018
 	if tile_id == TILE_WATER:

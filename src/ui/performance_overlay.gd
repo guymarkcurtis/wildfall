@@ -13,6 +13,7 @@ var _sample_time := 0.0
 var _lowest_fps := 240.0
 var _current_fps := 60.0
 var _last_chunk_note := "No chunk load yet"
+var _last_hitch_log_usec := 0
 
 func _ready() -> void:
 	layer = 12
@@ -39,6 +40,7 @@ func _ready() -> void:
 
 func update_frame(delta: float, chunks: int, resources: int, creatures: int) -> void:
 	var instant_fps := 1.0 / maxf(delta, 0.0001)
+	_record_hitch_if_needed(delta, chunks, resources, creatures)
 	_current_fps = instant_fps
 	_lowest_fps = minf(_lowest_fps, instant_fps)
 	_sample_time += delta
@@ -56,6 +58,25 @@ func update_frame(delta: float, chunks: int, resources: int, creatures: int) -> 
 
 func record_chunk_load(chunk_coords: Vector2i, elapsed_ms: float) -> void:
 	_last_chunk_note = "Chunk %d, %d loaded: %.1f ms" % [chunk_coords.x, chunk_coords.y, elapsed_ms]
+
+func _record_hitch_if_needed(delta: float, chunks: int, resources: int, creatures: int) -> void:
+	var frame_ms := delta * 1000.0
+	if frame_ms < 33.0:
+		return
+	var now := Time.get_ticks_usec()
+	# Keep a useful diagnostic trail without turning a poor frame into dozens
+	# of synchronous log writes.
+	if now - _last_hitch_log_usec < 1000000:
+		return
+	_last_hitch_log_usec = now
+	var note := "[%s] frame %.1f ms | chunks %d | objects %d | creatures %d | %s" % [
+		Time.get_datetime_string_from_system(), frame_ms, chunks, resources, creatures, _last_chunk_note
+	]
+	print("PERF HITCH ", note)
+	var log := FileAccess.open("user://performance_hitches.log", FileAccess.READ_WRITE)
+	if log != null:
+		log.seek_end()
+		log.store_line(note)
 
 class FrameGraph extends Control:
 	var _samples: Array[float] = []

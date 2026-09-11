@@ -6,7 +6,7 @@ const CHUNK_SIZE: int = 16
 const TILE_SIZE: int = 32
 const PIXELS_PER_CHUNK: int = TILE_SIZE * CHUNK_SIZE
 const GENERATOR_VERSION: int = 1
-const DEFAULT_VIEWPORT_RADIUS: int = 3
+const DEFAULT_VIEWPORT_RADIUS: int = 2
 
 # Chunk data storage
 var _chunks: Dictionary = {}  # str(Vector2i) -> Dictionary

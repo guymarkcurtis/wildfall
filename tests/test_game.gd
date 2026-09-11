@@ -234,8 +234,10 @@ func _run_checks() -> void:
 	# Full signal path: ChunkSystem.generate_chunk/unload_chunk -> Main handlers
 	# -> ResourceSpawner (records) + TerrainRenderer (cells) + resource nodes.
 	var far: Vector2i = Vector2i(10, 0)
+	main.call("flush_pending_chunk_visuals")
 	var res_before: int = resource_spawner.get_all_resources().size()
 	chunk_system.generate_chunk(far)
+	main.call("flush_pending_chunk_visuals")
 	var res_after_gen: int = resource_spawner.get_all_resources().size()
 	_check(res_after_gen > res_before, "Far chunk generates resources when loaded (+%d)" % (res_after_gen - res_before))
 	var nodes_before: int = int(main.get("_resource_nodes").size())
@@ -244,6 +246,7 @@ func _run_checks() -> void:
 	_check(nodes_after < nodes_before, "Unloading a chunk frees its resource nodes (%d -> %d)" % [nodes_before, nodes_after])
 	_check(resource_spawner.get_all_resources().size() == res_before, "Spawner records cleared on chunk unload")
 	chunk_system.generate_chunk(far)
+	main.call("flush_pending_chunk_visuals")
 	var res_reentered: int = resource_spawner.get_all_resources().size()
 	_check(res_reentered == res_after_gen, \
 			"Re-entering an unloaded chunk re-spawns the same resources (%d -> %d) (B3)" % [res_before, res_reentered])
