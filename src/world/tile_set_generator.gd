@@ -1,8 +1,29 @@
-## Generates proper tile sprites for terrain and resources.
+## Builds Wildfall's illustrated terrain and resource TileSet from project art.
+##
+## The atlas files are intentionally kept at their original generated resolution.
+## At startup each module is cropped and smoothly reduced to the game's 32px grid,
+## keeping the world compatible with its existing coordinates and collision logic.
 class_name TileSetGenerator
 extends Node
 
 const TILE_SIZE: int = 32
+
+const TERRAIN_ATLAS_PATH := "res://assets/tiles/wildfall-terrain-atlas.png"
+const RESOURCE_ATLAS_PATH := "res://assets/tiles/wildfall-resources-atlas.png"
+const WATER_ANIMATION_PATH := "res://assets/tiles/wildfall-water-animation.png"
+const TERRAIN_ATLAS: Texture2D = preload("res://assets/tiles/wildfall-terrain-atlas.png")
+const RESOURCE_ATLAS: Texture2D = preload("res://assets/tiles/wildfall-resources-atlas.png")
+const WATER_ANIMATION: Texture2D = preload("res://assets/tiles/wildfall-water-animation.png")
+
+const WATER_FRAME_SOURCE_IDS := [100, 101, 102, 103]
+
+# HarvestableResource creates a short-lived generator per spawned prop. Keep
+# the cropped resource textures shared so chunk streaming never reprocesses an
+# atlas for every tree, rock, and bush.
+static var _resource_texture_cache: Dictionary = {}
+# Full-resolution material cells, retained for the chunk surface compositor.
+# These are sampled in world-space rather than repeated as 32px tiles.
+static var _terrain_surface_cache: Dictionary = {}
 
 # Terrain tile IDs
 const TILE_WATER: int = 0
@@ -22,297 +43,163 @@ const TILE_BERRY: int = 13
 const TILE_IRON_ORE: int = 14
 const TILE_COAL: int = 15
 const TILE_GOLD_ORE: int = 16
+const TILE_CRYSTAL: int = 17
 
-## Generate the full tile set for terrain.
+## Generate the complete in-memory tile set used by TerrainRenderer.
 func generate_tile_set() -> TileSet:
 	var tile_set := TileSet.new()
 	tile_set.set_tile_size(Vector2i(TILE_SIZE, TILE_SIZE))
-
-	# Generate terrain tiles
 	_generate_terrain_tiles(tile_set)
-	
-	# Generate resource tiles
 	_generate_resource_tiles(tile_set)
-	
 	return tile_set
 
-## Generate terrain tiles with proper sprites.
+## Source ID for a frame in the four-frame water loop.
+func get_water_source_id(frame: int) -> int:
+	return WATER_FRAME_SOURCE_IDS[posmod(frame, WATER_FRAME_SOURCE_IDS.size())]
+
 func _generate_terrain_tiles(tile_set: TileSet) -> void:
-	var water_texture := _create_gradient_texture(Color(0.2, 0.4, 0.8), Color(0.3, 0.5, 0.9))
-	_add_tile(tile_set, TILE_WATER, water_texture)
-	
-	var sand_texture := _create_gradient_texture(Color(0.8, 0.7, 0.4), Color(0.9, 0.8, 0.5))
-	_add_tile(tile_set, TILE_SAND, sand_texture)
-	
-	var grass_texture := _create_gradient_texture(Color(0.2, 0.6, 0.2), Color(0.3, 0.7, 0.3))
-	_add_tile(tile_set, TILE_GRASS, grass_texture)
-	
-	var forest_texture := _create_gradient_texture(Color(0.15, 0.45, 0.15), Color(0.2, 0.5, 0.2))
-	_add_tile(tile_set, TILE_FOREST, forest_texture)
-	
-	var dirt_texture := _create_gradient_texture(Color(0.5, 0.4, 0.3), Color(0.6, 0.5, 0.4))
-	_add_tile(tile_set, TILE_DIRT, dirt_texture)
-	
-	var stone_texture := _create_gradient_texture(Color(0.5, 0.5, 0.5), Color(0.6, 0.6, 0.6))
-	_add_tile(tile_set, TILE_STONE, stone_texture)
-	
-	var snow_texture := _create_gradient_texture(Color(0.9, 0.9, 0.95), Color(1.0, 1.0, 1.0))
-	_add_tile(tile_set, TILE_SNOW, snow_texture)
-	
-	var mud_texture := _create_gradient_texture(Color(0.4, 0.35, 0.25), Color(0.5, 0.45, 0.35))
-	_add_tile(tile_set, TILE_MUD, mud_texture)
+	# Water is placed in four different TileSet sources so TerrainRenderer can
+	# switch all water cells together without changing the game's tile IDs.
+	for frame in range(WATER_FRAME_SOURCE_IDS.size()):
+		_add_tile(tile_set, get_water_source_id(frame), _create_water_texture(frame))
 
-## Generate resource tiles with proper sprites.
+	_add_tile(tile_set, TILE_SAND, _create_terrain_texture(TILE_SAND))
+	_add_tile(tile_set, TILE_GRASS, _create_terrain_texture(TILE_GRASS))
+	_add_tile(tile_set, TILE_FOREST, _create_terrain_texture(TILE_FOREST))
+	_add_tile(tile_set, TILE_DIRT, _create_terrain_texture(TILE_DIRT))
+	_add_tile(tile_set, TILE_STONE, _create_terrain_texture(TILE_STONE))
+	_add_tile(tile_set, TILE_SNOW, _create_terrain_texture(TILE_SNOW))
+	_add_tile(tile_set, TILE_MUD, _create_terrain_texture(TILE_MUD))
+
 func _generate_resource_tiles(tile_set: TileSet) -> void:
-	# Tree - green circle with brown center
-	var tree_texture := _create_tree_texture()
-	_add_tile(tile_set, TILE_TREE, tree_texture)
-	
-	# Rock - gray irregular shape
-	var rock_texture := _create_rock_texture()
-	_add_tile(tile_set, TILE_ROCK, rock_texture)
-	
-	# Fibre - brown bundle
-	var fibre_texture := _create_fibre_texture()
-	_add_tile(tile_set, TILE_FIBRE, fibre_texture)
-	
-	# Berry bush - green with red dots
-	var berry_texture := _create_berry_texture()
-	_add_tile(tile_set, TILE_BERRY, berry_texture)
-	
-	# Iron ore - dark gray with sparkle
-	var iron_ore_texture := _create_iron_ore_texture()
-	_add_tile(tile_set, TILE_IRON_ORE, iron_ore_texture)
-	
-	# Coal - black with shine
-	var coal_texture := _create_coal_texture()
-	_add_tile(tile_set, TILE_COAL, coal_texture)
-	
-	# Gold ore - yellow with sparkle
-	var gold_ore_texture := _create_gold_ore_texture()
-	_add_tile(tile_set, TILE_GOLD_ORE, gold_ore_texture)
+	_add_tile(tile_set, TILE_TREE, _create_tree_texture())
+	_add_tile(tile_set, TILE_ROCK, _create_rock_texture())
+	_add_tile(tile_set, TILE_FIBRE, _create_fibre_texture())
+	_add_tile(tile_set, TILE_BERRY, _create_berry_texture())
+	_add_tile(tile_set, TILE_IRON_ORE, _create_iron_ore_texture())
+	_add_tile(tile_set, TILE_COAL, _create_coal_texture())
+	_add_tile(tile_set, TILE_GOLD_ORE, _create_gold_ore_texture())
+	_add_tile(tile_set, TILE_CRYSTAL, _create_crystal_texture())
 
-## Create a gradient texture.
-func _create_gradient_texture(color1: Color, color2: Color) -> ImageTexture:
-	var image := Image.create_empty(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
-	
-	for y in range(TILE_SIZE):
-		for x in range(TILE_SIZE):
-			var ratio := float(y) / float(TILE_SIZE)
-			var color := color1.lerp(color2, ratio)
-			# Add some noise for texture
-			var noise := randf() * 0.05
-			color = Color(
-				clamp(color.r + noise, 0.0, 1.0),
-				clamp(color.g + noise, 0.0, 1.0),
-				clamp(color.b + noise, 0.0, 1.0),
-				1.0
-			)
-			image.set_pixel(x, y, color)
-	
-	return ImageTexture.create_from_image(image)
+## The terrain sheet is ordered row-major as water, sand, grass, forest,
+## dirt, stone, snow, mud. Water is supplied by its dedicated animation strip.
+func _create_terrain_texture(tile_id: int) -> ImageTexture:
+	return _load_atlas_cell(TERRAIN_ATLAS_PATH, 4, 2, tile_id)
 
-## Create a tree texture.
+func _create_water_texture(frame: int) -> ImageTexture:
+	return _load_atlas_cell(WATER_ANIMATION_PATH, 4, 1, frame)
+
+## Resource order in the illustrated sheet: tree, rock, fibre, berry, iron,
+## coal, gold, crystal.
 func _create_tree_texture() -> ImageTexture:
-	var image := Image.create_empty(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
-	
-	# Background - grass green
-	for y in range(TILE_SIZE):
-		for x in range(TILE_SIZE):
-			image.set_pixel(x, y, Color(0.2, 0.6, 0.2))
-	
-	# Trunk - brown rectangle at bottom
-	for y in range(20, 32):
-		for x in range(12, 20):
-			image.set_pixel(x, y, Color(0.4, 0.25, 0.1))
-	
-	# Canopy - green circle
-	var center := Vector2(16, 14)
-	for y in range(TILE_SIZE):
-		for x in range(TILE_SIZE):
-			var dist := Vector2(float(x), float(y)).distance_to(center)
-			if dist < 12.0:
-				var intensity := 1.0 - (dist / 12.0)
-				var color := Color(0.15, 0.45, 0.15).lerp(Color(0.3, 0.7, 0.3), intensity)
-				image.set_pixel(x, y, color)
-	
-	return ImageTexture.create_from_image(image)
+	return _load_resource_texture(0)
 
-## Create a rock texture.
 func _create_rock_texture() -> ImageTexture:
-	var image := Image.create_empty(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
-	
-	# Background - stone gray
-	for y in range(TILE_SIZE):
-		for x in range(TILE_SIZE):
-			image.set_pixel(x, y, Color(0.5, 0.5, 0.5))
-	
-	# Rock shape - irregular gray polygon
-	var points: Array[Vector2] = [
-		Vector2(4, 20), Vector2(8, 12), Vector2(14, 8),
-		Vector2(22, 10), Vector2(28, 16), Vector2(26, 24),
-		Vector2(18, 28), Vector2(10, 26)
-	]
-	
-	for y in range(TILE_SIZE):
-		for x in range(TILE_SIZE):
-			if _point_in_polygon(Vector2(float(x), float(y)), points):
-				var noise := randf() * 0.1
-				var color := Color(0.45 + noise, 0.45 + noise, 0.45 + noise)
-				image.set_pixel(x, y, color)
-	
-	return ImageTexture.create_from_image(image)
+	return _load_resource_texture(1)
 
-## Create a fibre texture.
 func _create_fibre_texture() -> ImageTexture:
-	var image := Image.create_empty(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
-	
-	# Background - light brown
-	for y in range(TILE_SIZE):
-		for x in range(TILE_SIZE):
-			image.set_pixel(x, y, Color(0.6, 0.5, 0.3))
-	
-	# Fibre strands - diagonal brown lines
-	for i in range(-10, 20):
-		for j in range(-10, 20):
-			var x := i + j
-			var y := i - j + 16
-			if x >= 0 and x < TILE_SIZE and y >= 0 and y < TILE_SIZE:
-				if (i + j) % 3 == 0:
-					image.set_pixel(x, y, Color(0.5, 0.4, 0.2))
-	
-	return ImageTexture.create_from_image(image)
+	return _load_resource_texture(2)
 
-## Create a berry bush texture.
 func _create_berry_texture() -> ImageTexture:
-	var image := Image.create_empty(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
-	
-	# Background - green
-	for y in range(TILE_SIZE):
-		for x in range(TILE_SIZE):
-			image.set_pixel(x, y, Color(0.2, 0.5, 0.2))
-	
-	# Bush - darker green circle
-	var center := Vector2(16, 16)
-	for y in range(TILE_SIZE):
-		for x in range(TILE_SIZE):
-			var dist := Vector2(float(x), float(y)).distance_to(center)
-			if dist < 14.0:
-				var color := Color(0.15, 0.4, 0.15)
-				image.set_pixel(x, y, color)
-	
-	# Berries - red dots
-	var berry_positions := [
-		Vector2(8, 10), Vector2(14, 8), Vector2(20, 12),
-		Vector2(10, 18), Vector2(16, 20), Vector2(22, 18),
-		Vector2(12, 14), Vector2(18, 14)
-	]
-	for berry in berry_positions:
-		for dy in range(-2, 3):
-			for dx in range(-2, 3):
-				var px := int(berry.x) + dx
-				var py := int(berry.y) + dy
-				if px >= 0 and px < TILE_SIZE and py >= 0 and py < TILE_SIZE:
-					var dist := Vector2(float(dx), float(dy)).length()
-					if dist <= 2.0:
-						image.set_pixel(px, py, Color(0.8, 0.2, 0.2))
-	
-	return ImageTexture.create_from_image(image)
+	return _load_resource_texture(3)
 
-## Create an iron ore texture.
 func _create_iron_ore_texture() -> ImageTexture:
-	var image := Image.create_empty(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
-	
-	# Background - dark gray stone
-	for y in range(TILE_SIZE):
-		for x in range(TILE_SIZE):
-			image.set_pixel(x, y, Color(0.3, 0.3, 0.3))
-	
-	# Iron ore - lighter gray specks
-	for i in range(15):
-		var x := randi() % TILE_SIZE
-		var y := randi() % TILE_SIZE
-		var size := randi() % 4 + 2
-		for dy in range(-size, size):
-			for dx in range(-size, size):
-				var px := x + dx
-				var py := y + dy
-				if px >= 0 and px < TILE_SIZE and py >= 0 and py < TILE_SIZE:
-					var dist := Vector2(float(dx), float(dy)).length()
-					if dist <= float(size):
-						image.set_pixel(px, py, Color(0.6, 0.6, 0.6))
-	
-	return ImageTexture.create_from_image(image)
+	return _load_resource_texture(4)
 
-## Create a coal texture.
 func _create_coal_texture() -> ImageTexture:
-	var image := Image.create_empty(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
-	
-	# Background - dark gray
-	for y in range(TILE_SIZE):
-		for x in range(TILE_SIZE):
-			image.set_pixel(x, y, Color(0.2, 0.2, 0.2))
-	
-	# Coal - black lumps with shine
-	for i in range(10):
-		var x := randi() % (TILE_SIZE - 6) + 3
-		var y := randi() % (TILE_SIZE - 6) + 3
-		for dy in range(-4, 5):
-			for dx in range(-4, 5):
-				var px := x + dx
-				var py := y + dy
-				if px >= 0 and px < TILE_SIZE and py >= 0 and py < TILE_SIZE:
-					var dist := Vector2(float(dx), float(dy)).length()
-					if dist <= 4.0:
-						var shine := 0.1 if dist > 3.0 else 0.3
-						image.set_pixel(px, py, Color(shine, shine, shine))
-	
-	return ImageTexture.create_from_image(image)
+	return _load_resource_texture(5)
 
-## Create a gold ore texture.
 func _create_gold_ore_texture() -> ImageTexture:
+	return _load_resource_texture(6)
+
+func _create_crystal_texture() -> ImageTexture:
+	return _load_resource_texture(7)
+
+func _load_resource_texture(index: int) -> ImageTexture:
+	if _resource_texture_cache.has(index):
+		return _resource_texture_cache[index]
+	var texture := _load_atlas_cell(RESOURCE_ATLAS_PATH, 4, 2, index)
+	_resource_texture_cache[index] = texture
+	return texture
+
+## Compose a chunk from the original high-resolution material art. Sampling is
+## anchored to world pixels, so two neighbouring cells of the same material
+## share a continuous image instead of visibly repeating a 32px tile.
+func create_contiguous_chunk_image(world_start: Vector2i, tile_ids: PackedInt32Array,
+		chunk_size: int, water_frame: int) -> Image:
+	var image := Image.create_empty(chunk_size * TILE_SIZE, chunk_size * TILE_SIZE,
+			false, Image.FORMAT_RGBA8)
+	for y in range(chunk_size):
+		for x in range(chunk_size):
+			var index: int = y * chunk_size + x
+			var tile_id: int = tile_ids[index] if index < tile_ids.size() else TILE_GRASS
+			var source := _get_continuous_surface(tile_id, water_frame)
+			if source == null or source.is_empty():
+				continue
+			var world_pixel := Vector2i(
+				(world_start.x + x) * TILE_SIZE,
+				(world_start.y + y) * TILE_SIZE
+			)
+			var source_x: int = posmod(world_pixel.x, max(1, source.get_width() - TILE_SIZE))
+			var source_y: int = posmod(world_pixel.y, max(1, source.get_height() - TILE_SIZE))
+			image.blit_rect(source, Rect2i(source_x, source_y, TILE_SIZE, TILE_SIZE),
+					Vector2i(x * TILE_SIZE, y * TILE_SIZE))
+	return image
+
+func _get_continuous_surface(tile_id: int, water_frame: int) -> Image:
+	if tile_id == TILE_WATER:
+		return _get_atlas_surface(WATER_ANIMATION, 4, 1, water_frame, "water_%d" % water_frame)
+	return _get_atlas_surface(TERRAIN_ATLAS, 4, 2, tile_id, "terrain_%d" % tile_id)
+
+func _get_atlas_surface(atlas: Texture2D, columns: int, rows: int, index: int,
+		cache_key: String) -> Image:
+	if _terrain_surface_cache.has(cache_key):
+		return _terrain_surface_cache[cache_key]
+	if atlas == null:
+		return null
+	var sheet := atlas.get_image()
+	if sheet == null or sheet.is_empty():
+		return null
+	var cell_width: int = sheet.get_width() / columns
+	var cell_height: int = sheet.get_height() / rows
+	var column: int = posmod(index, columns)
+	var row: int = clampi(index / columns, 0, rows - 1)
+	var surface := sheet.get_region(Rect2i(
+		column * cell_width, row * cell_height, cell_width, cell_height
+	))
+	_terrain_surface_cache[cache_key] = surface
+	return surface
+
+## Crops a source module, smooths it to the current world tile size, and
+## preserves alpha for resource sprites.
+func _load_atlas_cell(path: String, columns: int, rows: int, index: int) -> ImageTexture:
+	var atlas: Texture2D = null
+	match path:
+		TERRAIN_ATLAS_PATH:
+			atlas = TERRAIN_ATLAS
+		RESOURCE_ATLAS_PATH:
+			atlas = RESOURCE_ATLAS
+		WATER_ANIMATION_PATH:
+			atlas = WATER_ANIMATION
+	var sheet: Image = atlas.get_image() if atlas != null else null
+	if sheet == null or sheet.is_empty() or columns <= 0 or rows <= 0:
+		push_warning("Wildfall art atlas could not be loaded: %s" % path)
+		return _create_fallback_texture()
+
+	var cell_width: int = sheet.get_width() / columns
+	var cell_height: int = sheet.get_height() / rows
+	var column: int = posmod(index, columns)
+	var row: int = clampi(index / columns, 0, rows - 1)
+	var region := Rect2i(column * cell_width, row * cell_height, cell_width, cell_height)
+	var cell: Image = sheet.get_region(region)
+	cell.resize(TILE_SIZE, TILE_SIZE, Image.INTERPOLATE_LANCZOS)
+	return ImageTexture.create_from_image(cell)
+
+func _create_fallback_texture() -> ImageTexture:
 	var image := Image.create_empty(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
-	
-	# Background - dark gray stone
-	for y in range(TILE_SIZE):
-		for x in range(TILE_SIZE):
-			image.set_pixel(x, y, Color(0.35, 0.35, 0.35))
-	
-	# Gold ore - yellow specks
-	for i in range(12):
-		var x := randi() % TILE_SIZE
-		var y := randi() % TILE_SIZE
-		var size := randi() % 3 + 1
-		for dy in range(-size, size + 1):
-			for dx in range(-size, size + 1):
-				var px := x + dx
-				var py := y + dy
-				if px >= 0 and px < TILE_SIZE and py >= 0 and py < TILE_SIZE:
-					var dist := Vector2(float(dx), float(dy)).length()
-					if dist <= float(size):
-						image.set_pixel(px, py, Color(0.9, 0.7, 0.2))
-	
+	image.fill(Color(0.12, 0.22, 0.19, 1.0))
 	return ImageTexture.create_from_image(image)
 
-## Check if a point is inside a polygon.
-func _point_in_polygon(point: Vector2, polygon: Array[Vector2]) -> bool:
-	var inside := false
-	var n := polygon.size()
-	for i in range(n):
-		var j := (i + 1) % n
-		var yi := polygon[i].y
-		var yj := polygon[j].y
-		var xi := polygon[i].x
-		var xj := polygon[j].x
-		if ((yi > point.y) != (yj > point.y)) and \
-		   (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi):
-			inside = not inside
-	return inside
-
-## Add a tile to the tile set.
-## Note: Godot 4.6 removed TileSetAtlasSource.tile_size and add_texture_rect();
-## the atlas grid now derives from texture_region_size, tiles are registered
-## with create_tile(), and add_source() takes the source ID directly.
 func _add_tile(tile_set: TileSet, tile_id: int, texture: ImageTexture) -> void:
 	var source := TileSetAtlasSource.new()
 	source.texture = texture
