@@ -43,7 +43,7 @@ func set_hunger(value: float) -> void:
 	hunger_changed.emit(current_hunger, max_hunger)
 
 ## Apply starvation damage to a health component.
-func apply_starvation(health: "HealthComponent", delta: float) -> void:
+func apply_starvation(health: HealthComponent, delta: float) -> void:
 	if current_hunger <= 0:
 		health.take_damage(_starvation_rate * delta)
 
@@ -55,7 +55,8 @@ func serialize() -> Dictionary:
 	}
 
 ## Deserialize for loading.
+## (Explicit coercions: JSON round-trips can deliver ints as floats.)
 func deserialize(data: Dictionary) -> void:
-	max_hunger = data.get("max_hunger", 100.0)
-	current_hunger = data.get("current_hunger", max_hunger)
+	max_hunger = float(data.get("max_hunger", 100.0))
+	current_hunger = float(data.get("current_hunger", max_hunger))
 	hunger_changed.emit(current_hunger, max_hunger)

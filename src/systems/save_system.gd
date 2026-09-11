@@ -1,4 +1,7 @@
-## Handles saving and loading game state.
+## Handles saving and loading game state as JSON in user://.
+## Collects and applies real game state: player position, health, hunger,
+## inventory, and the world seed. There are no autoloads in this project,
+## so typed references are injected by Main.
 class_name SaveSystem
 extends Node
 
@@ -10,7 +13,23 @@ signal game_saved(path: String)
 signal game_loaded(path: String)
 signal save_failed(reason: String)
 
-## Save game state to disk.
+# References (injected by Main; resolved from the scene tree)
+var event_bus: Node = null
+var player_ref: Player = null
+var world_generator_ref: WorldGenerator = null
+
+func _ready() -> void:
+	event_bus = get_node_or_null("../GameEventBus")
+
+## Give the save system a typed reference to the player.
+func set_player(p: Player) -> void:
+	player_ref = p
+
+## Give the save system a typed reference to the world generator.
+func set_world_generator(world_generator: WorldGenerator) -> void:
+	world_generator_ref = world_generator
+
+## Save game state to disk. Returns true on success.
 func save_game(path: String = SAVE_PATH) -> bool:
 	var save_data: Dictionary = _collect_save_data()
 	save_data["version"] = SAVE_VERSION
@@ -24,10 +43,11 @@ func save_game(path: String = SAVE_PATH) -> bool:
 
 	file.store_string(json_string)
 	file.close()
+	print("Game saved to %s" % path)
 	game_saved.emit(path)
 	return true
 
-## Load game state from disk.
+## Load game state from disk. Returns true on success.
 func load_game(path: String = SAVE_PATH) -> bool:
 	if not FileAccess.file_exists(path):
 		save_failed.emit("Save file not found: %s" % path)
@@ -52,14 +72,15 @@ func load_game(path: String = SAVE_PATH) -> bool:
 		return false
 
 	_apply_save_data(save_data)
+	print("Game loaded from %s" % path)
 	game_loaded.emit(path)
 	return true
 
-## Collect all game state for saving.
+## Collect all game state for saving (JSON-safe values only).
 func _collect_save_data() -> Dictionary:
 	var data: Dictionary = {
 		"player": {
-			"position": Vector2(0, 0),
+			"position": {"x": 0.0, "y": 0.0},
 			"health": {},
 			"hunger": {},
 			"inventory": {}
@@ -72,15 +93,18 @@ func _collect_save_data() -> Dictionary:
 		"day_number": 0
 	}
 
-	# Save player state (placeholder - would connect to actual player)
-	var player := get_node_or_null("/root/Main/Player") as Node
-	if player:
-		data["player"]["position"] = player.global_position
+	if player_ref != null:
+		var pos: Vector2 = player_ref.get_world_position()
+		data["player"]["position"] = {"x": pos.x, "y": pos.y}
+		if player_ref.health_component != null:
+			data["player"]["health"] = player_ref.health_component.serialize()
+		if player_ref.hunger_component != null:
+			data["player"]["hunger"] = player_ref.hunger_component.serialize()
+		if player_ref.inventory != null:
+			data["player"]["inventory"] = player_ref.inventory.serialize()
 
-	# Save world state (placeholder)
-	var world_gen := get_node_or_null("/root/WorldGenerator") as Node
-	if world_gen:
-		data["world"]["seed"] = world_gen.get("seed", 0)
+	if world_generator_ref != null:
+		data["world"]["seed"] = world_generator_ref.get_seed()
 
 	return data
 
@@ -90,29 +114,50 @@ func _validate_save_data(data: Dictionary) -> bool:
 
 ## Apply loaded save data to game state.
 func _apply_save_data(data: Dictionary) -> void:
-	# Restore player position
-	var player := get_node_or_null("/root/Main/Player") as Node
-	if player and data.get("player"):
-		var pos: Vector2 = data["player"].get("position", Vector2(0, 0))
-		player.global_position = pos
+	# If the save belongs to a different world, regenerate first: the event
+	# bus routes this to Main, which rebuilds chunks/resources synchronously
+	# (and teleports the player back to the spawn point).
+	var world: Dictionary = data.get("world", {})
+	var saved_seed: int = int(world.get("seed", 0))
+	if world_generator_ref != null and event_bus != null \
+			and saved_seed != world_generator_ref.get_seed():
+		event_bus.world_seed_set.emit(saved_seed)
 
-	# Restore world (placeholder)
-	var world_gen := get_node_or_null("/root/WorldGenerator") as Node
-	if world_gen and data.get("world"):
-		# Would regenerate world from saved seed and modifications
+	if player_ref == null or not data.has("player"):
+		return
+
+	# Restore player state (after any world regeneration above).
+	var player_data: Dictionary = data["player"]
+	var pos: Dictionary = player_data.get("position", {"x": 0.0, "y": 0.0})
+	player_ref.global_position = Vector2(float(pos.get("x", 0.0)), float(pos.get("y", 0.0)))
+
+	if player_ref.health_component != null and player_data.has("health"):
+		player_ref.health_component.deserialize(player_data["health"])
+	if player_ref.hunger_component != null and player_data.has("hunger"):
+		player_ref.hunger_component.deserialize(player_data["hunger"])
+	if player_ref.inventory != null and player_data.has("inventory"):
+		player_ref.inventory.deserialize(player_data["inventory"])
 
 ## Delete a save file.
+## (DirAccess has no remove_absolute() in Godot 4; remove_file() takes a
+## path relative to the opened directory.)
 func delete_save(path: String = SAVE_PATH) -> bool:
-	if FileAccess.file_exists(path):
-		DirAccess.remove_absolute(path)
-		return true
-	return false
+	if not FileAccess.file_exists(path):
+		return false
+	var dir := DirAccess.open("user://")
+	if dir == null:
+		return false
+	var err: Error = dir.remove_file(path)
+	if err != OK:
+		push_warning("SaveSystem: failed to delete %s (error %d)" % [path, err])
+		return false
+	return true
 
 ## Check if a save file exists.
 func has_save(path: String = SAVE_PATH) -> bool:
 	return FileAccess.file_exists(path)
 
-## List all save files.
+## List all save files in user://.
 func list_saves() -> Array[String]:
 	var saves: Array[String] = []
 	var dir := DirAccess.open("user://")

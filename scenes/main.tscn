@@ -1,4 +1,4 @@
-[gd_scene load_steps=3 format=3 uid="uid://main001"]
+[gd_scene load_steps=19 format=3]
 
 [ext_resource type="Script" path="res://src/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://src/core/game_event_bus.gd" id="2_eventbus"]
@@ -8,13 +8,16 @@
 [ext_resource type="Script" path="res://src/world/chunk_system.gd" id="6_chunk"]
 [ext_resource type="Script" path="res://src/world/terrain_renderer.gd" id="7_terrain"]
 [ext_resource type="Script" path="res://src/world/resource_spawner.gd" id="8_resource"]
-[ext_resource type="Script" path="res://src/world/harvestable_resource.gd" id="9_harvest"]
-[ext_resource type="Script" path="res://src/world/harvest_system.gd" id="10_harvestsys"]
-[ext_resource type="Script" path="res://src/ui/debug_overlay.gd" id="11_debug"]
-[ext_resource type="Script" path="res://src/ui/inventory_panel.gd" id="12_inv"]
-[ext_resource type="Script" path="res://src/ui/crafting_panel.gd" id="13_craft"]
-[ext_resource type="Script" path="res://src/entities/player.gd" id="14_player"]
-[ext_resource type="Script" path="res://src/systems/item_database.gd" id="15_items"]
+[ext_resource type="Script" path="res://src/ui/debug_overlay.gd" id="9_debug"]
+[ext_resource type="Script" path="res://src/ui/inventory_panel.gd" id="10_inv"]
+[ext_resource type="Script" path="res://src/ui/crafting_panel.gd" id="11_craft"]
+[ext_resource type="Script" path="res://src/entities/player.gd" id="12_player"]
+[ext_resource type="Script" path="res://src/systems/item_database.gd" id="13_items"]
+[ext_resource type="Script" path="res://src/ui/hud.gd" id="14_hud"]
+[ext_resource type="Script" path="res://src/systems/save_system.gd" id="15_save"]
+[ext_resource type="Script" path="res://src/ui/slot_ui.gd" id="16_slot"]
+[ext_resource type="Script" path="res://src/ui/recipe_item_ui.gd" id="17_recipe"]
+[ext_resource type="Script" path="res://src/systems/creature_spawner.gd" id="18_creature_spawner"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -35,12 +38,15 @@ script = ExtResource("7_terrain")
 [node name="ResourceSpawner" type="Node" parent="."]
 script = ExtResource("8_resource")
 
+[node name="CreatureSpawner" type="Node" parent="."]
+script = ExtResource("18_creature_spawner")
+
 [node name="ItemDatabase" type="Node" parent="."]
-script = ExtResource("15_items")
+script = ExtResource("13_items")
 
 [node name="Player" type="CharacterBody2D" parent="."]
 position = Vector2(0, 0)
-script = ExtResource("14_player")
+script = ExtResource("12_player")
 
 [node name="CameraController" type="Camera2D" parent="."]
 script = ExtResource("3_camera")
@@ -49,12 +55,73 @@ position = Vector2(0, 0)
 [node name="SeedInput" type="Node" parent="."]
 script = ExtResource("4_seed")
 
+[node name="WorldRoot" type="Node2D" parent="."]
+
 [node name="DebugOverlay" type="CanvasLayer" parent="."]
 layer = 10
-script = ExtResource("11_debug")
+script = ExtResource("9_debug")
+
+[node name="DebugPanel" type="PanelContainer" parent="DebugOverlay"]
+anchors_preset = 0
+offset_left = 8.0
+offset_top = 40.0
+offset_right = 208.0
+offset_bottom = 200.0
+visible = false
+
+[node name="DebugLabel" type="Label" parent="DebugOverlay/DebugPanel"]
+layout_mode = 2
+text = "Debug"
 
 [node name="HUD" type="CanvasLayer" parent="."]
 layer = 11
+script = ExtResource("14_hud")
+
+[node name="Overlay" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="HealthBar" type="ProgressBar" parent="HUD/Overlay"]
+layout_mode = 1
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 208.0
+offset_bottom = 32.0
+max_value = 100.0
+value = 100.0
+show_percentage = false
+
+[node name="HungerBar" type="ProgressBar" parent="HUD/Overlay"]
+layout_mode = 1
+offset_left = 216.0
+offset_top = 8.0
+offset_right = 416.0
+offset_bottom = 32.0
+max_value = 100.0
+value = 100.0
+show_percentage = false
+
+[node name="SeedLabel" type="Label" parent="HUD/Overlay"]
+layout_mode = 1
+offset_left = 8.0
+offset_top = 40.0
+offset_right = 408.0
+offset_bottom = 58.0
+text = "Seed: "
+
+[node name="DebugLabel" type="Label" parent="HUD/Overlay"]
+layout_mode = 3
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -400.0
+offset_top = 40.0
+offset_right = -8.0
+offset_bottom = 240.0
+grow_horizontal = 0
+visible = false
 
 [node name="InventoryPanel" type="Control" parent="HUD"]
 layout_mode = 3
@@ -66,10 +133,79 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 0
 offset_left = -300.0
-offset_top = -100.0
+offset_top = -140.0
 offset_right = 300.0
 offset_bottom = 0.0
-script = ExtResource("12_inv")
+script = ExtResource("10_inv")
+
+[node name="Title" type="Label" parent="HUD/InventoryPanel"]
+layout_mode = 1
+offset_left = 8.0
+offset_top = 4.0
+offset_right = 592.0
+offset_bottom = 24.0
+text = "Inventory"
+
+[node name="MarginContainer" type="MarginContainer" parent="HUD/InventoryPanel"]
+layout_mode = 1
+offset_left = 4.0
+offset_top = 24.0
+offset_right = 596.0
+offset_bottom = 136.0
+
+[node name="VBox" type="VBoxContainer" parent="HUD/InventoryPanel/MarginContainer"]
+layout_mode = 2
+
+[node name="Slots" type="GridContainer" parent="HUD/InventoryPanel/MarginContainer/VBox"]
+layout_mode = 2
+columns = 9
+
+[node name="Slot" type="Control" parent="HUD/InventoryPanel/MarginContainer/VBox/Slots"]
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+visible = false
+script = ExtResource("16_slot")
+
+[node name="Background" type="ColorRect" parent="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.25, 0.25, 0.35, 0.8)
+
+[node name="SelectedOverlay" type="ColorRect" parent="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot"]
+layout_mode = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+visible = false
+color = Color(1, 1, 0.3, 0.25)
+
+[node name="ItemLabel" type="Label" parent="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot"]
+layout_mode = 1
+offset_left = 4.0
+offset_top = 4.0
+offset_right = 44.0
+offset_bottom = 30.0
+horizontal_alignment = 1
+
+[node name="QuantityLabel" type="Label" parent="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot"]
+layout_mode = 1
+offset_left = 24.0
+offset_top = 28.0
+offset_right = 44.0
+offset_bottom = 44.0
+horizontal_alignment = 1
+
+[node name="SlotButton" type="Button" parent="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+flat = true
+
+[node name="CraftResult" type="Label" parent="HUD/InventoryPanel/MarginContainer/VBox"]
+layout_mode = 2
+text = "Craft result"
 
 [node name="CraftingPanel" type="Control" parent="HUD"]
 layout_mode = 3
@@ -81,7 +217,80 @@ anchor_bottom = 0.5
 grow_horizontal = 2
 grow_vertical = 2
 offset_left = -250.0
-offset_top = 0.0
+offset_top = 4.0
 offset_right = 250.0
 offset_bottom = 200.0
-script = ExtResource("13_craft")
+script = ExtResource("11_craft")
+
+[node name="Title" type="Label" parent="HUD/CraftingPanel"]
+layout_mode = 1
+offset_left = 8.0
+offset_top = 4.0
+offset_right = 492.0
+offset_bottom = 24.0
+text = "Crafting"
+
+[node name="MarginContainer" type="MarginContainer" parent="HUD/CraftingPanel"]
+layout_mode = 1
+offset_left = 4.0
+offset_top = 24.0
+offset_right = 496.0
+offset_bottom = 196.0
+
+[node name="VBox" type="VBoxContainer" parent="HUD/CraftingPanel/MarginContainer"]
+layout_mode = 2
+
+[node name="RecipeList" type="VBoxContainer" parent="HUD/CraftingPanel/MarginContainer/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="RecipeItem" type="Control" parent="HUD/CraftingPanel/MarginContainer/VBox/RecipeList"]
+custom_minimum_size = Vector2(240, 40)
+layout_mode = 2
+visible = false
+script = ExtResource("17_recipe")
+
+[node name="Background" type="ColorRect" parent="HUD/CraftingPanel/MarginContainer/VBox/RecipeList/RecipeItem"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.25, 0.3, 0.4, 0.8)
+
+[node name="NameLabel" type="Label" parent="HUD/CraftingPanel/MarginContainer/VBox/RecipeList/RecipeItem"]
+layout_mode = 1
+offset_left = 4.0
+offset_top = 2.0
+offset_right = 160.0
+offset_bottom = 20.0
+text = "Recipe"
+
+[node name="CostLabel" type="Label" parent="HUD/CraftingPanel/MarginContainer/VBox/RecipeList/RecipeItem"]
+layout_mode = 1
+offset_left = 4.0
+offset_top = 20.0
+offset_right = 160.0
+offset_bottom = 38.0
+text = "Cost"
+
+[node name="CraftButton" type="Button" parent="HUD/CraftingPanel/MarginContainer/VBox/RecipeList/RecipeItem"]
+layout_mode = 1
+offset_left = 168.0
+offset_top = 8.0
+offset_right = 236.0
+offset_bottom = 32.0
+text = "Craft"
+
+[node name="ResultLabel" type="Label" parent="HUD/CraftingPanel/MarginContainer/VBox"]
+layout_mode = 2
+text = ""
+
+[node name="StationLabel" type="Label" parent="HUD/CraftingPanel/MarginContainer/VBox"]
+layout_mode = 2
+text = "Station: "
+
+[node name="SaveSystem" type="Node" parent="."]
+script = ExtResource("15_save")
+
+[connection signal="gui_input" from="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot" to="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot" method="_on_gui_input"]
+[connection signal="pressed" from="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot/SlotButton" to="HUD/InventoryPanel/MarginContainer/VBox/Slots/Slot" method="_on_button_pressed"]

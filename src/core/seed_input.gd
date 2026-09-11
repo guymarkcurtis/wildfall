@@ -42,20 +42,42 @@ func cancel_editing() -> void:
 	_is_editing = false
 	_input_buffer = str(_current_seed)
 
-## Handle text input for seed editing.
+## Handle input for the seed editor.
+##   * Not editing: T (change_seed) opens the editor.
+##   * Editing: digits (number row or numpad) append, BACKSPACE deletes,
+##     ENTER applies the new seed, ESCAPE cancels and keeps the old one.
 func _input(event: InputEvent) -> void:
-	if not _is_editing:
-		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		if not _is_editing:
+			if event.is_action_pressed("change_seed"):
+				start_editing()
+			return
+		# While editing, only the editor's own keys do anything.
+		match event.keycode:
+			KEY_ENTER, KEY_KP_ENTER:
+				get_viewport().set_input_as_handled()
+				finish_editing()
+			KEY_ESCAPE:
+				get_viewport().set_input_as_handled()
+				cancel_editing()
+			KEY_BACKSPACE:
+				get_viewport().set_input_as_handled()
+				if len(_input_buffer) > 0:
+					_input_buffer = _input_buffer.substr(0, len(_input_buffer) - 1)
+			_:
+				# unicode 48..57 covers both the number row and the numpad.
+				if event.unicode >= 48 and event.unicode <= 57 \
+						and len(_input_buffer) < MAX_INPUT_LENGTH:
+					get_viewport().set_input_as_handled()
+					_input_buffer += str(event.unicode - 48)
 
-	if event is InputEventKey and event.pressed:
-		if event.keycode == KEY_ENTER or event.keycode == KEY_ESCAPE:
-			finish_editing()
-		elif event.keycode == KEY_BACKSPACE:
-			if len(_input_buffer) > 0:
-				_input_buffer = _input_buffer.substr(0, len(_input_buffer) - 1)
-		elif event.keycode >= KEY_0 and event.keycode <= KEY_9:
-			if len(_input_buffer) < MAX_INPUT_LENGTH:
-				_input_buffer += str(event.keycode - KEY_0)
+## Whether the seed editor is currently active.
+func is_editing() -> bool:
+	return _is_editing
+
+## The digit buffer the player is currently typing.
+func get_input_buffer() -> String:
+	return _input_buffer
 
 ## Get the current seed.
 func get_seed() -> int:

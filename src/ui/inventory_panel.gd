@@ -6,8 +6,8 @@ const SLOT_SIZE: int = 48
 const SLOTS_PER_ROW: int = 9
 const MAX_SLOTS: int = 36
 
-@onready var grid_container: GridContainer = $MarginContainer/GridContainer
-@onready var slot_template: Control = $MarginContainer/GridContainer/Slot
+@onready var grid_container: GridContainer = $MarginContainer/VBox/Slots
+@onready var slot_template: Control = $MarginContainer/VBox/Slots/Slot
 
 var inventory: Dictionary = {}  # {slot_index: {item_id: String, quantity: int}}
 var selected_slot: int = -1
@@ -32,8 +32,15 @@ func _setup_grid() -> void:
 		slot.name = "Slot%d" % i
 		slot.index = i
 		grid_container.add_child(slot)
+		# React to this slot being activated (its button/click) by selecting it.
+		if slot.has_signal("slot_selected"):
+			slot.connect("slot_selected", _on_slot_selected)
 	
 	_refresh()
+
+## A slot UI requested selection.
+func _on_slot_selected(slot_index: int) -> void:
+	select_slot(slot_index)
 
 ## Refresh the inventory display.
 func refresh(inventory_data: Dictionary) -> void:

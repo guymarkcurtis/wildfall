@@ -9,7 +9,7 @@
 
 # Generated
 user://
-*.import/
+*.import
 *.remap
 
 # OS
@@ -42,3 +42,6 @@ Thumbs.db
 # Build output
 bin/
 exported/
+
+# One-off debugging probes (not part of the project)
+tmp_imgtest/

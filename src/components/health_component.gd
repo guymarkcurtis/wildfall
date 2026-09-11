@@ -72,8 +72,9 @@ func serialize() -> Dictionary:
 	}
 
 ## Deserialize for loading.
+## (Explicit coercions: JSON round-trips can deliver ints as floats.)
 func deserialize(data: Dictionary) -> void:
-	max_health = data.get("max_health", 100)
-	current_health = data.get("current_health", float(max_health))
-	_is_dead = data.get("is_dead", false)
+	max_health = int(data.get("max_health", 100))
+	current_health = float(data.get("current_health", float(max_health)))
+	_is_dead = bool(data.get("is_dead", false))
 	health_changed.emit(int(current_health), max_health)

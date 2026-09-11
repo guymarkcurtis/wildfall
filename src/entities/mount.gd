@@ -58,8 +58,7 @@ func _setup_visuals() -> void:
 	if texture:
 		_sprite.texture = texture
 	else:
-		var image := Image.new()
-		image.create(32, 32, false, Image.FORMAT_RGBA8)
+		var image := Image.create_empty(32, 32, false, Image.FORMAT_RGBA8)
 		var color := _get_mount_color()
 		for y in range(32):
 			for x in range(32):
@@ -76,8 +75,7 @@ func _setup_visuals() -> void:
 
 ## Get texture for mount type.
 func _get_mount_texture() -> ImageTexture:
-	var image := Image.new()
-	image.create(32, 32, false, Image.FORMAT_RGBA8)
+	var image := Image.create_empty(32, 32, false, Image.FORMAT_RGBA8)
 	var color := _get_mount_color()
 	
 	for y in range(32):

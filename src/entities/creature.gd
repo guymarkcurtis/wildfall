@@ -1,304 +1,369 @@
-## Base creature entity with movement, health, and AI.
+## Passive creature entity with movement, health, and a wander/flee AI.
+## Phase 3 port of the legacy placeholder: creatures are bound to the chunk
+## they spawned in, wander within it, and flee when the player gets close.
+## All Phase 3 creatures are passive/neutral — hostile AI (chase/attack) is
+## a later phase, so the old CHASE/ATTACK states were dropped.
 class_name Creature
 extends CharacterBody2D
 
-const BASE_SPEED: float = 50.0
-const DETECTION_RANGE: float = 200.0
-const ATTACK_RANGE: float = 32.0
-const PATROL_RANGE: float = 100.0
+const TILE_SIZE: float = 32.0
 
-# Creature states
+# Creature states (no CHASE/ATTACK yet: no creature attacks the player in
+# Phase 3 — they all flee instead).
 enum State {
 	IDLE,
 	PATROL,
-	CHASE,
-	ATTACK,
 	FLEE
 }
 
-# Creature data
-var creature_type: String = "slime"
-var display_name: String = "Slime"
-var health: int = 20
-var max_health: int = 20
-var damage: int = 2
-var speed: float = BASE_SPEED
+# Creature data (filled in by setup from the CreatureDefinition)
+var creature_type: String = "rabbit"
+var display_name: String = "Rabbit"
+var health: int = 10
+var max_health: int = 10
+var speed: float = 3.0  # tiles per second (CreatureDefinition schema)
 var is_hostile: bool = false
-var xp_reward: int = 10
+var is_fish: bool = false
 
 # State tracking
 var current_state: State = State.IDLE
 var target_position: Vector2 = Vector2.ZERO
 var patrol_center: Vector2 = Vector2.ZERO
-var patrol_radius: float = 50.0
+var patrol_radius: float = 100.0
+var detection_range: float = 144.0  # pixels (tiles * TILE_SIZE)
 var state_timer: float = 0.0
-var attack_timer: float = 0.0
+
+# World generator reference (sibling under Main) for water queries.
+var world_generator: Node = null
+
+# Runtime state
+var _chunk_bounds: Rect2 = Rect2()
+var _player_ref: Node = null
+var _idle_duration: float = 2.0
+# Pre-rolled per patrol leg so the state machine stays deterministic
+# (re-rolling a random threshold every physics frame would not).
+var _patrol_duration: float = 4.0
+var _dead: bool = false
+var _loot: Array[Dictionary] = []
+var _loot_table: Array[Dictionary] = []
 
 # Visual
-var _sprite: Sprite2D = null
+var _body: Polygon2D = null
+var _label: Label = null
 var _health_bar: ProgressBar = null
 
 # Signals
 signal health_changed(current: int, max: int)
 signal creature_died
-signal creature_spotted(player_position: Vector2)
 
-## Initialize the creature.
-func setup(creature_type: String, health: int, damage: int, is_hostile: bool, xp_reward: int) -> void:
-	self.creature_type = creature_type
-	self.health = health
-	self.max_health = health
-	self.damage = damage
-	self.is_hostile = is_hostile
-	self.xp_reward = xp_reward
-	self.patrol_center = global_position
-	_setup_visuals()
-	_setup_collision()
+## Initialize the creature from its definition. Must be called before the
+## node is added to the tree (Main sets the position, calls setup, connects
+## signals, then add_child — same pattern as HarvestableResource).
+func setup(ctype: String, def: CreatureDefinition, chunk_coords: Vector2i, world_gen: Node) -> void:
+	creature_type = def.id
+	display_name = def.display_name
+	health = def.health
+	max_health = def.health
+	speed = def.speed
+	is_hostile = def.hostile
+	is_fish = (ctype == "fish")
+	detection_range = def.detection_range * TILE_SIZE
+	patrol_radius = float(def.custom_data.get("patrol_radius", 100.0))
+	_loot_table = def.loot_table
+	world_generator = world_gen
 
-## Set up visual representation.
-func _setup_visuals() -> void:
-	# Create sprite
-	_sprite = Sprite2D.new()
-	_sprite.position = Vector2(16, 16)
-	
-	var texture: ImageTexture = _get_creature_texture()
-	if texture:
-		_sprite.texture = texture
-	else:
-		# Fallback colored sprite
-		var image := Image.new()
-		image.create(32, 32, false, Image.FORMAT_RGBA8)
-		var color := _get_creature_color()
-		for y in range(32):
-			for x in range(32):
-				image.set_pixel(x, y, color)
-		_sprite.texture = ImageTexture.create_from_image(image)
-	
-	add_child(_sprite)
-	
-	# Create health bar
+	var start: Vector2i = Vector2i(chunk_coords) * 16
+	_chunk_bounds = Rect2(
+		float(start.x * TILE_SIZE),
+		float(start.y * TILE_SIZE),
+		float(CHUNK_PIXELS),
+		float(CHUNK_PIXELS)
+	)
+	patrol_center = global_position
+	_idle_duration = randf_range(1.0, 3.0)
+	_setup_visuals(def)
+	_setup_collision(def)
+
+## The pixel size of one chunk (16 tiles * 32 px).
+const CHUNK_PIXELS: int = 512
+
+func _ready() -> void:
+	# The player is always a sibling under Main (works in the game and in
+	# the headless test harness, which adds main.tscn to the tree root).
+	var parent := get_parent()
+	if parent:
+		_player_ref = parent.get_node_or_null("Player")
+
+## Set up the placeholder visual (a colored circle, a name label, and a
+## small health bar) — same placeholder-art style as the resource nodes.
+func _setup_visuals(def: CreatureDefinition) -> void:
+	var size: float = float(def.custom_data.get("size", 10.0))
+	# Godot 4's Circle2D is an abstract drawing primitive (it cannot be
+	# instantiated), so the placeholder body is a filled Polygon2D that
+	# approximates a circle.
+	_body = Polygon2D.new()
+	_body.polygon = _circle_points(size)
+	_body.color = _get_creature_color()
+	add_child(_body)
+
+	_label = Label.new()
+	_label.text = display_name
+	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_label.position = Vector2(-24.0, -size - 18.0)
+	add_child(_label)
+
 	_health_bar = ProgressBar.new()
 	_health_bar.min_value = 0
 	_health_bar.max_value = max_health
 	_health_bar.value = health
-	_health_bar.custom_minimum_size = Vector2(32, 4)
-	_health_bar.position = Vector2(0, -20)
+	_health_bar.custom_minimum_size = Vector2(28, 4)
+	_health_bar.position = Vector2(-14.0, -size - 10.0)
 	add_child(_health_bar)
 
-## Get texture for creature type.
-func _get_creature_texture() -> ImageTexture:
-	var image := Image.new()
-	image.create(32, 32, false, Image.FORMAT_RGBA8)
-	var color := _get_creature_color()
-	
-	for y in range(32):
-		for x in range(32):
-			var pixel_color := color
-			# Add simple pattern
-			if (x + y) % 4 < 2:
-				pixel_color = color.lerp(Color(1.0, 1.0, 1.0), 0.2)
-			image.set_pixel(x, y, pixel_color)
-	
-	return ImageTexture.create_from_image(image)
+## Build the point list for a filled circle of the given radius.
+func _circle_points(radius: float, segments: int = 16) -> PackedVector2Array:
+	var points: PackedVector2Array = PackedVector2Array()
+	for i in range(segments):
+		var angle: float = float(i) / float(segments) * TAU
+		points.append(Vector2(cos(angle), sin(angle)) * radius)
+	return points
 
 ## Get color for creature type.
 func _get_creature_color() -> Color:
 	match creature_type:
-		"slime":
-			return Color(0.3, 0.8, 0.3)  # Green
-		"rat":
-			return Color(0.6, 0.5, 0.4)  # Brown
+		"rabbit":
+			return Color(0.72, 0.56, 0.42)  # tan
+		"deer":
+			return Color(0.45, 0.3, 0.18)  # brown
+		"boar":
+			return Color(0.35, 0.25, 0.2)  # dark brown
 		"wolf":
-			return Color(0.5, 0.5, 0.5)  # Gray
-		"bear":
-			return Color(0.4, 0.3, 0.2)  # Brown
-		"slime_poison":
-			return Color(0.4, 0.8, 0.2)  # Lime
-		"zombie":
-			return Color(0.4, 0.6, 0.4)  # Sickly green
-		"skeleton":
-			return Color(0.9, 0.9, 0.8)  # White
-		"slime_fire":
-			return Color(0.9, 0.4, 0.2)  # Orange
+			return Color(0.55, 0.55, 0.58)  # gray
+		"polar_bear":
+			return Color(0.93, 0.95, 0.98)  # white
+		"vulture":
+			return Color(0.25, 0.22, 0.2)  # black
+		"fish":
+			return Color(0.4, 0.65, 1.0)  # blue
 		_:
 			return Color(0.5, 0.5, 0.5)
 
-## Set up collision detection.
-func _setup_collision() -> void:
+## Set up collision detection. Creatures ignore everything (mask 0): the
+## player can walk through them and they do not clip into resource nodes.
+func _setup_collision(def: CreatureDefinition) -> void:
 	var collision := CollisionShape2D.new()
 	var shape := CircleShape2D.new()
-	shape.radius = 16.0
+	shape.radius = max(6.0, float(def.custom_data.get("size", 10.0)))
 	collision.shape = shape
 	add_child(collision)
-	
+
 	collision_layer = 2
 	collision_mask = 0
 
 ## Update creature behavior.
 func _physics_process(delta: float) -> void:
+	if _dead:
+		return
+
 	state_timer += delta
-	attack_timer += delta
-	
-	# Update health bar
 	if _health_bar:
 		_health_bar.value = health
-	
-	# Check for player
-	var player := _get_player()
-	if player:
+
+	var player := _player_ref
+	if player != null and not is_instance_valid(player):
+		_player_ref = null
+		player = null
+
+	var was_fleeing: bool = current_state == State.FLEE
+	if player != null:
 		var dist_to_player: float = global_position.distance_to(player.global_position)
-		
-		if dist_to_player <= DETECTION_RANGE:
-			creature_spotted.emit(player.global_position)
-			
-			if is_hostile and dist_to_player <= ATTACK_RANGE:
-				_current_state = State.CHASE
-			elif not is_hostile and dist_to_player <= DETECTION_RANGE * 0.5:
-				_current_state = State.FLEE
-		elif dist_to_player > DETECTION_RANGE * 2:
-			_current_state = State.PATROL
-	
-	# Execute current state
-	match _current_state:
+		if dist_to_player <= detection_range:
+			if not was_fleeing:
+				current_state = State.FLEE
+				state_timer = 0.0
+		elif was_fleeing:
+			# Player is out of range again: resume wandering.
+			current_state = State.PATROL
+			state_timer = 0.0
+			_patrol_duration = randf_range(3.0, 6.0)
+			_set_patrol_target()
+
+	match current_state:
 		State.IDLE:
 			_idle_behavior(delta)
 		State.PATROL:
 			_patrol_behavior(delta)
-		State.CHASE:
-			_chase_behavior(delta, player)
-		State.ATTACK:
-			_attack_behavior(delta, player)
 		State.FLEE:
 			_flee_behavior(delta, player)
 
-## Get the player node.
-func _get_player() -> Node:
-	var root := get_tree().root
-	var player := root.get_node_or_null("/root/Main/Player")
-	return player
-
-## Idle behavior.
-func _idle_behavior(delta: float) -> void:
-	if state_timer > randf_range(2.0, 5.0):
+## Stay still for a while, then start a patrol leg.
+func _idle_behavior(_delta: float) -> void:
+	velocity = Vector2.ZERO
+	if state_timer > _idle_duration:
 		state_timer = 0.0
-		if randf() < 0.3:
-			_current_state = State.PATROL
-			_set_random_patrol_target()
+		_idle_duration = randf_range(1.5, 4.0)
+		_patrol_duration = randf_range(3.0, 6.0)
+		current_state = State.PATROL
+		_set_patrol_target()
 
-## Patrol behavior.
-func _patrol_behavior(delta: float) -> void:
-	if global_position.distance_to(patrol_center) > patrol_radius:
-		_current_state = State.IDLE
-		state_timer = 0.0
+## Walk toward the patrol target at half speed; stop when reached and drift
+## back to IDLE. If the creature was pushed outside its spawn chunk (a long
+## flee), steer it back first.
+func _patrol_behavior(_delta: float) -> void:
+	if not _chunk_bounds.grow(32.0).has_point(global_position):
+		_return_to_chunk()
 		return
-	
-	var direction := (patrol_center - global_position).normalized()
-	velocity = direction * speed * 0.5
-	move_and_slide()
-	
-	if state_timer > randf_range(3.0, 6.0):
-		state_timer = 0.0
-		_current_state = State.IDLE
 
-## Chase behavior.
-func _chase_behavior(delta: float, player: Node) -> void:
-	if not player:
-		_current_state = State.IDLE
-		return
-	
-	var direction := (player.global_position - global_position).normalized()
-	velocity = direction * speed
-	move_and_slide()
-	
-	# Check if in attack range
-	if global_position.distance_to(player.global_position) <= ATTACK_RANGE:
-		_current_state = State.ATTACK
-		attack_timer = 0.0
-
-## Attack behavior.
-func _attack_behavior(delta: float, player: Node) -> void:
-	if not player:
-		_current_state = State.CHASE
-		return
-	
-	# Face player
-	if velocity.length() > 0:
-		velocity = velocity.normalized()
-	
-	# Attack timer
-	if attack_timer >= 1.0:
-		attack_timer = 0.0
-		_attack_player(player)
+	var dist_to_target: float = global_position.distance_to(target_position)
+	if dist_to_target > 8.0:
+		var direction: Vector2 = (target_position - global_position).normalized()
+		velocity = direction * speed * 0.5 * TILE_SIZE
+		move_and_slide()
 	else:
 		velocity = Vector2.ZERO
-		move_and_slide()
 
-## Flee behavior.
-func _flee_behavior(delta: float, player: Node) -> void:
-	if not player:
-		_current_state = State.PATROL
+	if state_timer > _patrol_duration:
+		state_timer = 0.0
+		current_state = State.IDLE
+
+## Run away from the player at 1.5x speed. Fish may not run onto land, so
+## they try rotated flee directions until one stays in the water.
+func _flee_behavior(_delta: float, player: Node) -> void:
+	if player == null or not is_instance_valid(player):
+		current_state = State.PATROL
+		state_timer = 0.0
+		_patrol_duration = randf_range(3.0, 6.0)
+		_set_patrol_target()
 		return
-	
-	var direction := (global_position - player.global_position).normalized()
-	velocity = direction * speed * 1.5
+
+	var away: Vector2 = global_position - player.global_position
+	if away.length() < 1.0:
+		away = Vector2(1.0, 0.0)
+
+	var direction: Vector2 = away.normalized()
+	if is_fish:
+		var options: Array[Vector2] = [
+			away, away.rotated(0.9), away.rotated(-0.9), away.rotated(1.8)
+		]
+		var found_water: bool = false
+		for option in options:
+			var step_point: Vector2 = global_position + option.normalized() * 32.0
+			if _is_water(step_point):
+				direction = option.normalized()
+				found_water = true
+				break
+		if not found_water:
+			velocity = Vector2.ZERO  # boxed in: hold position
+			move_and_slide()
+			if not _chunk_bounds.grow(32.0).has_point(global_position):
+				_return_to_chunk()
+			return
+	else:
+		if not _chunk_bounds.grow(32.0).has_point(global_position):
+			_return_to_chunk()
+			return
+
+	velocity = direction * speed * 1.5 * TILE_SIZE
 	move_and_slide()
-	
-	if global_position.distance_to(player.global_position) > DETECTION_RANGE:
-		_current_state = State.PATROL
 
-## Attack the player.
-func _attack_player(player: Node) -> void:
-	if player.has_method("take_damage"):
-		player.take_damage(damage)
+	if player != null and is_instance_valid(player):
+		if global_position.distance_to(player.global_position) > detection_range * 2.0:
+			current_state = State.PATROL
+			state_timer = 0.0
+			_patrol_duration = randf_range(3.0, 6.0)
+			_set_patrol_target()
 
-## Set a random patrol target.
-func _set_random_patrol_target() -> void:
-	var angle := randf() * TAU
-	var distance := randf_range(20.0, patrol_radius)
-	patrol_center = global_position + Vector2(cos(angle), sin(angle)) * distance
+## Steer the creature back toward the center of its spawn chunk (fish return
+## to their spawn point, which is always in water).
+func _return_to_chunk() -> void:
+	state_timer = 0.0
+	_patrol_duration = randf_range(3.0, 6.0)
+	if is_fish:
+		target_position = patrol_center
+	else:
+		target_position = _chunk_bounds.position + _chunk_bounds.size * 0.5
+	current_state = State.PATROL
 
-## Damage the creature.
-func take_damage(amount: int) -> bool:
-	if health <= 0:
+## Pick a new patrol target: a random point within patrol_radius of the
+## patrol anchor, clamped into the spawn chunk and on the right terrain
+## (fish must stay in water, land creatures on land).
+func _set_patrol_target() -> void:
+	for _i in range(24):
+		var candidate: Vector2 = _random_point_in_chunk()
+		if is_fish:
+			if _is_water(candidate):
+				target_position = candidate
+				return
+		else:
+			if not _is_water(candidate):
+				target_position = candidate
+				return
+	# Fallback: hold the current anchor (never leaves its terrain).
+	target_position = patrol_center
+
+## Random point within patrol_radius of the patrol anchor, clamped into the
+## spawn chunk bounds.
+func _random_point_in_chunk() -> Vector2:
+	var angle: float = randf() * TAU
+	var distance: float = randf_range(0.0, patrol_radius)
+	var point: Vector2 = patrol_center + Vector2(cos(angle), sin(angle)) * distance
+	point.x = clampf(point.x, _chunk_bounds.position.x, _chunk_bounds.end.x)
+	point.y = clampf(point.y, _chunk_bounds.position.y, _chunk_bounds.end.y)
+	return point
+
+## Is the given world position water? Uses the same noise the terrain
+## renderer renders from (elevation < 0.3 is water).
+func _is_water(world_pos: Vector2) -> bool:
+	if world_generator == null or not is_instance_valid(world_generator):
+		return is_fish  # assume open water if the generator is gone
+	var values: Dictionary = world_generator.get_noise_values(world_pos.x, world_pos.y)
+	return float(values.get("elevation", 0.5)) < 0.3
+
+## Apply damage (from the player's interact/attack). Returns true when this
+## hit killed the creature. On death the loot is rolled and creature_died is
+## emitted; Main hands the loot to the inventory and frees the node.
+func take_damage(amount: float) -> bool:
+	if _dead or amount <= 0:
 		return false
-	
-	health = max(0, health - amount)
+
+	health = maxi(0, health - int(amount))
 	health_changed.emit(health, max_health)
-	
+	if _health_bar:
+		_health_bar.value = health
+
 	if health <= 0:
+		_dead = true
+		_roll_loot()
 		creature_died.emit()
 		return true
-	
+
 	return false
+
+## Roll the loot table into the concrete drop list (random, at death time).
+func _roll_loot() -> void:
+	for entry in _loot_table:
+		var chance: float = float(entry.get("chance", 1.0))
+		if randf() < chance:
+			var min_qty: int = int(entry.get("min_qty", 1))
+			var max_qty: int = int(entry.get("max_qty", 1))
+			var qty: int = randi_range(mini(min_qty, max_qty), maxi(min_qty, max_qty))
+			if qty > 0:
+				_loot.append({"item_id": str(entry["item_id"]), "quantity": qty})
+
+## The rolled drop list (filled in when the creature dies).
+func get_loot() -> Array[Dictionary]:
+	return _loot
+
+## Check if creature is dead.
+func is_dead() -> bool:
+	return _dead
+
+## Get health ratio.
+func get_health_ratio() -> float:
+	if max_health <= 0:
+		return 0.0
+	return float(health) / float(max_health)
 
 ## Get creature type.
 func get_creature_type() -> String:
 	return creature_type
-
-## Get health ratio.
-func get_health_ratio() -> float:
-	return float(health) / float(max_health)
-
-## Check if creature is dead.
-func is_dead() -> bool:
-	return health <= 0
-
-## Get XP reward.
-func get_xp_reward() -> int:
-	return xp_reward
-
-## Serialize creature data.
-func serialize() -> Dictionary:
-	return {
-		"creature_type": creature_type,
-		"position": global_position,
-		"health": health,
-		"max_health": max_health,
-		"is_hostile": is_hostile
-	}
-
-## Deserialize creature data.
-func deserialize(data: Dictionary) -> void:
-	global_position = data.get("position", Vector2.ZERO)
-	health = data.get("health", max_health)
-	health_changed.emit(health, max_health)

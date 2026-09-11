@@ -2,73 +2,123 @@
 
 ## Overview
 
-Crafting allows players to combine resources into new items using recipes defined by `RecipeDefinition` resources.
+Crafting lets the player combine resources into new items using recipes
+defined by `RecipeDefinition` resources. All 40 recipes are created in
+code by `ItemDatabase._load_recipes()` (see `ITEM_SYSTEM.md` for the
+item side).
 
 ## Recipe Definition Fields
 
+Exact fields of `resources/recipe_definition.gd`:
+
 | Field | Type | Description |
 |-------|------|-------------|
-| id | String | Unique recipe ID |
-| display_name | String | Name in UI |
-| description | String | Recipe description |
-| station_id | String | Required crafting station (empty = hand) |
-| tech_id | String | Required technology unlock |
-| craft_time | float | Seconds to craft |
+| recipe_id | String | Unique recipe ID |
+| result_item_id | String | Item produced (must exist in the item database) |
+| result_quantity | int | Units produced per craft |
+| crafting_station | String | `""` (hand) / `campfire` / `furnace` / `anvil` |
+| required_items | Dictionary | `{item_id: quantity}` — e.g. `{"wood": 2}` |
+| craft_time | float | Seconds to craft (0 = instant) |
 | unlocked | bool | Unlocked by default |
-| ingredients | Array[Dict] | Required items |
-| outputs | Array[Dict] | Resulting items |
-| consume_ingredients | bool | Remove ingredients on craft |
 
-## Ingredient/Output Format
+Helper methods on the resource:
 
-```gdscript
-{
-    "item_id": "wood",
-    "quantity": 3
-}
-```
+- `can_craft(inventory: Dictionary) -> bool` — every `required_items`
+  entry is met by the given `{item_id: quantity}` map
+- `get_cost_string() -> String` — "2x wood, 1x fibre"
+- `get_rarity() -> String` — derived from result quantity / craft time
 
-## Crafting Flow
-
-1. Player opens crafting UI
-2. System shows available recipes
-3. Player selects a recipe
-4. System checks ingredients
-5. If valid: consume ingredients, produce output
-6. Signal `recipe_crafted` emitted
+> The older version of this table listed `station_id`, `tech_id`,
+> `ingredients[]`, `outputs[]` and `consume_ingredients`. Those do not
+> exist — the schema above is the real one. Stations are stored in
+> `crafting_station`; there is no technology gating yet.
 
 ## Crafting Stations
 
-Some recipes require a station:
-- `crafting_table` → Basic recipes
-- `furnace` → Smelting
-- `anvil` → Metalworking
+Stations used by the current 40 recipes:
 
-If `station_id` is empty, recipe can be crafted by hand.
+| Station | Recipes |
+|---------|---------|
+| hand (empty string) | 30 recipes — all tools, planks, charcoal, torch, building parts, chest, fence, farm_soil, stone_brick, flour, and crafting the stations themselves (campfire, furnace, workbench, anvil) |
+| furnace | glass, iron_ingot, gold_ingot, copper_ingot, potion_health, potion_mana |
+| anvil | bronze_ingot |
+| campfire | cooked_meat, cooked_fish, soup |
 
-## Technology Integration
+**Current behaviour**: `CraftingComponent.craft_recipe()` checks only
+`can_craft()` — the station field is displayed in the panel but **not enforced**,
+because stations are not placeable in the world yet (all stations are
+craftable *items*, e.g. the `furnace` building). Enforcing proximity is
+a planned task (see PROJECT_STATE.md).
 
-Recipes can be locked behind technology:
-```gdscript
-tech_id = "metalworking"
-```
-Player must unlock the technology before the recipe becomes available.
+## Recipe Database (40 recipes)
+
+| Recipe | Result (qty) | Station | Costs |
+|--------|--------------|---------|-------|
+| plank | plank ×4 | hand | wood 1 |
+| charcoal | charcoal ×1 | hand | wood |
+| glass | glass ×1 | furnace | sand, coal |
+| iron_ingot | iron_ingot ×1 | furnace | iron_ore, coal |
+| gold_ingot | gold_ingot ×1 | furnace | gold_ore, coal |
+| copper_ingot | copper_ingot ×1 | furnace | copper_ore, coal |
+| bronze_ingot | bronze_ingot ×1 | anvil | copper_ingot 2, tin_ore 1 |
+| wooden_axe / stone_axe / iron_axe | ×1 | hand | plank + (fibre / stone / iron_ingot) |
+| wooden_pickaxe / stone_pickaxe / iron_pickaxe | ×1 | hand | plank + (fibre / stone / iron_ingot) |
+| wooden_sword / stone_sword / iron_sword | ×1 | hand | plank + (fibre / stone / iron_ingot) |
+| stone_hoe | ×1 | hand | plank 2, stone 3, fibre 2 |
+| wooden_hammer / stone_hammer | ×1 | hand | plank + stone |
+| torch | torch ×4 | hand | plank, charcoal, fibre |
+| wooden_wall / wooden_door / chest / fence | ×1 | hand | plank |
+| stone_floor | ×4 | hand | stone |
+| stone_brick | ×2 | hand | stone 2 |
+| flour | ×2 | hand | wheat 1 (grassland plant drop) |
+| stone_wall | ×1 | hand | stone_brick |
+| campfire / furnace / workbench / anvil | ×1 | hand | stone/wood/charcoal or plank/stone or iron_ingot/stone |
+| bed | ×1 | hand | plank, hide, fibre (hide drops from rabbit/deer/boar/wolf/polar_bear) |
+| farm_soil | ×4 | hand | sand, clay |
+| cooked_meat / cooked_fish / soup | ×1 | campfire | meat / fish / meat+mushroom+herb (creature + plant drops) |
+| bread | ×2 | hand | flour, berry |
+| potion_health / potion_mana | ×1 | furnace | (glass) + herb (herb is a plant drop) |
+
+\* exact quantities: see `src/systems/item_database.gd`.
+
+### Ghost recipes
+
+The crafting panel hides any recipe whose ingredients are not obtainable
+from the current world (resource spawner drops across all biomes +
+**creature spawner loot tables** + starting inventory + recursive craft
+results). Phase 3 closed the last gaps — creature drops (meat, fish,
+hide, feather, bone), plant drops (wheat, herb, mushroom), and the new
+`stone_brick`/`flour` recipes — so with the current data **0 of 40
+recipes are hidden**: the panel shows the entire database. The filter
+stays in place as a safety net: any future recipe whose ingredients no
+live system can provide is hidden automatically.
+
+## Crafting Flow
+
+1. Player opens the crafting UI (C key)
+2. `Main` gathers obtainable recipes → `CraftingPanel.refresh(list)`
+3. Panel builds one `RecipeItemUI` row per recipe (name, cost, station,
+   result, Craft button)
+4. Player presses Craft → `CraftingComponent.craft_recipe(recipe_id, inventory)`
+5. `can_craft()` fails → `recipe_failed` signal with a reason; succeeds →
+   ingredients consumed, output added
+6. `result_crafted` signal emitted → Main adds items to the inventory
+   (and refreshes the panel)
+
+Panel limits: `MAX_RECIPES = 40` rows (raised from 20 on 2026-09-10 —
+the old cap made 10 obtainable recipes unreachable, see B19 in
+TEST_RESULTS.md). `MAX_DISPLAYED = 15` is the cap for the small
+preview rows when the panel is in compact mode.
 
 ## Creating New Recipes
 
-1. Create `RecipeDefinition` resource
-2. Set `id` and `display_name`
-3. Add `ingredients` array
-4. Add `outputs` array
-5. Set `craft_time` (0.0 for instant)
-6. (Optional) Set `station_id` and `tech_id`
-
-## Example: Wooden Plank
-
+```gdscript
+recipes["ruby_pickaxe"] = _create_recipe(
+    "ruby_pickaxe", "ruby_pickaxe", 1, "",          # hand-crafted
+    {"plank": 2, "ruby_shard": 3}, 5.0)
 ```
-Recipe ID: plank
-Name: Wooden Plank
-Ingredients: [{item_id: "wood", quantity: 2}]
-Outputs: [{item_id: "plank", quantity: 3}]
-Craft time: 1.0
-```
+`_create_recipe(recipe_id, result_item_id, result_quantity,
+crafting_station, required_items, craft_time = 0.0)`
+
+The new recipe appears in the panel automatically once its ingredients
+are obtainable.

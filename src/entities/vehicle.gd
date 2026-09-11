@@ -62,8 +62,7 @@ func _setup_visuals() -> void:
 	if texture:
 		_sprite.texture = texture
 	else:
-		var image := Image.new()
-		image.create(32, 32, false, Image.FORMAT_RGBA8)
+		var image := Image.create_empty(32, 32, false, Image.FORMAT_RGBA8)
 		var color := _get_vehicle_color()
 		for y in range(32):
 			for x in range(32):
@@ -83,8 +82,7 @@ func _setup_visuals() -> void:
 
 ## Get texture for vehicle type.
 func _get_vehicle_texture() -> ImageTexture:
-	var image := Image.new()
-	image.create(32, 32, false, Image.FORMAT_RGBA8)
+	var image := Image.create_empty(32, 32, false, Image.FORMAT_RGBA8)
 	var color := _get_vehicle_color()
 	
 	for y in range(32):

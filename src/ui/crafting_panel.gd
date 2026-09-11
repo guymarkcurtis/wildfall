@@ -2,12 +2,14 @@
 class_name CraftingPanel
 extends Control
 
-const MAX_RECIPES: int = 20
+# Must be >= the recipe database size: smaller caps silently make recipes
+# unreachable in the panel (there is no scroll view on the list).
+const MAX_RECIPES: int = 40
 
-@onready var recipe_list: VBoxContainer = $MarginContainer/RecipeList
-@onready var recipe_template: Control = $MarginContainer/RecipeList/RecipeItem
-@onready var result_label: Label = $MarginContainer/ResultPanel/ResultLabel
-@onready var station_label: Label = $MarginContainer/StationLabel
+@onready var recipe_list: VBoxContainer = $MarginContainer/VBox/RecipeList
+@onready var recipe_template: Control = $MarginContainer/VBox/RecipeList/RecipeItem
+@onready var result_label: Label = $MarginContainer/VBox/ResultLabel
+@onready var station_label: Label = $MarginContainer/VBox/StationLabel
 
 var recipes: Array[Dictionary] = []
 var inventory: Dictionary = {}
@@ -17,7 +19,11 @@ var current_station: String = ""
 # Signals
 signal recipe_selected(recipe_index: int)
 signal recipe_crafted(result_item_id: String, quantity: int)
+signal result_crafted(result_item_id: String, quantity: int)
 signal craft_failed(reason: String)
+# A recipe item's Craft button was pressed: the game (Main) applies the
+# craft to the real player inventory, then refreshes this panel.
+signal recipe_craft_requested(recipe_index: int)
 
 func _ready() -> void:
 	_setup_ui()
@@ -45,11 +51,16 @@ func _refresh() -> void:
 		var recipe: Dictionary = recipes[i]
 		var can_craft: bool = _can_craft(recipe)
 		var recipe_item: Control = recipe_template.duplicate()
-		recipe_item.visible = true
 		recipe_item.name = "Recipe%d" % i
 		recipe_item.index = i
-		recipe_item.set_data(recipe, can_craft)
+		# Enter the tree FIRST: @onready node paths inside RecipeItemUI are
+		# only resolved when the node's _ready runs (on add_child). Calling
+		# set_data before add_child would dereference null labels.
 		recipe_list.add_child(recipe_item)
+		recipe_item.visible = true
+		recipe_item.set_data(recipe, can_craft)
+		if recipe_item.has_signal("craft_requested"):
+			recipe_item.connect("craft_requested", _on_recipe_craft_requested)
 	
 	# Update station label
 	if station_label:
@@ -67,6 +78,12 @@ func _can_craft(recipe: Dictionary) -> bool:
 		if available < needed:
 			return false
 	return true
+
+## A recipe item UI requested crafting: update the result label and
+## notify the game layer (Main) to apply the craft to the real inventory.
+func _on_recipe_craft_requested(recipe_index: int) -> void:
+	select_recipe(recipe_index)
+	recipe_craft_requested.emit(recipe_index)
 
 ## Select a recipe.
 func select_recipe(recipe_index: int) -> void:

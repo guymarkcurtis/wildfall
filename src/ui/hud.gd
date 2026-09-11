@@ -2,8 +2,8 @@
 class_name HUD
 extends CanvasLayer
 
-@onready var health_bar: ProgressBar = $Overlay/HBoxContainer/HealthBar
-@onready var hunger_bar: ProgressBar = $Overlay/HBoxContainer/HungerBar
+@onready var health_bar: ProgressBar = $Overlay/HealthBar
+@onready var hunger_bar: ProgressBar = $Overlay/HungerBar
 @onready var debug_label: Label = $Overlay/DebugLabel
 @onready var seed_label: Label = $Overlay/SeedLabel
 
@@ -45,16 +45,31 @@ func _process(_delta: float) -> void:
 	var info: String = ""
 	if _player:
 		info += "Position: %.1f, %.1f\n" % [_player.global_position.x, _player.global_position.y]
-		info += "Chunk: %d, %d\n" % [_player.get_chunk_coordinate()]
+		var player_chunk: Vector2i = _player.get_chunk_coordinate()
+		info += "Chunk: %d, %d\n" % [player_chunk.x, player_chunk.y]
 		info += "Health: %d/%d\n" % [int(_player.health_component.current_health), _player.health_component.max_health]
 		info += "Hunger: %.1f/%.1f\n" % [_player.hunger_component.current_hunger, _player.hunger_component.max_hunger]
 
 	info += "\nFPS: %d" % Engine.get_frames_per_second()
 	debug_label.text = info
 
+var _seed: int = -1
+
 ## Set the game seed for display.
 func set_seed(seed: int) -> void:
+	_seed = seed
 	seed_label.text = "Seed: %d" % seed
+
+## Reflect the seed editor state in the seed label while the player types
+## a new seed (T to edit, Enter to apply, Esc to cancel).
+func set_seed_editing(editing: bool, buffer: String = "") -> void:
+	var new_text: String
+	if editing:
+		new_text = "Seed: %s  (Enter apply / Esc cancel)" % buffer
+	else:
+		new_text = "Seed: %d" % (_seed if _seed >= 0 else 0)
+	if seed_label.text != new_text:
+		seed_label.text = new_text
 
 ## Show/hide the entire HUD.
 func set_hud_visible(visible: bool) -> void:

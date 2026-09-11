@@ -9,9 +9,9 @@ const TEMPERATURE_OCTAVES: int = 2
 const ELEVATION_LACUNARITY: float = 2.0
 const MOISTURE_LACUNARITY: float = 2.0
 const TEMPERATURE_LACUNARITY: float = 1.5
-const ELEVATION_PERSISTENCE: float = 0.5
-const MOISTURE_PERSISTENCE: float = 0.5
-const TEMPERATURE_PERSISTENCE: float = 0.5
+const ELEVATION_GAIN: float = 0.5
+const MOISTURE_GAIN: float = 0.5
+const TEMPERATURE_GAIN: float = 0.5
 
 # Noise generators
 var elevation_noise: FastNoiseLite
@@ -26,19 +26,28 @@ func initialize(seed: int) -> void:
 	_seed = seed
 
 	elevation_noise = FastNoiseLite.new()
-	elevation_noise.noise_type = FastNoiseLite.NOISE_SIMPLEX
+	elevation_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
 	elevation_noise.seed = seed
 	elevation_noise.frequency = 0.005
+	elevation_noise.fractal_octaves = ELEVATION_OCTAVES
+	elevation_noise.fractal_lacunarity = ELEVATION_LACUNARITY
+	elevation_noise.fractal_gain = ELEVATION_GAIN
 
 	moisture_noise = FastNoiseLite.new()
-	moisture_noise.noise_type = FastNoiseLite.NOISE_SIMPLEX
+	moisture_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
 	moisture_noise.seed = seed + 1000
 	moisture_noise.frequency = 0.003
+	moisture_noise.fractal_octaves = MOISTURE_OCTAVES
+	moisture_noise.fractal_lacunarity = MOISTURE_LACUNARITY
+	moisture_noise.fractal_gain = MOISTURE_GAIN
 
 	temperature_noise = FastNoiseLite.new()
-	temperature_noise.noise_type = FastNoiseLite.NOISE_SIMPLEX
+	temperature_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
 	temperature_noise.seed = seed + 2000
 	temperature_noise.frequency = 0.002
+	temperature_noise.fractal_octaves = TEMPERATURE_OCTAVES
+	temperature_noise.fractal_lacunarity = TEMPERATURE_LACUNARITY
+	temperature_noise.fractal_gain = TEMPERATURE_GAIN
 
 ## Get elevation value at world position.
 func get_elevation(x: float, y: float) -> float:

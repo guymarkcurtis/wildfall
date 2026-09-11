@@ -26,7 +26,8 @@ const TILE_GOLD_ORE: int = 16
 ## Generate the full tile set for terrain.
 func generate_tile_set() -> TileSet:
 	var tile_set := TileSet.new()
-	
+	tile_set.set_tile_size(Vector2i(TILE_SIZE, TILE_SIZE))
+
 	# Generate terrain tiles
 	_generate_terrain_tiles(tile_set)
 	
@@ -93,8 +94,7 @@ func _generate_resource_tiles(tile_set: TileSet) -> void:
 
 ## Create a gradient texture.
 func _create_gradient_texture(color1: Color, color2: Color) -> ImageTexture:
-	var image := Image.new()
-	image.create(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
+	var image := Image.create_empty(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
 	
 	for y in range(TILE_SIZE):
 		for x in range(TILE_SIZE):
@@ -114,8 +114,7 @@ func _create_gradient_texture(color1: Color, color2: Color) -> ImageTexture:
 
 ## Create a tree texture.
 func _create_tree_texture() -> ImageTexture:
-	var image := Image.new()
-	image.create(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
+	var image := Image.create_empty(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
 	
 	# Background - grass green
 	for y in range(TILE_SIZE):
@@ -141,8 +140,7 @@ func _create_tree_texture() -> ImageTexture:
 
 ## Create a rock texture.
 func _create_rock_texture() -> ImageTexture:
-	var image := Image.new()
-	image.create(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
+	var image := Image.create_empty(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
 	
 	# Background - stone gray
 	for y in range(TILE_SIZE):
@@ -150,7 +148,7 @@ func _create_rock_texture() -> ImageTexture:
 			image.set_pixel(x, y, Color(0.5, 0.5, 0.5))
 	
 	# Rock shape - irregular gray polygon
-	var points := [
+	var points: Array[Vector2] = [
 		Vector2(4, 20), Vector2(8, 12), Vector2(14, 8),
 		Vector2(22, 10), Vector2(28, 16), Vector2(26, 24),
 		Vector2(18, 28), Vector2(10, 26)
@@ -167,8 +165,7 @@ func _create_rock_texture() -> ImageTexture:
 
 ## Create a fibre texture.
 func _create_fibre_texture() -> ImageTexture:
-	var image := Image.new()
-	image.create(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
+	var image := Image.create_empty(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
 	
 	# Background - light brown
 	for y in range(TILE_SIZE):
@@ -188,8 +185,7 @@ func _create_fibre_texture() -> ImageTexture:
 
 ## Create a berry bush texture.
 func _create_berry_texture() -> ImageTexture:
-	var image := Image.new()
-	image.create(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
+	var image := Image.create_empty(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
 	
 	# Background - green
 	for y in range(TILE_SIZE):
@@ -225,8 +221,7 @@ func _create_berry_texture() -> ImageTexture:
 
 ## Create an iron ore texture.
 func _create_iron_ore_texture() -> ImageTexture:
-	var image := Image.new()
-	image.create(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
+	var image := Image.create_empty(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
 	
 	# Background - dark gray stone
 	for y in range(TILE_SIZE):
@@ -251,8 +246,7 @@ func _create_iron_ore_texture() -> ImageTexture:
 
 ## Create a coal texture.
 func _create_coal_texture() -> ImageTexture:
-	var image := Image.new()
-	image.create(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
+	var image := Image.create_empty(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
 	
 	# Background - dark gray
 	for y in range(TILE_SIZE):
@@ -277,8 +271,7 @@ func _create_coal_texture() -> ImageTexture:
 
 ## Create a gold ore texture.
 func _create_gold_ore_texture() -> ImageTexture:
-	var image := Image.new()
-	image.create(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
+	var image := Image.create_empty(TILE_SIZE, TILE_SIZE, false, Image.FORMAT_RGBA8)
 	
 	# Background - dark gray stone
 	for y in range(TILE_SIZE):
@@ -317,9 +310,12 @@ func _point_in_polygon(point: Vector2, polygon: Array[Vector2]) -> bool:
 	return inside
 
 ## Add a tile to the tile set.
+## Note: Godot 4.6 removed TileSetAtlasSource.tile_size and add_texture_rect();
+## the atlas grid now derives from texture_region_size, tiles are registered
+## with create_tile(), and add_source() takes the source ID directly.
 func _add_tile(tile_set: TileSet, tile_id: int, texture: ImageTexture) -> void:
 	var source := TileSetAtlasSource.new()
 	source.texture = texture
-	source.tile_size = Vector2i(TILE_SIZE, TILE_SIZE)
-	source.add_texture_rect(Rect2i(0, 0, TILE_SIZE, TILE_SIZE), Vector2i(0, 0))
-	tile_set.add_texture_source(source, tile_id)
+	source.texture_region_size = Vector2i(TILE_SIZE, TILE_SIZE)
+	source.create_tile(Vector2i(0, 0))
+	tile_set.add_source(source, tile_id)

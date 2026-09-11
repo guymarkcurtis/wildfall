@@ -9,6 +9,7 @@ var player: Node = null
 var inventory_system: Node = null
 var crafting_system: Node = null
 var save_system: Node = null
+var event_bus: Node = null
 
 # Game state
 var _world_seed: int = 0
@@ -22,8 +23,11 @@ signal game_resumed
 signal game_over
 
 func _ready() -> void:
+	# Resolve the event bus at runtime (the project has no autoloads).
+	event_bus = get_node_or_null("../GameEventBus")
 	_world_seed = _generate_seed()
-	GameEventBus.world_seed_set.emit(_world_seed)
+	if event_bus:
+		event_bus.world_seed_set.emit(_world_seed)
 	game_started.emit()
 
 ## Generate a random world seed.
@@ -65,7 +69,8 @@ func load_game(path: String) -> bool:
 ## Restart the game with a new seed.
 func restart_game() -> void:
 	_world_seed = _generate_seed()
-	GameEventBus.world_seed_set.emit(_world_seed)
+	if event_bus:
+		event_bus.world_seed_set.emit(_world_seed)
 	_game_time = 0.0
 	# Reload world and reset player
 	if world_generator:

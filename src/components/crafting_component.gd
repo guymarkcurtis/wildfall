@@ -10,9 +10,9 @@ var _crafting_queue: Array[Dictionary] = []
 var _current_crafting: Dictionary = {}
 
 ## Register a recipe.
-func add_recipe(recipe: "RecipeDefinition") -> void:
-	if recipe.is_valid():
-		_recipes[recipe.id] = recipe
+func add_recipe(recipe: RecipeDefinition) -> void:
+	if recipe != null and recipe.recipe_id != "":
+		_recipes[recipe.recipe_id] = recipe
 
 ## Remove a recipe.
 func remove_recipe(recipe_id: String) -> void:
@@ -27,51 +27,55 @@ func has_recipe(recipe_id: String) -> bool:
 	return _recipes.has(recipe_id)
 
 ## Get recipe by ID.
-func get_recipe(recipe_id: String) -> "RecipeDefinition":
+func get_recipe(recipe_id: String) -> RecipeDefinition:
 	return _recipes.get(recipe_id)
 
 ## Check if a recipe can be crafted with the given inventory.
-func can_craft(recipe_id: String, inventory: "InventoryComponent") -> bool:
+func can_craft(recipe_id: String, inventory: InventoryComponent) -> bool:
 	var recipe: RecipeDefinition = _recipes.get(recipe_id)
 	if not recipe:
 		return false
 	return recipe.can_craft(inventory.get_all_items())
 
-## Get failure reason for a recipe.
-func get_failure_reason(recipe_id: String, inventory: "InventoryComponent") -> String:
+## Get failure reason for a recipe (first missing ingredient, if any).
+func get_failure_reason(recipe_id: String, inventory: InventoryComponent) -> String:
 	var recipe: RecipeDefinition = _recipes.get(recipe_id)
-	if not recipe:
+	if recipe == null:
 		return "Recipe not found: %s" % recipe_id
-	if not recipe.can_craft(inventory.get_all_items()):
-		return recipe.get_craft_failure_reason(inventory.get_all_items())
+	for item_id in recipe.required_items:
+		if inventory.get_item_quantity(str(item_id)) < int(recipe.required_items[item_id]):
+			return "Missing %dx %s" % [int(recipe.required_items[item_id]), str(item_id)]
 	return ""
 
 ## Craft a recipe immediately (consume ingredients, produce output).
-func craft_recipe(recipe_id: String, inventory: "InventoryComponent") -> Array[Dictionary]:
+func craft_recipe(recipe_id: String, inventory: InventoryComponent) -> Array[Dictionary]:
 	var recipe: RecipeDefinition = _recipes.get(recipe_id)
-	if not recipe:
+	if recipe == null:
 		recipe_failed.emit(recipe_id, "Recipe not found")
 		return []
 
-	if not recipe.can_craft(inventory.get_all_items()):
-		var reason: String = recipe.get_craft_failure_reason(inventory.get_all_items())
+	var inv_data: Dictionary = inventory.get_all_items()
+	if not recipe.can_craft(inv_data):
+		var reason: String = get_failure_reason(recipe_id, inventory)
 		recipe_failed.emit(recipe_id, reason)
 		return []
 
-	# Consume ingredients
-	if recipe.consume_ingredients:
-		inventory.remove_item_from_all(recipe.ingredients)
+	# Consume ingredients.
+	for item_id in recipe.required_items:
+		inventory.remove_item(str(item_id), int(recipe.required_items[item_id]))
 
-	# Generate outputs
-	var outputs: Array[Dictionary] = recipe.generate_outputs()
+	# Produce output.
+	var outputs: Array[Dictionary] = [
+		{"item_id": recipe.result_item_id, "quantity": recipe.result_quantity}
+	]
 	for output in outputs:
-		inventory.add_item(output["item_id"], output["quantity"])
+		inventory.add_item(str(output["item_id"]), int(output["quantity"]))
 
 	recipe_crafted.emit(recipe_id)
 	return outputs
 
 ## Start a timed craft (for stations with craft_time > 0).
-func start_craft(recipe_id: String, inventory: "InventoryComponent", duration: float = 0.0) -> bool:
+func start_craft(recipe_id: String, inventory: InventoryComponent, duration: float = 0.0) -> bool:
 	var recipe: RecipeDefinition = _recipes.get(recipe_id)
 	if not recipe:
 		return false
@@ -95,7 +99,7 @@ func update_craft(delta: float) -> Array[Dictionary]:
 	_current_crafting["elapsed"] += delta
 	if _current_crafting["elapsed"] >= _current_crafting["duration"]:
 		var recipe_id: String = _current_crafting["recipe_id"]
-		var inventory: "InventoryComponent" = _current_crafting["inventory"]
+		var inventory: InventoryComponent = _current_crafting["inventory"]
 		_current_crafting = {}
 		return craft_recipe(recipe_id, inventory)
 	return []

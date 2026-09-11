@@ -28,6 +28,9 @@ func initialize(seed: int) -> void:
 	_seed = seed
 	_chunks.clear()
 	_chunk_nodes.clear()
+	# Sentinel so the first update_player_position() call always triggers the
+	# initial chunk load, even when the player starts in chunk (0, 0).
+	_player_position = Vector2i(-999999, -999999)
 
 ## Update player position and manage chunk loading/unloading.
 func update_player_position(world_position: Vector2) -> void:
@@ -58,7 +61,7 @@ func generate_chunk(chunk_coords: Vector2i) -> Dictionary:
 	if _chunks.has(key):
 		return _chunks[key]
 
-	var world_gen := get_node_or_null("/root/WorldGenerator") as Node
+	var world_gen := get_node_or_null("../WorldGenerator") as Node
 	if world_gen:
 		var data: Dictionary = world_gen.call("generate_chunk", chunk_coords, _seed)
 		_chunks[key] = data
@@ -112,7 +115,7 @@ func _update_chunks() -> void:
 			generate_chunk(chunk_coords)
 
 	# Unload chunks outside viewport
-	var keys: PackedStringArray = _chunks.keys()
+	var keys: Array = _chunks.keys()
 	for key in keys:
 		var coords: Vector2i = _str_to_vec2i(key)
 		if abs(coords.x - _player_position.x) > _viewport_radius or abs(coords.y - _player_position.y) > _viewport_radius:

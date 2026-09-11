@@ -1,4 +1,5 @@
 ## Interactive resource node that can be harvested.
+class_name HarvestableResource
 extends Area2D
 
 const DEFAULT_HITBOX_RADIUS: float = 16.0
@@ -84,8 +85,7 @@ func _get_resource_texture() -> ImageTexture:
 
 ## Create a fallback colored sprite.
 func _create_fallback_sprite() -> Sprite2D:
-	var image := Image.new()
-	image.create(32, 32, false, Image.FORMAT_RGBA8)
+	var image := Image.create_empty(32, 32, false, Image.FORMAT_RGBA8)
 	var color: Color = _get_resource_color()
 	for y in range(32):
 		for x in range(32):
@@ -106,6 +106,7 @@ func _get_resource_color() -> Color:
 		"iron_ore": return Color(0.4, 0.4, 0.4)
 		"coal": return Color(0.2, 0.2, 0.2)
 		"gold_ore": return Color(0.9, 0.7, 0.2)
+		"plant": return Color(0.4, 0.75, 0.35)
 		_: return Color(0.5, 0.5, 0.5)
 
 ## Set up collision detection.
@@ -158,9 +159,10 @@ func destroy() -> bool:
 		return false
 
 	is_destroyed = true
-	queue_free()
 
-	# Generate yields
+	# Emit yields first, then queue the node for freeing. (Godot 4 defers
+	# the actual free to the end of the frame, but this ordering keeps the
+	# node fully alive while handlers process its yields.)
 	for yield_entry in yield_items:
 		var item_id: String = yield_entry["item_id"]
 		var min_qty: int = yield_entry.get("min_qty", 1)
@@ -171,6 +173,7 @@ func destroy() -> bool:
 			var qty: int = randi() % (max_qty - min_qty + 1) + min_qty
 			resource_destroyed.emit(item_id, qty)
 
+	queue_free()
 	return true
 
 ## Get remaining health ratio.
@@ -199,4 +202,5 @@ func _get_display_name(resource_type: String) -> String:
 		"iron_ore": return "Iron Ore Deposit"
 		"coal": return "Coal Deposit"
 		"gold_ore": return "Gold Ore Deposit"
+		"plant": return "Plant"
 		_: return resource_type.capitalize()

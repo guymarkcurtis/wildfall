@@ -44,26 +44,26 @@ func _load_items() -> void:
 	items["glass"] = _create_item("glass", "Glass", "material", 32, 1.0)
 	
 	# Tools
-	items["wooden_axe"] = _create_item("wooden_axe", "Wooden Axe", "tool", 1, 2.0, tool_type="axe", damage_bonus=3, durability=50)
-	items["stone_axe"] = _create_item("stone_axe", "Stone Axe", "tool", 1, 2.5, tool_type="axe", damage_bonus=5, durability=100)
-	items["iron_axe"] = _create_item("iron_axe", "Iron Axe", "tool", 1, 3.0, tool_type="axe", damage_bonus=8, durability=200)
-	items["wooden_pickaxe"] = _create_item("wooden_pickaxe", "Wooden Pickaxe", "tool", 1, 2.0, tool_type="pickaxe", damage_bonus=3, durability=50)
-	items["stone_pickaxe"] = _create_item("stone_pickaxe", "Stone Pickaxe", "tool", 1, 2.5, tool_type="pickaxe", damage_bonus=5, durability=100)
-	items["iron_pickaxe"] = _create_item("iron_pickaxe", "Iron Pickaxe", "tool", 1, 3.0, tool_type="pickaxe", damage_bonus=8, durability=200)
-	items["wooden_sword"] = _create_item("wooden_sword", "Wooden Sword", "weapon", 1, 1.5, tool_type="sword", damage_bonus=5, durability=50)
-	items["stone_sword"] = _create_item("stone_sword", "Stone Sword", "weapon", 1, 2.0, tool_type="sword", damage_bonus=8, durability=100)
-	items["iron_sword"] = _create_item("iron_sword", "Iron Sword", "weapon", 1, 2.5, tool_type="sword", damage_bonus=12, durability=200)
-	items["stone_hoe"] = _create_item("stone_hoe", "Stone Hoe", "tool", 1, 2.0, tool_type="hoe", damage_bonus=2, durability=100)
-	items["wooden_hammer"] = _create_item("wooden_hammer", "Wooden Hammer", "tool", 1, 2.5, tool_type="hammer", damage_bonus=4, durability=50)
-	items["stone_hammer"] = _create_item("stone_hammer", "Stone Hammer", "tool", 1, 3.0, tool_type="hammer", damage_bonus=6, durability=100)
+	items["wooden_axe"] = _create_item("wooden_axe", "Wooden Axe", "tool", 1, 2.0, "axe", 0, 0, 3, 50)
+	items["stone_axe"] = _create_item("stone_axe", "Stone Axe", "tool", 1, 2.5, "axe", 0, 0, 5, 100)
+	items["iron_axe"] = _create_item("iron_axe", "Iron Axe", "tool", 1, 3.0, "axe", 0, 0, 8, 200)
+	items["wooden_pickaxe"] = _create_item("wooden_pickaxe", "Wooden Pickaxe", "tool", 1, 2.0, "pickaxe", 0, 0, 3, 50)
+	items["stone_pickaxe"] = _create_item("stone_pickaxe", "Stone Pickaxe", "tool", 1, 2.5, "pickaxe", 0, 0, 5, 100)
+	items["iron_pickaxe"] = _create_item("iron_pickaxe", "Iron Pickaxe", "tool", 1, 3.0, "pickaxe", 0, 0, 8, 200)
+	items["wooden_sword"] = _create_item("wooden_sword", "Wooden Sword", "weapon", 1, 1.5, "sword", 0, 0, 5, 50)
+	items["stone_sword"] = _create_item("stone_sword", "Stone Sword", "weapon", 1, 2.0, "sword", 0, 0, 8, 100)
+	items["iron_sword"] = _create_item("iron_sword", "Iron Sword", "weapon", 1, 2.5, "sword", 0, 0, 12, 200)
+	items["stone_hoe"] = _create_item("stone_hoe", "Stone Hoe", "tool", 1, 2.0, "hoe", 0, 0, 2, 100)
+	items["wooden_hammer"] = _create_item("wooden_hammer", "Wooden Hammer", "tool", 1, 2.5, "hammer", 0, 0, 4, 50)
+	items["stone_hammer"] = _create_item("stone_hammer", "Stone Hammer", "tool", 1, 3.0, "hammer", 0, 0, 6, 100)
 	
 	# Food
-	items["cooked_meat"] = _create_item("cooked_meat", "Cooked Meat", "food", 16, 0.5, hunger_bonus=20, health_bonus=5)
-	items["cooked_fish"] = _create_item("cooked_fish", "Cooked Fish", "food", 16, 0.5, hunger_bonus=15, health_bonus=5)
-	items["bread"] = _create_item("bread", "Bread", "food", 32, 0.3, hunger_bonus=10, health_bonus=3)
-	items["soup"] = _create_item("soup", "Soup", "food", 8, 0.5, hunger_bonus=25, health_bonus=10)
-	items["fish"] = _create_item("fish", "Raw Fish", "food", 16, 0.3, hunger_bonus=5)
-	items["meat"] = _create_item("meat", "Raw Meat", "food", 16, 0.5, hunger_bonus=3)
+	items["cooked_meat"] = _create_item("cooked_meat", "Cooked Meat", "food", 16, 0.5, "", 5, 20)
+	items["cooked_fish"] = _create_item("cooked_fish", "Cooked Fish", "food", 16, 0.5, "", 5, 15)
+	items["bread"] = _create_item("bread", "Bread", "food", 32, 0.3, "", 3, 10)
+	items["soup"] = _create_item("soup", "Soup", "food", 8, 0.5, "", 10, 25)
+	items["fish"] = _create_item("fish", "Raw Fish", "food", 16, 0.3, "", 0, 5)
+	items["meat"] = _create_item("meat", "Raw Meat", "food", 16, 0.5, "", 0, 3)
 	
 	# Building materials
 	items["torch"] = _create_item("torch", "Torch", "building", 32, 0.2)
@@ -84,11 +84,11 @@ func _load_items() -> void:
 	items["seed_wheat"] = _create_item("seed_wheat", "Wheat Seed", "resource", 64, 0.1)
 	items["wheat"] = _create_item("wheat", "Wheat", "resource", 64, 0.2)
 	items["flour"] = _create_item("flour", "Flour", "material", 64, 0.3)
-	items["apple"] = _create_item("apple", "Apple", "food", 32, 0.2, hunger_bonus=8, health_bonus=2)
-	items["mushroom"] = _create_item("mushroom", "Mushroom", "food", 32, 0.1, hunger_bonus=5)
+	items["apple"] = _create_item("apple", "Apple", "food", 32, 0.2, "", 2, 8)
+	items["mushroom"] = _create_item("mushroom", "Mushroom", "food", 32, 0.1, "", 0, 5)
 	items["herb"] = _create_item("herb", "Herb", "resource", 64, 0.1)
-	items["potion_health"] = _create_item("potion_health", "Health Potion", "consumable", 16, 0.3, health_bonus=30)
-	items["potion_mana"] = _create_item("potion_mana", "Mana Potion", "consumable", 16, 0.3, hunger_bonus=5)
+	items["potion_health"] = _create_item("potion_health", "Health Potion", "consumable", 16, 0.3, "", 30, 0)
+	items["potion_mana"] = _create_item("potion_mana", "Mana Potion", "consumable", 16, 0.3, "", 0, 5)
 
 ## Load all recipe definitions.
 func _load_recipes() -> void:
@@ -234,8 +234,11 @@ func _load_recipes() -> void:
 		"hide": 3,
 		"fibre": 5
 	})
+	# "dirt" is not an obtainable item (no resource drops it), so farm soil
+	# is made from sand + clay — both of which are harvestable.
 	recipes["farm_soil"] = _create_recipe("farm_soil", "farm_soil", 4, "", {
-		"dirt": 4
+		"sand": 3,
+		"clay": 1
 	})
 	recipes["fence"] = _create_recipe("fence", "fence", 1, "", {
 		"plank": 3
@@ -251,6 +254,18 @@ func _load_recipes() -> void:
 		"glass": 1,
 		"berry": 1
 	}, 5.0)
+
+	# Phase 3 (creatures & hunting): close the last obtainability gaps.
+	# Stone brick gives stone walls a source; flour (milled from wheat,
+	# which grows on grassland plants) gives bread a source. Together with
+	# the creature drops (meat/fish/hide/feather/bone) and the plant drops
+	# (wheat/herb/mushroom), every recipe in the database is now reachable.
+	recipes["stone_brick"] = _create_recipe("stone_brick", "stone_brick", 2, "", {
+		"stone": 2
+	})
+	recipes["flour"] = _create_recipe("flour", "flour", 2, "", {
+		"wheat": 1
+	})
 
 ## Create a basic item.
 func _create_item(item_id: String, display_name: String, category: String, stack_size: int, weight: float, 
@@ -284,6 +299,13 @@ func _create_recipe(recipe_id: String, result_item_id: String, result_quantity: 
 ## Get an item by ID.
 func get_item(item_id: String) -> ItemDefinition:
 	return items.get(item_id)
+
+## Get the display name for an item (falls back to the item id).
+func get_item_display_name(item_id: String) -> String:
+	var item := get_item(item_id)
+	if item == null:
+		return item_id
+	return item.display_name
 
 ## Get a recipe by ID.
 func get_recipe(recipe_id: String) -> RecipeDefinition:

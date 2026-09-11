@@ -49,6 +49,10 @@ func _refresh() -> void:
 
 	debug_label.text = text
 
+## Whether the debug overlay is currently shown.
+func is_enabled() -> bool:
+	return _enabled
+
 ## Called when debug toggle is pressed.
 func toggle() -> void:
 	_enabled = not _enabled
