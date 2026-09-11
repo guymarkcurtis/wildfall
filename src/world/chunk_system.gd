@@ -3,6 +3,8 @@ class_name ChunkSystem
 extends Node
 
 const CHUNK_SIZE: int = 16
+const TILE_SIZE: int = 32
+const PIXELS_PER_CHUNK: int = TILE_SIZE * CHUNK_SIZE
 const GENERATOR_VERSION: int = 1
 const DEFAULT_VIEWPORT_RADIUS: int = 3
 
@@ -34,7 +36,7 @@ func initialize(seed: int) -> void:
 
 ## Update player position and manage chunk loading/unloading.
 func update_player_position(world_position: Vector2) -> void:
-	var new_chunk: Vector2i = world_to_chunk_coords(Vector2i(world_position))
+	var new_chunk: Vector2i = world_to_chunk_coords(world_position)
 
 	if new_chunk != _player_position:
 		var old_chunk: Vector2i = _player_position
@@ -121,9 +123,15 @@ func _update_chunks() -> void:
 		if abs(coords.x - _player_position.x) > _viewport_radius or abs(coords.y - _player_position.y) > _viewport_radius:
 			unload_chunk(coords)
 
-## Convert world tile position to chunk coordinates.
-static func world_to_chunk_coords(tile_pos: Vector2i) -> Vector2i:
-	return Vector2i(tile_pos.x / CHUNK_SIZE, tile_pos.y / CHUNK_SIZE)
+## Convert a world (pixel) position to chunk coordinates.
+## Floors (not truncates) so negative coordinates land in the same chunk
+## the terrain renderer draws them in: chunk c covers pixels
+## [c * PIXELS_PER_CHUNK, (c + 1) * PIXELS_PER_CHUNK).
+static func world_to_chunk_coords(world_position: Vector2) -> Vector2i:
+	return Vector2i(
+		int(floor(world_position.x / float(PIXELS_PER_CHUNK))),
+		int(floor(world_position.y / float(PIXELS_PER_CHUNK)))
+	)
 
 ## Convert chunk coordinates to world tile start position.
 static func chunk_coords_to_world_start(chunk_coords: Vector2i) -> Vector2i:

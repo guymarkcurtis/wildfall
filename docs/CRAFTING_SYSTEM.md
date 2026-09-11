@@ -95,7 +95,9 @@ live system can provide is hidden automatically.
 
 ## Crafting Flow
 
-1. Player opens the crafting UI (C key)
+1. Player presses **C** to open the crafting UI — the panel starts
+   hidden (it used to cover the HUD at startup with all 40 rows); C
+   again closes it
 2. `Main` gathers obtainable recipes → `CraftingPanel.refresh(list)`
 3. Panel builds one `RecipeItemUI` row per recipe (name, cost, station,
    result, Craft button)

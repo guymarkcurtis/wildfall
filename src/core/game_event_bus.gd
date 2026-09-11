@@ -32,6 +32,7 @@ signal recipe_failed(recipe_id: String, reason: String)
 # --- Debug Events ---
 signal toggle_debug
 signal toggle_inventory_ui
+signal toggle_crafting_ui
 
 # --- Combat Events ---
 signal entity_hit(entity_id: String, damage: float)

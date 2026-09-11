@@ -104,6 +104,9 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("toggle_inventory"):
 		if event_bus:
 			event_bus.toggle_inventory_ui.emit()
+	if Input.is_action_just_pressed("toggle_crafting"):
+		if event_bus:
+			event_bus.toggle_crafting_ui.emit()
 
 ## Update hunger over time.
 func _process(delta: float) -> void:
@@ -201,7 +204,8 @@ func get_world_position() -> Vector2:
 
 ## Get player's chunk coordinate (pixels / (TILE_SIZE * CHUNK_SIZE)).
 func get_chunk_coordinate() -> Vector2i:
-	return Vector2i(int(global_position.x / 512.0), int(global_position.y / 512.0))
+	# Floor (not truncate) — must match ChunkSystem.world_to_chunk_coords.
+	return Vector2i(int(floor(global_position.x / 512.0)), int(floor(global_position.y / 512.0)))
 
 ## Signal handlers.
 func _on_health_changed(current: float, max: int) -> void:

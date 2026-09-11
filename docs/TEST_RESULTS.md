@@ -3,7 +3,7 @@
 ## Test Run Summary
 - **Date**: 2026-09-10
 - **Godot Version**: 4.6.stable (linux.x86_64, official)
-- **Test Script**: `tests/test_game.gd` (SceneTree harness: boots the real `main.tscn`, runs 41 assertions over ~10 frames, exits with the failure count as the exit code)
+- **Test Script**: `tests/test_game.gd` (SceneTree harness: boots the real `main.tscn`, runs 43 static assertions at frame 5, then a **live input phase** — C-key crafting-panel toggle, then a held 1050 px walk — and exits with the failure count as the exit code)
 
 ### Test command
 ```bash
@@ -31,7 +31,7 @@ pre-fix code produced:
 
 ## Result (after fixes, 2026-09-10)
 
-**41/41 checks passed, 0 script errors, exit code 0.**
+**50/50 checks passed, 0 script errors, exit code 0.**
 
 A separate 35-second run of the real game (main scene, no test script) also
 completed with **0 errors, 0 warnings, 0 leaked objects** at exit —
@@ -41,14 +41,15 @@ generation.
 | # | Section | Checks | Result |
 |---|---------|--------|--------|
 | 1 | Scene loading | 9 | 9/9 required nodes present (GameEventBus, WorldGenerator, ChunkSystem, TerrainRenderer, ResourceSpawner, ItemDatabase, Player, CameraController, SeedInput, HUD) |
-| 2 | World generation | 6 | chunk (0,0) data present; 3× chunk↔world coordinate math; biome map varied (4 distinct biomes across 49 sampled points) |
+| 2 | World generation | 7 | chunk (0,0) data present; 4× chunk-coord checks on **pixel** positions with floor semantics (incl. negatives — regression guard, see below); chunk→world start; biome map varied (4 distinct biomes across 49 sampled points) |
 | 3 | Terrain rendering | 2 | 12,544 tiles rendered for the initial 7×7 chunk ring; resources spawned |
 | 4 | Item database | 2 | 62 items, 40 recipes loaded |
 | 5 | Crafting panel | 4 | all 40 recipes displayed — Phase 3 (creature + plant drops, stone_brick, flour) closed every obtainability gap, so no ghost recipes remain; plank & wooden_axe visible; panel count matches the recipe database |
 | 6 | Camera | 2 | target set from player; lerp converges over frames |
 | 7 | Seed input | 6 | `change_seed` action exists (T); editor opens on T; buffer pre-filled; Escape cancels and keeps the old seed |
 | 8 | Save/load | 3 | save after moving succeeds; load restores exact player position (123.0, -77.0) |
-| 9 | Chunk lifecycle (B3) + regen | 6 | generating a far chunk spawns its resources via the real signal path; unloading frees nodes and spawner records; re-entering re-spawns identically (475 nodes); `set_seed(42)` regenerates and updates the HUD seed label |
+| 9 | Chunk lifecycle (B3) + regen | 8 | generating a far chunk spawns its resources via the real signal path; unloading frees nodes and spawner records; re-entering re-spawns identically (449 nodes); `set_seed(42)` regenerates and updates the HUD seed label |
+| 10 | Dynamic input phase (new) | 7 | panel starts hidden (doesn't cover the game); C opens it; second C press closes it; player actually walks 1050 px; ChunkSystem's nominal chunk tracks the player's real chunk after walking; the chunk under the feet stays loaded; terrain cells still rendered under the feet |
 
 ## Notes
 
@@ -79,6 +80,31 @@ Post-fix verification: harness **41/41, 0 script errors, exit 0**; 35 s
 live headless run **0 errors**. The 34 unwired future-phase scripts
 (see ARCHITECTURE.md) still do not parse — unchanged, intentional, zero
 runtime impact.
+
+## Post-push gameplay-bug fixes (player-reported)
+
+The first real play-through surfaced two runtime bugs the harness could not
+see (it teleports the player instead of walking):
+
+| # | Issue (as reported) | Root cause | Fix |
+|---|---------------------|-----------|-----|
+| G1 | "When I move the character the terrain disappears" | `ChunkSystem.world_to_chunk_coords()` divided **pixel** input by 16 (CHUNK_SIZE) — tile-unit math applied to pixel positions. A real chunk is 512 px wide (32 px tile × 16), so the system believed a chunk boundary was crossed every 16 px, re-centred the 7×7 ring on every stride, and unloaded the chunk under the player ~64 px into the walk | Chunk coords now floor **pixel** positions by `PIXELS_PER_CHUNK` (512); `player.gd`'s debug-label coordinate and `main.gd`'s overlay use the same function |
+| G2 | "A big crafting list is over the top of everything" at startup | The `CraftingPanel` node in `main.tscn` had no `visible = false` (40 recipe rows anchored over the HUD), and **no input action existed to toggle it at all** | Panel now starts hidden; new `toggle_crafting` action (C key) → `GameEventBus.toggle_crafting_ui` → `Main._on_toggle_crafting_ui()` flips `visible` (same wiring pattern as the I-key inventory) |
+
+The old harness had **blessed the wrong contract**: its chunk-math checks
+asserted tile-unit semantics (`world_to_chunk_coords(16, 0) == (1, 0)`), so
+41/41 runs were green while the runtime was broken. Those are replaced by
+four pixel/floor unit checks (origin, last pixel of chunk (0,0), first pixel
+of (1,1), negatives) plus the section-10 live-input phase: the player
+actually walks 1050 px (two real 512-px boundaries) and the test then
+verifies the nominal chunk, the chunk-loaded state and the rendered terrain
+cell are all still under the player's feet.
+
+Post-fix verification: harness **50/50, 0 script errors, exit 0**; 35 s
+live headless run **0 errors**. The dynamic phase drives real input
+(`Input.action_press` / `action_release` with per-frame state polling, since
+"just pressed" edges land on the frame *after* the press, and a
+release-then-press must be separate frames to register twice).
 
 ## Pre-fix known issues — all resolved by the 2026-09-10 review
 

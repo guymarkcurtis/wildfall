@@ -21,17 +21,31 @@ still used `Circle2D` (an abstract class in Godot 4 → `Creature.new()`
 crashed on every chunk generation) and the test's ghost-recipe check still
 encoded the pre-Phase-3 expectation. Both fixed: the placeholder body is a
 `Polygon2D` circle approximation, and the test now asserts the whole
-recipe database is visible (no ghosts left). See `docs/TEST_RESULTS.md`.
+recipe database is visible (no ghosts left).
 
-## TEST RESULTS (2026-09-10)
+The first real play-through (same day, post-push) then found two runtime
+bugs the harness could not catch because it teleports the player instead of
+walking: **chunk coordinates were computed as pixels ÷ 16 instead of
+pixels ÷ 512** (the 7×7 ring re-centred every 16 px and the ground under
+the player was unloaded ~64 px into every walk — "the terrain disappears
+when I move"), and **the crafting panel was visible at startup with no
+input action to close it** ("a big crafting list over everything"). Both
+fixed: chunk coords now floor pixel positions by `PIXELS_PER_CHUNK` (512);
+the panel starts hidden and a new C-key `toggle_crafting` action opens/closes
+it (event bus → Main, same wiring as the I-key inventory). The harness grew
+4 pixel/floor unit checks plus a live-input phase (panel toggle + a held
+1050 px walk with chunk/terrain-under-feet guards). See
+`docs/TEST_RESULTS.md`.
 
-Automated headless run of the real main scene — **41/41 checks passed,
+## TEST RESULTS (2026-09-10, updated after the post-push gameplay fixes)
+
+Automated headless run of the real main scene — **50/50 checks passed,
 0 script errors, exit code 0**:
 
 | Test | Status |
 |------|--------|
 | Scene loading + 9 required nodes | PASS (9/9) |
-| World generation (chunk data, 3× coordinate math, biome variety) | PASS (4 biomes sampled) |
+| World generation (chunk data, 4× pixel/chunk coordinate math, biome variety) | PASS (4 biomes sampled) |
 | Terrain rendering (12,544 tiles) + resource spawn | PASS |
 | Item database (62 items, 40 recipes) | PASS |
 | Crafting panel (all 40 visible — Phase 3 left no ghost recipes) | PASS |
@@ -39,6 +53,8 @@ Automated headless run of the real main scene — **41/41 checks passed,
 | Seed input (T opens, pre-fill, Escape cancels) | PASS |
 | Save/load round-trip (position restored exactly) | PASS |
 | Chunk lifecycle (generate/unload/reload deterministic) + set_seed regen | PASS |
+| Live input: crafting panel hidden at start, C opens it, second C closes it | PASS |
+| Live input: 1050 px walk keeps the chunk loaded + terrain rendered under the player | PASS |
 
 A 30-second headless run of the actual game also completed with 0 errors,
 0 warnings and 0 leaked objects.
@@ -80,7 +96,7 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - `src/systems/` — SaveSystem, ItemDatabase, CreatureSpawner (Phase 3)
 - `resources/` — ItemDefinition, RecipeDefinition, BiomeDefinition, CreatureDefinition (wired); TechnologyDefinition, BuildingDefinition (future phases)
 - `scenes/` — `main.tscn` is the only wired scene (see dead-code inventory in ARCHITECTURE.md)
-- `tests/` — `test_game.gd` headless harness (41 checks)
+- `tests/` — `test_game.gd` headless harness (50 checks: 43 static + 7 live-input)
 - `docs/` — Project documentation
 
 ## RECENTLY COMPLETED (2026-09-10 review)
@@ -92,7 +108,7 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - Fixed biome registration (bare Resource → BiomeDefinition; null-key bug) (B17)
 - Fixed ObjectDB leak: NoiseLayers now a child of WorldGenerator (B18)
 - Raised the recipe panel cap so all obtainable recipes are reachable (B19)
-- Rewrote the test harness to exercise the real main scene end-to-end (41 checks)
+- Rewrote the test harness to exercise the real main scene end-to-end (50 checks)
 - Corrected all stale documentation
 - Phase 3: wired creature spawning into chunk generation (7 creature types,
   per-chunk deterministic placement), live Creature nodes with wander/flee
@@ -105,6 +121,13 @@ A 30-second headless run of the actual game also completed with 0 errors,
   still asserting the pre-Phase-3 expectation (now asserts all 40 recipes
   are visible). Verified: 41/41 checks, 0 script errors; 35 s live headless
   run with 0 errors
+- Post-push gameplay fixes (player-reported): chunk coords now floor
+  **pixel** positions by 512 px (the old pixels ÷ 16 math unloaded the
+  ground under the player ~64 px into every walk); crafting panel starts
+  hidden with a new C-key `toggle_crafting` action (event bus → Main).
+  Harness gained 4 pixel-math checks + a live-input phase (panel
+  open/close + 1050 px walk with terrain-under-feet guards): **50/50
+  checks, 0 script errors; 35 s live headless run with 0 errors**
 
 ## NEXT TASKS
 

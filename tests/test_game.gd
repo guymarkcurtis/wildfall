@@ -16,6 +16,14 @@ var _frames: int = 0
 var _passed: int = 0
 var _failed: int = 0
 var _done: bool = false
+# Dynamic phases after the static checks:
+# 0 -> panel starts hidden, press C      1 -> wait for panel to open, press C
+# 2 -> wait for panel to close, walk     3 -> walk until far enough, check
+# 4 -> free the tree, then quit
+var _phase: int = 0
+var _phase_frame: int = 0
+var _crafted_press_sent: bool = false
+var _walk_start: Vector2 = Vector2.ZERO
 
 func _init() -> void:
 	# Instantiate and attach first: the _ready chain runs synchronously on
@@ -29,15 +37,90 @@ func _process(_delta: float) -> bool:
 	if _frames == 5 and not _done:
 		_run_checks()
 		_done = true
-	# Free the game tree a couple of frames later: queued frees flush at the
-	# end of the frame, so exiting immediately would report leaked instances.
-	if _frames == 8 and _done and is_instance_valid(_main):
-		_main.queue_free()
-	if _frames == 10 and _done:
-		print("\n%d passed, %d failed" % [_passed, _failed])
-		quit(_failed if _failed > 0 else 0)
-		return true
+	if not _done:
+		return false
+	match _phase:
+		0:
+			var panel: Node = _main.get_node("HUD/CraftingPanel")
+			_check(panel.visible == false, "Crafting panel starts hidden (does not cover the game)")
+			Input.action_press("toggle_crafting")
+			_phase = 1
+			_phase_frame = _frames
+		1:
+			# The first press was sent at frame 5; the per-frame input flush
+			# raises the "just pressed" edge on the NEXT frame, so polling
+			# (with a timeout) instead of assuming a frame edge.
+			var panel: Node = _main.get_node("HUD/CraftingPanel")
+			if panel.visible == true:
+				_check(true, "C key opens the crafting panel")
+				# Release here: a second action_press in the same frame
+				# would net out to "no state change" at the next flush, so
+				# the release and the closing press must be separate frames.
+				Input.action_release("toggle_crafting")
+				_phase = 2
+				_phase_frame = _frames
+				_crafted_press_sent = false
+			elif _frames > _phase_frame + 20:
+				_check(false, "C key opens the crafting panel")
+				_phase = 4
+				_phase_frame = _frames
+		2:
+			# One frame after the release, send the second press so the input
+			# flush sees a fresh press edge; then wait for the close.
+			if not _crafted_press_sent:
+				_crafted_press_sent = true
+				Input.action_press("toggle_crafting")
+				return false
+			var panel: Node = _main.get_node("HUD/CraftingPanel")
+			if panel.visible == false:
+				_check(true, "Second C press closes the crafting panel again")
+				Input.action_release("toggle_crafting")
+				_walk_start = _main.get_node("Player").global_position
+				Input.action_press("move_right")
+				_phase = 3
+				_phase_frame = _frames
+			elif _frames > _phase_frame + 20:
+				_check(false, "Second C press closes the crafting panel again")
+				_phase = 4
+				_phase_frame = _frames
+		3:
+			var pos: Vector2 = _main.get_node("Player").global_position
+			if pos.x > _walk_start.x + 1050.0 or _frames > _phase_frame + 3600:
+				_run_walk_checks(pos)
+				Input.action_release("move_right")
+				# Free a couple of frames later: queued frees flush at the
+				# end of the frame, so exiting immediately would report
+				# leaked instances.
+				_phase = 4
+				_phase_frame = _frames
+		4:
+			if _frames == _phase_frame + 1 and is_instance_valid(_main):
+				_main.queue_free()
+			elif _frames > _phase_frame + 2:
+				print("\n%d passed, %d failed" % [_passed, _failed])
+				quit(_failed if _failed > 0 else 0)
+				return true
 	return false
+
+## Dynamic regression: walk 1050+ px (two real 512-px chunk boundaries) and
+## verify the world stays under the player. With the old pixels/16 chunk
+## math, the ground was already unloaded after ~64 px of walking.
+func _run_walk_checks(pos: Vector2) -> void:
+	var chunk_system: Node = _main.get_node("ChunkSystem")
+	var terrain_renderer: Node = _main.get_node("TerrainRenderer")
+	_check(pos.x > _walk_start.x + 1000.0, \
+			"Player actually walked right (%.0f -> %.0f px)" % [_walk_start.x, pos.x])
+	var nominal: Vector2i = chunk_system.get_player_chunk()
+	_check(ChunkSystem.world_to_chunk_coords(pos) == nominal, \
+			"ChunkSystem tracks the player's real chunk after walking (pos %s, nominal %s)" % [str(pos), str(nominal)])
+	var feet: Vector2i = Vector2i(int(floor(pos.x / 32.0)), int(floor(pos.y / 32.0)))
+	var feet_chunk: Vector2i = Vector2i(int(floor(feet.x / 16.0)), int(floor(feet.y / 16.0)))
+	_check(chunk_system.has_chunk(feet_chunk), \
+			"Chunk under the player's feet %s is still loaded after walking" % str(feet_chunk))
+	# TileMapLayer 4.6 exposes get_cell_source_id (source id == tile id in
+	# the renderer; -1 means "no cell"). has_cell is not part of the API here.
+	_check(terrain_renderer.get_cell_source_id(feet) != -1, \
+			"Terrain still rendered under the player's feet %s after walking (no vanishing ground)" % str(feet))
 
 func _check(condition: bool, label: String) -> void:
 	if condition:
@@ -76,8 +159,16 @@ func _run_checks() -> void:
 	# --- 2. World generation -----------------------------------------------
 	var chunk0: Dictionary = chunk_system.get_chunk(Vector2i(0, 0))
 	_check(chunk0.size() > 0, "Chunk (0,0) generated with terrain data")
-	_check(ChunkSystem.world_to_chunk_coords(Vector2i(16, 0)) == Vector2i(1, 0), "world_to_chunk_coords(16,0) == (1,0)")
-	_check(ChunkSystem.world_to_chunk_coords(Vector2i(31, 31)) == Vector2i(1, 1), "world_to_chunk_coords(31,31) == (1,1)")
+	# Chunk coordinates come from PIXEL positions (one chunk = 512 px) with
+	# floor semantics: the pixel just left/above the origin belongs to
+	# chunk (-1,0)/(0,-1) — exactly where the terrain renderer draws that
+	# tile. (Regression guard: dividing pixels by 16 treated every 16 px as
+	# a chunk boundary and unloaded the ground under the player while
+	# walking — "the terrain disappears when I move".)
+	_check(ChunkSystem.world_to_chunk_coords(Vector2(0, 0)) == Vector2i(0, 0), "chunk math: origin -> (0,0)")
+	_check(ChunkSystem.world_to_chunk_coords(Vector2(511, 511)) == Vector2i(0, 0), "chunk math: last pixel of chunk (0,0) stays (0,0)")
+	_check(ChunkSystem.world_to_chunk_coords(Vector2(512, 512)) == Vector2i(1, 1), "chunk math: first pixel of chunk (1,1) -> (1,1)")
+	_check(ChunkSystem.world_to_chunk_coords(Vector2(-1, -1)) == Vector2i(-1, -1), "chunk math: negative pixels floor, never truncate")
 	_check(ChunkSystem.chunk_coords_to_world_start(Vector2i(1, 0)) == Vector2i(16, 0), "chunk_coords_to_world_start(1,0) == (16,0)")
 	var seen_biomes: Dictionary = {}
 	for dx in range(-3, 4):

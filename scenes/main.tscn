@@ -220,6 +220,7 @@ offset_left = -250.0
 offset_top = 4.0
 offset_right = 250.0
 offset_bottom = 200.0
+visible = false
 script = ExtResource("11_craft")
 
 [node name="Title" type="Label" parent="HUD/CraftingPanel"]

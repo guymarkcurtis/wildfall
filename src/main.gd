@@ -57,6 +57,7 @@ func _ready() -> void:
 	event_bus.world_seed_set.connect(_on_world_seed_set)
 	event_bus.inventory_changed.connect(_on_inventory_changed)
 	event_bus.toggle_inventory_ui.connect(_on_toggle_inventory_ui)
+	event_bus.toggle_crafting_ui.connect(_on_toggle_crafting_ui)
 	chunk_system.chunk_generated.connect(_on_chunk_generated)
 	chunk_system.chunk_unloaded.connect(_on_chunk_unloaded)
 	crafting_panel.recipe_craft_requested.connect(_on_craft_requested)
@@ -263,6 +264,10 @@ func _on_inventory_changed() -> void:
 func _on_toggle_inventory_ui() -> void:
 	inventory_panel.visible = not inventory_panel.visible
 
+## Player toggled the crafting UI (C key, via the event bus).
+func _on_toggle_crafting_ui() -> void:
+	crafting_panel.visible = not crafting_panel.visible
+
 ## Per-frame: keep chunk loading in sync with the player, move the camera, keep the HUD
 ## in step with the seed editor, and update the debug overlay.
 func _process(delta: float) -> void:
@@ -295,7 +300,9 @@ func _update_debug_overlay() -> void:
 		return
 	var player_pos: Vector2 = player.get_world_position()
 	var tile_pos: Vector2i = Vector2i(int(player_pos.x / float(TILE_SIZE)), int(player_pos.y / float(TILE_SIZE)))
-	var chunk_pos: Vector2i = Vector2i(tile_pos.x / CHUNK_SIZE, tile_pos.y / CHUNK_SIZE)
+	# Show the same chunk ChunkSystem uses (pixel-based, floor) so the debug
+	# label never disagrees with the chunk that is actually loaded.
+	var chunk_pos: Vector2i = ChunkSystem.world_to_chunk_coords(player_pos)
 	var biome: String = world_generator.get_biome_at_world(tile_pos.x, tile_pos.y)
 	debug_overlay.update_debug(player_pos, tile_pos, chunk_pos, _world_seed, biome,
 			world_generator.get_noise_values(float(tile_pos.x), float(tile_pos.y)),
