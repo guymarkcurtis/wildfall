@@ -24,16 +24,36 @@ var _water_cells: Dictionary = {}
 var _water_frame: int = 0
 var _water_frame_elapsed: float = 0.0
 var _art_generator: TileSetGenerator = null
-# The TileMap remains as the logical terrain grid. These sprites are its
-# high-resolution visual surface, generated once per streamed chunk.
+# The TileMap remains as the logical terrain grid. Visuals deliberately live
+# in sibling layers so its legacy tiles can never peek through the new surface.
 var _chunk_art_sprites: Dictionary = {}
 var _chunk_tile_ids: Dictionary = {}
+var _chunk_detail_sprites: Dictionary = {}
+var _surface_layer: Node2D = null
+var _detail_layer: Node2D = null
 
 ## Set up the tile set.
 func _ready() -> void:
 	_create_tile_set()
 	collision_enabled = true
 	world_generator = get_node_or_null("../WorldGenerator")
+	_create_visual_layers()
+	# Physics stays on this TileMapLayer, while the visual tile sheet is hidden.
+	# This prevents a 32px grid from leaking through at material transitions.
+	visible = false
+
+func _create_visual_layers() -> void:
+	var parent := get_parent()
+	if parent == null:
+		return
+	_surface_layer = Node2D.new()
+	_surface_layer.name = "TerrainSurfaceLayer"
+	_surface_layer.z_index = -20
+	parent.call_deferred("add_child", _surface_layer)
+	_detail_layer = Node2D.new()
+	_detail_layer.name = "TerrainDetailLayer"
+	_detail_layer.z_index = -10
+	parent.call_deferred("add_child", _detail_layer)
 
 ## True when the given world tile is currently drawn as water.
 func is_water_cell(world_tile: Vector2i) -> bool:
@@ -68,6 +88,11 @@ func clear_all() -> void:
 		if is_instance_valid(sprite):
 			sprite.queue_free()
 	_chunk_art_sprites.clear()
+	for sprites in _chunk_detail_sprites.values():
+		for sprite in sprites:
+			if is_instance_valid(sprite):
+				sprite.queue_free()
+	_chunk_detail_sprites.clear()
 	clear()
 
 ## Clear rendered tiles for one chunk (used when the chunk is unloaded).
@@ -83,6 +108,7 @@ func clear_chunk(chunk_coords: Vector2i) -> void:
 		if is_instance_valid(sprite):
 			sprite.queue_free()
 		_chunk_art_sprites.erase(chunk_key)
+	_clear_chunk_details(chunk_key)
 	var world_start: Vector2i = _chunk_coords_to_world_start(chunk_coords)
 	for y in range(CHUNK_SIZE):
 		for x in range(CHUNK_SIZE):
@@ -126,6 +152,7 @@ func _render_chunk(chunk_coords: Vector2i, data: Dictionary) -> void:
 
 	_chunk_tile_ids[str(chunk_coords)] = tile_ids
 	_update_chunk_surface(chunk_coords, tile_ids)
+	_update_chunk_details(chunk_coords, tile_ids)
 
 func _get_source_id(tile_id: int) -> int:
 	if tile_id != TILE_WATER:
@@ -153,9 +180,63 @@ func _update_chunk_surface(chunk_coords: Vector2i, tile_ids: PackedInt32Array) -
 		sprite = Sprite2D.new()
 		sprite.centered = false
 		sprite.position = Vector2(world_start * TILE_SIZE)
-		add_child(sprite)
+		if _surface_layer != null:
+			_surface_layer.add_child(sprite)
+		else:
+			add_child(sprite)
 		_chunk_art_sprites[chunk_key] = sprite
 	sprite.texture = texture
+
+## Add sparse, independently placed accents. They make the ground feel alive
+## without turning every floor pixel into a repeated illustration.
+func _update_chunk_details(chunk_coords: Vector2i, tile_ids: PackedInt32Array) -> void:
+	if _art_generator == null or _detail_layer == null:
+		return
+	var chunk_key := str(chunk_coords)
+	_clear_chunk_details(chunk_key)
+	var random := RandomNumberGenerator.new()
+	random.seed = int(chunk_coords.x * 92821 + chunk_coords.y * 68917 + 1729)
+	var sprites: Array[Sprite2D] = []
+	var world_start := _chunk_coords_to_world_start(chunk_coords)
+	var count := random.randi_range(9, 15)
+	for _i in range(count):
+		var tile_x := random.randi_range(0, CHUNK_SIZE - 1)
+		var tile_y := random.randi_range(0, CHUNK_SIZE - 1)
+		var tile_id: int = tile_ids[tile_y * CHUNK_SIZE + tile_x]
+		var detail_index := _detail_for_tile(tile_id, random)
+		if detail_index < 0:
+			continue
+		var sprite := Sprite2D.new()
+		sprite.texture = _art_generator.get_ground_detail_texture(detail_index)
+		sprite.position = Vector2(
+			(world_start.x + tile_x) * TILE_SIZE + random.randf_range(5.0, 27.0),
+			(world_start.y + tile_y) * TILE_SIZE + random.randf_range(5.0, 27.0)
+		)
+		sprite.rotation = random.randf_range(-0.35, 0.35)
+		sprite.scale = Vector2.ONE * random.randf_range(0.55, 0.82)
+		sprite.modulate.a = random.randf_range(0.72, 0.94)
+		_detail_layer.add_child(sprite)
+		sprites.append(sprite)
+	_chunk_detail_sprites[chunk_key] = sprites
+
+func _clear_chunk_details(chunk_key: String) -> void:
+	if not _chunk_detail_sprites.has(chunk_key):
+		return
+	for sprite in _chunk_detail_sprites[chunk_key]:
+		if is_instance_valid(sprite):
+			sprite.queue_free()
+	_chunk_detail_sprites.erase(chunk_key)
+
+func _detail_for_tile(tile_id: int, random: RandomNumberGenerator) -> int:
+	match tile_id:
+		TILE_WATER: return -1
+		TILE_SAND: return [0, 3, 4][random.randi_range(0, 2)]
+		TILE_GRASS: return [1, 3, 4, 5][random.randi_range(0, 3)]
+		TILE_FOREST: return [2, 3, 4, 5][random.randi_range(0, 3)]
+		TILE_DIRT, TILE_MUD: return [0, 3, 4, 6][random.randi_range(0, 3)]
+		TILE_STONE: return [0, 4, 7][random.randi_range(0, 2)]
+		TILE_SNOW: return 7
+		_: return -1
 
 func _update_chunk_surface_from_key(chunk_key: String, tile_ids: PackedInt32Array) -> void:
 	var coords_text := chunk_key.trim_prefix("(").trim_suffix(")").split(", ")

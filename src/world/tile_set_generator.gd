@@ -11,9 +11,11 @@ const TILE_SIZE: int = 32
 const TERRAIN_ATLAS_PATH := "res://assets/tiles/wildfall-terrain-atlas.png"
 const RESOURCE_ATLAS_PATH := "res://assets/tiles/wildfall-resources-atlas.png"
 const WATER_ANIMATION_PATH := "res://assets/tiles/wildfall-water-animation.png"
+const GROUND_DETAILS_PATH := "res://assets/tiles/wildfall-ground-details.png"
 const TERRAIN_ATLAS: Texture2D = preload("res://assets/tiles/wildfall-terrain-atlas.png")
 const RESOURCE_ATLAS: Texture2D = preload("res://assets/tiles/wildfall-resources-atlas.png")
 const WATER_ANIMATION: Texture2D = preload("res://assets/tiles/wildfall-water-animation.png")
+const GROUND_DETAILS: Texture2D = preload("res://assets/tiles/wildfall-ground-details.png")
 
 const WATER_FRAME_SOURCE_IDS := [100, 101, 102, 103]
 
@@ -21,9 +23,7 @@ const WATER_FRAME_SOURCE_IDS := [100, 101, 102, 103]
 # the cropped resource textures shared so chunk streaming never reprocesses an
 # atlas for every tree, rock, and bush.
 static var _resource_texture_cache: Dictionary = {}
-# Full-resolution material cells, retained for the chunk surface compositor.
-# These are sampled in world-space rather than repeated as 32px tiles.
-static var _terrain_surface_cache: Dictionary = {}
+static var _ground_detail_texture_cache: Dictionary = {}
 
 # Terrain tile IDs
 const TILE_WATER: int = 0
@@ -122,53 +122,87 @@ func _load_resource_texture(index: int) -> ImageTexture:
 	_resource_texture_cache[index] = texture
 	return texture
 
-## Compose a chunk from the original high-resolution material art. Sampling is
-## anchored to world pixels, so two neighbouring cells of the same material
-## share a continuous image instead of visibly repeating a 32px tile.
+## Returns one sparse, transparent environment accent from the 4x2 detail
+## sheet. These are deliberately separate sprites rather than pixels baked
+## into the floor, allowing each biome to be re-scattered as chunks stream.
+func get_ground_detail_texture(index: int) -> ImageTexture:
+	if _ground_detail_texture_cache.has(index):
+		return _ground_detail_texture_cache[index]
+	var texture := _load_atlas_cell(GROUND_DETAILS_PATH, 4, 2, index)
+	_ground_detail_texture_cache[index] = texture
+	return texture
+
+## Compose a quiet, continuous ground material. The palette is sampled in world
+## space so the faint painted texture crosses chunk and tile borders without
+## repeating. Props, plants and rocks are rendered later as independent nodes.
 func create_contiguous_chunk_image(world_start: Vector2i, tile_ids: PackedInt32Array,
 		chunk_size: int, water_frame: int) -> Image:
 	var image := Image.create_empty(chunk_size * TILE_SIZE, chunk_size * TILE_SIZE,
 			false, Image.FORMAT_RGBA8)
-	for y in range(chunk_size):
-		for x in range(chunk_size):
-			var index: int = y * chunk_size + x
-			var tile_id: int = tile_ids[index] if index < tile_ids.size() else TILE_GRASS
-			var source := _get_continuous_surface(tile_id, water_frame)
-			if source == null or source.is_empty():
-				continue
-			var world_pixel := Vector2i(
-				(world_start.x + x) * TILE_SIZE,
-				(world_start.y + y) * TILE_SIZE
-			)
-			var source_x: int = posmod(world_pixel.x, max(1, source.get_width() - TILE_SIZE))
-			var source_y: int = posmod(world_pixel.y, max(1, source.get_height() - TILE_SIZE))
-			image.blit_rect(source, Rect2i(source_x, source_y, TILE_SIZE, TILE_SIZE),
-					Vector2i(x * TILE_SIZE, y * TILE_SIZE))
+	for y in range(image.get_height()):
+		for x in range(image.get_width()):
+			var tile_x: int = x / TILE_SIZE
+			var tile_y: int = y / TILE_SIZE
+			var tile_index: int = tile_y * chunk_size + tile_x
+			var tile_id: int = tile_ids[tile_index] if tile_index < tile_ids.size() else TILE_GRASS
+			var world_x: int = (world_start.x * TILE_SIZE) + x
+			var world_y: int = (world_start.y * TILE_SIZE) + y
+			var colour: Color = _material_colour(tile_id, world_x, world_y, water_frame)
+			# Feather only the edge between differing materials. This preserves
+			# shorelines and biome shapes without a hard 32px checkerboard seam.
+			var edge_distance: int = min(min(x % TILE_SIZE, TILE_SIZE - 1 - (x % TILE_SIZE)),
+					min(y % TILE_SIZE, TILE_SIZE - 1 - (y % TILE_SIZE)))
+			if edge_distance < 4:
+				var neighbour_id := _nearest_different_neighbour(tile_ids, chunk_size, tile_x, tile_y, x, y, tile_id)
+				if neighbour_id >= 0:
+					var neighbour_colour := _material_colour(neighbour_id, world_x, world_y, water_frame)
+					colour = neighbour_colour.lerp(colour, float(edge_distance + 1) / 5.0)
+			image.set_pixel(x, y, colour)
 	return image
 
-func _get_continuous_surface(tile_id: int, water_frame: int) -> Image:
-	if tile_id == TILE_WATER:
-		return _get_atlas_surface(WATER_ANIMATION, 4, 1, water_frame, "water_%d" % water_frame)
-	return _get_atlas_surface(TERRAIN_ATLAS, 4, 2, tile_id, "terrain_%d" % tile_id)
+func _nearest_different_neighbour(tile_ids: PackedInt32Array, chunk_size: int,
+		tile_x: int, tile_y: int, pixel_x: int, pixel_y: int, tile_id: int) -> int:
+	var candidates: Array[Vector2i] = []
+	if pixel_x % TILE_SIZE < 4: candidates.append(Vector2i(-1, 0))
+	if pixel_x % TILE_SIZE > TILE_SIZE - 5: candidates.append(Vector2i(1, 0))
+	if pixel_y % TILE_SIZE < 4: candidates.append(Vector2i(0, -1))
+	if pixel_y % TILE_SIZE > TILE_SIZE - 5: candidates.append(Vector2i(0, 1))
+	for direction in candidates:
+		var nx := tile_x + direction.x
+		var ny := tile_y + direction.y
+		if nx < 0 or nx >= chunk_size or ny < 0 or ny >= chunk_size:
+			continue
+		var neighbour: int = tile_ids[ny * chunk_size + nx]
+		if neighbour != tile_id:
+			return neighbour
+	return -1
 
-func _get_atlas_surface(atlas: Texture2D, columns: int, rows: int, index: int,
-		cache_key: String) -> Image:
-	if _terrain_surface_cache.has(cache_key):
-		return _terrain_surface_cache[cache_key]
-	if atlas == null:
-		return null
-	var sheet := atlas.get_image()
-	if sheet == null or sheet.is_empty():
-		return null
-	var cell_width: int = sheet.get_width() / columns
-	var cell_height: int = sheet.get_height() / rows
-	var column: int = posmod(index, columns)
-	var row: int = clampi(index / columns, 0, rows - 1)
-	var surface := sheet.get_region(Rect2i(
-		column * cell_width, row * cell_height, cell_width, cell_height
-	))
-	_terrain_surface_cache[cache_key] = surface
-	return surface
+func _material_colour(tile_id: int, world_x: int, world_y: int, water_frame: int) -> Color:
+	var base := _base_colour(tile_id)
+	# Several low-amplitude waves create a hand-painted mineral/soil variation
+	# but intentionally never form a visible repeating stamp.
+	var variation := sin(float(world_x) * 0.022 + float(world_y) * 0.013) * 0.028
+	variation += sin(float(world_x) * -0.007 + float(world_y) * 0.019) * 0.018
+	variation += sin(float(world_x + world_y) * 0.051) * 0.009
+	if tile_id == TILE_WATER:
+		variation += sin(float(world_x) * 0.036 + float(world_y) * 0.018 + water_frame * 1.57) * 0.035
+	return Color(
+		clampf(base.r + variation, 0.0, 1.0),
+		clampf(base.g + variation, 0.0, 1.0),
+		clampf(base.b + variation, 0.0, 1.0), 1.0
+	)
+
+func _base_colour(tile_id: int) -> Color:
+	match tile_id:
+		TILE_WATER: return Color("#1b4b50")
+		TILE_SAND: return Color("#b28d54")
+		TILE_GRASS: return Color("#587143")
+		TILE_FOREST: return Color("#314431")
+		TILE_DIRT: return Color("#796044")
+		TILE_STONE: return Color("#687078")
+		TILE_SNOW: return Color("#c8d2d2")
+		TILE_MUD: return Color("#504b38")
+		_: return Color("#587143")
 
 ## Crops a source module, smooths it to the current world tile size, and
 ## preserves alpha for resource sprites.
@@ -181,6 +215,8 @@ func _load_atlas_cell(path: String, columns: int, rows: int, index: int) -> Imag
 			atlas = RESOURCE_ATLAS
 		WATER_ANIMATION_PATH:
 			atlas = WATER_ANIMATION
+		GROUND_DETAILS_PATH:
+			atlas = GROUND_DETAILS
 	var sheet: Image = atlas.get_image() if atlas != null else null
 	if sheet == null or sheet.is_empty() or columns <= 0 or rows <= 0:
 		push_warning("Wildfall art atlas could not be loaded: %s" % path)
