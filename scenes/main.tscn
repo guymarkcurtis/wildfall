@@ -1,4 +1,4 @@
-[gd_scene load_steps=29 format=3]
+[gd_scene load_steps=31 format=3]
 
 [ext_resource type="Script" path="res://src/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://src/core/game_event_bus.gd" id="2_eventbus"]
@@ -28,6 +28,8 @@
 [ext_resource type="Script" path="res://src/systems/technology_system.gd" id="26_technology"]
 [ext_resource type="Script" path="res://src/ui/technology_panel.gd" id="27_technology_panel"]
 [ext_resource type="Script" path="res://src/systems/texture_pack_manager.gd" id="28_texture_packs"]
+[ext_resource type="Script" path="res://src/systems/mission_manager.gd" id="29_missions"]
+[ext_resource type="Script" path="res://src/ui/mission_panel.gd" id="30_mission_panel"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -191,6 +193,15 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("27_technology_panel")
 
+[node name="MissionPanel" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("30_mission_panel")
+
 [node name="CraftingPanel" type="Control" parent="HUD"]
 layout_mode = 3
 anchors_preset = 7
@@ -283,3 +294,6 @@ text = "Station: "
 
 [node name="SaveSystem" type="Node" parent="."]
 script = ExtResource("15_save")
+
+[node name="MissionManager" type="Node" parent="."]
+script = ExtResource("29_missions")
