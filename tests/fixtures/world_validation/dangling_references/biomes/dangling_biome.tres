@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="BiomeDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/biome_definition.gd" id="1_biome"]
+
+[resource]
+script = ExtResource("1_biome")
+id = "dangling_biome"
+display_name = "Dangling Biome"
+preferred_neighbors = PackedStringArray("ghost_neighbor")
+transition_biome_ids = PackedStringArray("ghost_transition")
+terrain_tile_id = "grass"
+resource_types = PackedStringArray("ghost_resource")

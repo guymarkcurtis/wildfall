@@ -13,14 +13,23 @@ The current world is finite and chunk-streamed using the dimensions and radius
 in `data/world/world_generation_config.tres`. Coordinates and seed derivation
 remain independent of those bounds so a future effectively infinite world can
 reuse the same generation APIs. Water is produced as a physical mask with
-coastline and inland-lake rules, not as a normal biome. Cave entrances are
-data-driven POI candidates, while cave spaces are generated separately by
-`CaveSpaceGenerator`; cave reset/depletion policy is intentionally not part of
-that generator.
+coastline and inland-lake rules, not as a normal biome.
 
-At chunk-runtime population, a candidate carrying a cave definition link
-becomes a `CaveEntrance` with its deterministic identity intact. Interacting
-with it opens `cave_space.tscn`, generated from the world seed, stable entrance
+POI candidate generation is a generic stage: every discovered
+`POIDefinition` contributes candidates from its own spacing grid, biome and
+environment constraints, and `spawn_weight`. Cave entrances are one consumer
+of that stage, not a special path — a POI that a cave definition links to
+additionally scales its placement chance by the biome's
+`cave_entrance_suitability` and carries the stable cave identity. Cave spaces
+themselves are generated separately by `CaveSpaceGenerator`; cave
+reset/depletion policy is intentionally not part of that generator.
+
+At chunk-runtime population, candidates are routed by their data fields, not
+by content names: a candidate carrying a cave definition link becomes a
+`CaveEntrance` with its deterministic identity intact; any other candidate
+becomes a plain `PoiMarker` runtime node (a generic surface marker carrying
+the POI's identity, category, and display name). Interacting with an entrance
+opens `cave_space.tscn`, generated from the world seed, stable entrance
 identity, and cave definition. The cave is placed in a separate runtime
 coordinate space, so surface terrain, collisions, streamed objects, and cave
 geometry cannot overlap. Leaving restores the exact surface position. This is
@@ -29,10 +38,10 @@ and data-defined underground deposit markers, and records discovery. Deposit
 candidate generation is separate from runtime harvesting, depletion, and reset
 policy, which remain intentionally undecided.
 
-POIs use their data-defined `min_spacing_tiles` to derive stable world-space
-anchor cells. This avoids per-chunk scattering and prevents adjacent chunks
-from producing overlapping candidates, while preserving independent generation
-and reload of each chunk.
+Every POI — cave-linked or not — uses its data-defined `min_spacing_tiles` to
+derive stable world-space anchor cells. This avoids per-chunk scattering and
+prevents adjacent chunks from producing overlapping candidates, while
+preserving independent generation and reload of each chunk.
 
 ## Overview
 
@@ -49,6 +58,52 @@ biome receives a configurable score bias, while that asset's
 transition biases. This produces broad, reproducible regions without encoding
 any particular biome relationship in source. The regional scale and all three
 weights are authored in `world_generation_config.tres`.
+
+## Coherent-region stage
+
+Biome selection is per-tile, so the raw map can leave small fragments of a
+biome that the data says deserves broader regions. A final stage over the
+per-tile map fixes that, driven entirely by biome data:
+
+- The map is divided into world-aligned **region cells** of
+  `region_cell_size_tiles` × `region_cell_size_tiles` tiles (config, default
+  8). Because 8 divides the 16-tile chunk size, every chunk holds exactly a
+  disjoint 2×2 of cells, so no cell straddles a chunk boundary and a cell's
+  content can never differ between two neighbouring chunks.
+- Each cell's **dominant biome** is the most common biome among the cell's
+  land tiles (water tiles are excluded — water is a physical mask, not a
+  biome). All-water cells stay water. Ties break toward the regional biome at
+  the cell centre, then toward the smallest biome id.
+- A biome that declares `minimum_region_size M > 0` in its
+  `BiomeDefinition` takes part in the stage; a biome with `M = 0` does not.
+  For a participating biome the generator measures the cell's 8-connected
+  fragment of raw cells on the shared raw map, clipped to a square window of
+  radius `W = ceil(sqrt(K) / 2)` cells, where `K = ceil(M / cell²)`. If the
+  windowed fragment holds fewer than `K` cells, the raw fragment is smaller
+  than the declared floor and the cell is **merged**: its land tiles take the
+  dominant biome of a chosen neighbouring cell.
+- The merge receiver is scored from the raw biome's authored adjacency: a
+  preferred neighbour's dominant scores +2.0, a transition neighbour's
+  dominant +1.0, plus +0.1 per adjacent cell of the same dominant; ties
+  break toward the smallest id. With up to four manhattan neighbours this
+  ordering guarantees a preferred receiver always beats a transition one,
+  which always beats a plain-adjacency one — no content name is special in
+  code. With no eligible neighbour the cell is kept as-is.
+
+The stage is **single-pass** (one merge round over the raw map), and it
+rewrites **land tiles only**: water tiles keep their raw biome both in the
+chunk payload and in on-demand queries, so water stays the physical system
+the mask describes. Every cell decision is a pure function of world
+coordinates, memoised in a generator-level cache that chunk payloads and
+`get_biome_at_world` share; payloads therefore carry a `region_cells` array
+(recording each of the chunk's cells with its raw and post-stage biome and
+a `kept`/`merged`/`water` source), and a chunk generated alone is byte-
+identical to the same chunk generated inside a box — adjacent chunks always
+match at their shared boundary. When no biome declares `M > 0` the stage is
+dormant: no `region_cells` records and a byte-identical biome map.
+The authored `M` also maps to a visual transition band of `M/2` tiles: a
+merged fragment's land tiles sit at most that many tiles from a genuine edge
+of the raw biome.
 
 ## Generation Layers
 
@@ -109,9 +164,15 @@ a chunk data dictionary:
     "moisture":    PackedFloat32Array,  # 256 values
     "temperature": PackedFloat32Array,  # 256 values
     "water_mask": PackedByteArray,      # 256 physical water flags
-    "biomes": PackedStringArray,        # per-tile biome ids
-    "poi_candidates": Array,            # data-driven POI candidates; cave
-                                         # candidates carry cave_type_id/cave_id
+    "biomes": PackedStringArray,        # per-tile biome ids (post-stage)
+    "region_cells": Array,              # coherent-region stage: one entry per
+                                         # world-aligned cell of this chunk —
+                                         # {cell, raw, biome, source} with
+                                         # source kept/merged/water; empty
+                                         # while no biome declares a minimum
+                                         # region size
+    "poi_candidates": Array,            # generic POI candidates; cave-linked
+                                         # ones carry cave_type_id/cave_id
     "biome":   String,   # chunk-level biome id (from averages)
     "seed":    int,      # chunk-local seed
     "version": int       # generator version

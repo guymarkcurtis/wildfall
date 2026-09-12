@@ -15,6 +15,28 @@ const TILE_STONE: int = 5
 const TILE_SNOW: int = 6
 const TILE_MUD: int = 7
 
+## Terrain content ids the renderer can draw, mapped to tile IDs. This is
+## renderer vocabulary, not biome content. WorldContentRegistry validates
+## biome terrain references against this same table at startup, so adding a
+## new terrain here is what makes it legal in content assets.
+const TERRAIN_IDS_BY_CONTENT_ID: Dictionary = {
+	"water": TILE_WATER,
+	"sand": TILE_SAND,
+	"grass": TILE_GRASS,
+	"forest": TILE_FOREST,
+	"dirt": TILE_DIRT,
+	"stone": TILE_STONE,
+	"snow": TILE_SNOW,
+	"mud": TILE_MUD
+}
+const TERRAIN_CONTENT_IDS: Array[String] = ["water", "sand", "grass", "forest", "dirt", "stone", "snow", "mud"]
+
+## Whether a biome asset's terrain id can be rendered. Static so content
+## validation (a plain RefCounted) can query the vocabulary without a
+## renderer instance.
+static func is_supported_terrain_id(content_id: String) -> bool:
+	return TERRAIN_IDS_BY_CONTENT_ID.has(content_id)
+
 var _chunk_data: Dictionary = {}
 var _chunk_coords: Dictionary = {}
 var _tile_set: TileSet = null
@@ -153,10 +175,17 @@ func _render_chunk(chunk_coords: Vector2i, data: Dictionary) -> void:
 			var tile_index: int = y * CHUNK_SIZE + x
 			var elev: float = elevation.get(tile_index) if tile_index < elevation.size() else 0.5
 			var moist: float = moisture.get(tile_index) if tile_index < moisture.size() else 0.5
-			# Per-tile biome where the generator is available (smooth biome
-			# borders); otherwise the chunk's dominant biome.
+			# Per-tile biome from the chunk payload where present: the
+			# generator's coherent-region stage is already applied there, so
+			# rendering reads the same smoothed map every other system does.
+			# Otherwise fall back to the generator's on-demand per-tile query;
+			# otherwise the chunk's dominant biome.
 			var biome_id: String = data["biome"]
-			if world_generator != null and is_instance_valid(world_generator) \
+			if data.has("biomes"):
+				var per_tile_biomes: PackedStringArray = data["biomes"]
+				if tile_index < per_tile_biomes.size():
+					biome_id = str(per_tile_biomes[tile_index])
+			elif world_generator != null and is_instance_valid(world_generator) \
 					and world_generator.has_method("get_biome_at_world"):
 				biome_id = world_generator.get_biome_at_world(world_x, world_y)
 			var is_water: bool = tile_index < water_mask.size() and water_mask[tile_index] != 0
@@ -279,16 +308,7 @@ func _get_tile_id(elevation: float, moisture: float, biome_id: String, is_water:
 ## Terrain IDs are renderer vocabulary, not biome/resource content. New visual
 ## terrain types can be added here without adding biome-specific branches.
 func _tile_id_from_content_id(terrain_id: String) -> int:
-	return {
-		"water": TILE_WATER,
-		"sand": TILE_SAND,
-		"grass": TILE_GRASS,
-		"forest": TILE_FOREST,
-		"dirt": TILE_DIRT,
-		"stone": TILE_STONE,
-		"snow": TILE_SNOW,
-		"mud": TILE_MUD
-	}.get(terrain_id, TILE_GRASS)
+	return TERRAIN_IDS_BY_CONTENT_ID.get(terrain_id, TILE_GRASS)
 
 ## Convert chunk coords to world start position.
 func _chunk_coords_to_world_start(chunk_coords: Vector2i) -> Vector2i:

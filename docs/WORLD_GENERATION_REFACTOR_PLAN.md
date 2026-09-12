@@ -136,7 +136,18 @@ For every card:
 
 ## Ordered bite-sized implementation cards
 
-### WG-01 — Validate content assets at startup
+### WG-01 — Validate content assets at startup — COMPLETE (2026-09-12)
+
+Delivered: per-asset and cross-asset validation in `WorldContentRegistry`
+(duplicate ids, missing ids, unloadable/wrong-type assets, inverted or
+out-of-bounds environment ranges, unsupported terrain ids, invalid distribution
+modes, impossible surface/underground combinations, and dangling biome/cave/POI
+references), each reported as `"<asset path>: <problem>"`. The generator logs
+the problems once and refuses to generate chunks while any remain; discovery
+re-runs on every (re)seed, so fixed assets recover without a restart. Shipped
+content validates clean; 20 new fixture-backed harness checks
+(`tests/fixtures/world_validation/`) pass — **291/291, exit 0**. Rules are
+documented in `WORLD_CONTENT_AUTHORING.md`.
 
 **Goal:** make invalid content fail clearly before it produces bad worlds.
 
@@ -150,7 +161,24 @@ Add a small invalid-fixture test set and document the validation rules in
 **Done when:** shipped assets validate, each important failure is covered by a
 test, and generator code still contains no normal content-name checks.
 
-### WG-02 — Make the POI layer genuinely generic
+### WG-02 — Make the POI layer genuinely generic — COMPLETE (2026-09-12)
+
+Delivered: `_generate_poi_candidates` now iterates every discovered
+`POIDefinition` — shared water/biome eligibility plus each asset's
+`min_spacing_tiles` grid and spawn weight — with cave entrances as one
+consumer (candidates scale by the host biome's `cave_entrance_suitability`
+and carry the stable `"<cave>@<x>,<y>"` identity) and unlinked POIs routing
+to plain `PoiMarker` runtime nodes (spawn, unload, reset, and cave
+visibility all handled). RNG consumption for cave-linked POIs is
+byte-identical to the old special path, so existing cave placements and
+saves are unchanged. `data/world/pois/survey_marker.tres` is the minimal
+non-cave shipped POI. Harness 291 → **301 checks, exit 0**: live-region
+checks (discovery from data alone, cross-region stability, boundary claims,
+spacing, live-node/payload agreement) plus a `poi_consumers` fixture world
+that proves the cave consumer directly. Limitation: the live seed can leave
+no tag-eligible biome near the origin, so the cave-presence guarantee lives
+in the fixture world, and `POIDefinition` has no distribution field yet, so
+"generic distribution" means the existing weight/spacing interpretation.
 
 **Goal:** remove the cave-only placement gate while preserving cave entrances.
 
@@ -163,7 +191,37 @@ game content) and test stable IDs, chunk-border behaviour, and spacing.
 **Done when:** a POI with no cave definition can be discovered, generated, and
 loaded deterministically using only data.
 
-### WG-03 — Enforce coherent regions and transitions
+### WG-03 — Enforce coherent regions and transitions — COMPLETE (2026-09-12)
+
+Delivered: a memoised coherent-region stage in `WorldGenerator` runs after
+per-tile biome selection. World-aligned region cells (side
+`region_cell_size_tiles`, default 8; 8 divides 16, so a chunk holds a
+disjoint 2x2 of cells) compute their dominant biome over land tiles; a
+cell whose dominant declares `minimum_region_size M > 0` and whose
+8-connected cell fragment is smaller than `ceil(M / cell^2)` cells is
+merged into a neighbouring cell's biome, scored by the raw biome's
+authored adjacency (preferred +2.0, transition +1.0, then adjacent-cell
+count, then id). Cells are world-coordinate pure and memoised in a
+generator-level cache shared by chunk payloads and on-demand
+`get_biome_at_world`, so adjacent chunks provably carry identical
+records for shared cells and seam chunks generate byte-identically
+alone or inside a box. Merged cells rewrite their land tiles only; the
+query path keeps the raw biome under water, so payload and query agree
+tile-for-tile. Dormant (byte-identical map, empty `region_cells`)
+whenever no biome declares `M > 0`. `BiomeDefinition.minimum_region_size`
+is now operative region-scale metadata, and the renderer's per-tile hot
+path reads the payload `biomes` array with the on-demand query as
+fallback. Harness 301 → **312 checks, exit 0**: a `region_coherence`
+fixture world (two M=256 biomes, one out of stage) with checks for data
+validation, the 2x2 world-aligned cell grid, no sub-floor raw fragments
+surviving, metadata-respecting merge receivers, tile-for-tile
+payload/query agreement, seam-chunk stability, reversed-order
+stability, and a live-seed dormant no-op on the shipped world.
+Limitations: the merge is single-pass over the raw map (no re-iteration,
+so a merge cannot create a new sub-floor fragment), the transition band
+is derived as `M/2` tiles rather than independently authored, and the
+harness measures fragments through the generator's own shared raw map,
+so a bug in raw selection itself (WG-01 territory) is out of scope.
 
 **Goal:** turn existing biome region metadata into measurable geography.
 

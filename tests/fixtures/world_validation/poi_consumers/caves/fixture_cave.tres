@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="CaveDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/cave_definition.gd" id="1_cave"]
+
+[resource]
+script = ExtResource("1_cave")
+id = "fixture_cave"
+display_name = "Fixture Cave"
+entrance_poi_id = "fixture_cave_entrance"
+allowed_environment_tags = PackedStringArray("rocky")
+entrance_weight = 1.0

@@ -21,7 +21,12 @@ extends Resource
 ## Weight used when multiple definitions match the same environmental field.
 @export var rarity_weight: float = 1.0
 
-## Soft region-scale hint for future macro-region blending and authoring tools.
+## Operative region-scale metadata for the coherent-region stage (WG-03).
+## When greater than 0, raw biome fragments smaller than this many tiles
+## (measured over the generator's world-aligned region cells) are merged
+## into a neighbouring cell's biome. The allowed transition band is derived
+## from the same number: minimum_region_size / 2 tiles. Leave 0 to keep the
+## biome out of the stage — its fragments are never merged.
 @export var minimum_region_size: int = 0
 
 ## Generic environment labels used by resources, POIs, and cave entrances.

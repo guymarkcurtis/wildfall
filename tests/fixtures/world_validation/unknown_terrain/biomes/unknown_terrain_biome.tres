@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="BiomeDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/biome_definition.gd" id="1_biome"]
+
+[resource]
+script = ExtResource("1_biome")
+id = "unknown_terrain"
+display_name = "Unknown Terrain Biome"
+terrain_tile_id = "crystal"
+high_elevation_terrain_tile_id = "void"

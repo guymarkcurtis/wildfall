@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="BiomeDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/biome_definition.gd" id="1_biome"]
+
+[resource]
+script = ExtResource("1_biome")
+id = "fx_shrub"
+display_name = "Fixture Shrub"
+elevation_range = Vector2(0.45, 0.85)
+moisture_range = Vector2(0.35, 0.75)
+temperature_range = Vector2(0.3, 0.9)
+rarity_weight = 1.0
+minimum_region_size = 256
+environment_tags = PackedStringArray("thicket")
+preferred_neighbors = PackedStringArray("fx_meadow")
+transition_biome_ids = PackedStringArray("fx_meadow")
+terrain_tile_id = "dirt"

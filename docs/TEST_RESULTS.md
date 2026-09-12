@@ -1,7 +1,7 @@
 # Wildfall Test Results
 
 ## Test Run Summary
-- **Current verification**: 271 checks passed, 0 failures, 0 script errors (Godot 4.7.2 headless run after the data-driven world-generation, regional-biome, POI-spacing, cave-runtime, directional-animation, and fixed-world-direction control work; includes registry, large-world configuration, underground-mineral filtering, deterministic regional/POI/cave identity, underground cave deposits, cave entry/exit, discovery-ledger checks, authored player-direction/action frames, jumping, and all four fixed WASD axes)
+- **Current verification**: 312 checks passed, 0 failures, 0 script errors (Godot 4.7.2 headless run after the data-driven world-generation, regional-biome, POI-spacing, cave-runtime, directional-animation, fixed-world-direction control, startup content-validation (WG-01), the generic POI layer (WG-02), and the coherent-region stage (WG-03) work; includes registry, large-world configuration, underground-mineral filtering, deterministic regional/POI/cave identity, underground cave deposits, cave entry/exit, discovery-ledger checks, authored player-direction/action frames, jumping, all four fixed WASD axes, the 20-check invalid-content validation suite, and the 11-check coherent-region suite (fixture data-driven region floors, world-aligned cell grid, no sub-floor fragments, metadata-respecting merges, tile-for-tile payload/query agreement, seam-chunk and reversed-order stability, and a live-seed dormant no-op))
 - **Godot Version**: 4.7.2.stable (linux.x86_64, official) — the project was upgraded to Godot 4.7 on 2026-09-11 (editor config sync from the Mac) and the Linux verification binary was upgraded to match
 - **Test Script**: `tests/test_game.gd` (SceneTree harness that boots the real `main.tscn`, validates world, UI, inventory, building, technology progression, texture-pack export/live switching, save persistence of player-caused world mutations, and resource accessibility, then exits with the failure count as its exit code)
 
@@ -30,6 +30,127 @@ coverage includes deterministic cross-chunk spacing and stable candidate
 generation; cave coverage includes deterministic identity, data-defined
 underground deposit candidates, an entry chamber, entering/exiting a separate
 runtime space, and discovery-ledger persistence.
+
+## Startup content validation — WG-01 (2026-09-12)
+
+`WorldContentRegistry` now fails clearly on invalid content. Discovery reports
+load failures, wrong script types, missing `id`s, and duplicate `id`s (naming
+both assets, later file still wins at runtime); `validate()` then checks
+per-asset rules (inverted or out-of-bounds normalized environment ranges,
+missing/unsupported terrain ids, `water` as biome terrain, out-of-range cave
+entrance suitability, unknown distribution modes, unspawnable resources, empty
+yield items, inconsistent cave room/deposit ranges, negative POI spacing) and
+cross-references (biome neighbours/transitions/resource links, cave POI/biome/
+resource links, POI biome links, and impossible surface/underground
+combinations). Every problem is reported as `"<asset path>: <problem>"`. While
+any problem remains, `WorldGenerator` logs the full report once per session and
+`generate_chunk()` returns empty chunks — the world boots safely and the query
+APIs stay crash-free; re-seeding re-runs discovery, so fixing the assets
+recovers the world without a restart. Shipped content validates clean.
+
+The harness grew from **271 to 291 checks** and passes with **0 failures and
+0 script errors** (exit 0). The 20 new checks use eight invalid fixture
+scenarios under `tests/fixtures/world_validation/` — `missing_id`,
+`duplicate_id`, `invalid_range`, `unknown_terrain`, `dangling_references`,
+`unknown_distribution`, `broken_cave_links`, `unspawnable_combinations` — each
+asserting that the registry reports the problem with the offending asset's
+path, plus a shipped-content check and duplicate-id controls.
+
+| # | Issue found by the new fixtures | Root cause | Fix |
+|---|--------------------------------|-----------|-----|
+| V1 | Discovery-phase errors (missing id, duplicate ids) were silently lost — invalid fixtures produced an empty registry with an **empty** error list, masquerading as "the files don't exist" | `discover()` ended with `validation_errors = validate()`, *replacing* the array that `_discover_directory` had filled during loading with `validate()`'s fresh cross-reference array | The append-only design is kept: `discover()` now does `validation_errors.append_array(validate())` |
+
+## Generic POI layer — WG-02 (2026-09-12)
+
+POI candidate generation is now a generic stage: every discovered
+`POIDefinition` contributes candidates (shared water/biome eligibility plus
+the asset's own `min_spacing_tiles` grid and spawn weight), and cave
+entrances are one consumer of that output rather than a special path —
+cave-linked POIs additionally scale by the host biome's
+`cave_entrance_suitability` and each candidate carries the stable
+`"<cave>@<x>,<y>"` identity the cave runtime consumes. POIs no cave
+definition links to load as plain `PoiMarker` debug nodes. `survey_marker`
+is the minimal shipped non-cave POI (a debug marker; no new gameplay
+content).
+
+Harness grew 291 → **301 checks**, all passing with **0 failures and
+0 script errors** (exit 0):
+
+- Live world (9×9-chunk region around the origin, generated twice): a POI
+  no cave links to is discovered from data alone; its candidates appear
+  across the region; the full candidate set — cave and non-cave POIs
+  together — is byte-stable across regeneration; no position is claimed by
+  two different chunks at a boundary; spacing respects the asset's
+  `min_spacing_tiles` across chunk edges; and the runtime loads the payload
+  as live nodes whose tiles match their chunk's deterministic candidates.
+- The cave-consumer guarantee uses a fixture world rather than the live
+  seed: the live world's seed decides which biomes sit near the origin (a
+  probe run found zero `rocky`-tagged tiles within a 65×65-chunk radius of
+  the origin on one seed, so a presence assertion there would flake). A
+  disposable `WorldGenerator` with its registry pointed at
+  `tests/fixtures/world_validation/poi_consumers/` (one tag-eligible biome
+  at full cave suitability, one cave linking one POI, plus one unlinked POI)
+  verifies both consumers of the same stage: 22 cave candidates each
+  carrying the context-derived stable identity, 25 plain candidates
+  carrying no cave identity, and the whole region deterministic across
+  regeneration.
+
+Design note: presence assertions for biome- or tag-gated content belong in
+fixture worlds with controlled content, never in the live-seed world, whose
+regional biome fields can place an entire biome class far from the origin.
+
+## Coherent regions — WG-03 (2026-09-12)
+
+`BiomeDefinition.minimum_region_size` is now operative: a coherent-region
+stage runs after per-tile biome selection over world-aligned 8-tile region
+cells (config `region_cell_size_tiles`, 8 divides the 16-tile chunk, so a
+chunk holds a disjoint 2×2 of cells and no cell straddles a boundary). A
+cell whose dominant biome declares `M > 0` and whose raw 8-connected
+fragment is below `ceil(M/cell²)` cells is merged into a neighbouring
+cell's dominant biome, scored by the raw biome's authored adjacency
+(preferred +2.0, transition +1.0, then adjacency count, then id). Merged
+cells rewrite their land tiles only; water tiles keep their raw biome in
+both the payload and on-demand queries. The stage is dormant — byte-
+identical map, empty `region_cells` — while no biome declares `M > 0`.
+Cell decisions are world-coordinate pure and memoised in a generator-level
+cache shared by chunk payloads and `get_biome_at_world`.
+
+Harness grew 301 → **312 checks**, all passing with **0 failures and
+0 script errors** (exit 0). The section 2c checks:
+
+- Fixture world `tests/fixtures/world_validation/region_coherence/`
+  discovers 3 biomes with 0 validation errors, and the 256/256/0
+  `minimum_region_size` values are read from the biome assets, not code.
+- In a 9×9-chunk box, every chunk's payload carries exactly the 2×2
+  world-aligned cells it owns (no tiny forbidden islands can hide in a
+  straddling cell).
+- No kept region cell leaves a raw fragment below its biome's declared
+  minimum, measured with the same windowed rule the stage uses (0
+  violations over 294 kept cells). Fragments are counted through the
+  generator's own shared raw map, so the check verifies decisions against
+  the exact fragments they were made on.
+- Raw fragments below the floor are actually merged (the stage fires, not
+  silently skipped).
+- Every merged cell joins a neighbouring cell's biome, and the receiver
+  honors the raw biome's authored adjacency (a preferred neighbour always
+  beats a transition one, which beats plain adjacency — a property the
+  +2.0/+1.0/+0.1 scoring guarantees).
+- Payload and on-demand `get_biome_at_world` agree at every tile of the
+  box, water tiles included (the stage rewrites land only, so the query
+  path needs no special-casing beyond the water guard).
+- Seam stability: chunk (0,0) generated alone (its own halo only) versus
+  inside the box produces identical `biomes` and `region_cells` — adjacent
+  chunks provably match at shared boundaries.
+- Full-payload equality in reversed generation order (the documented
+  "same world regardless of generation order" property, now including the
+  region stage).
+- On the live seed, the shipped world stays dormant: empty `region_cells`
+  and byte-identical biome maps at every tile of a sampled chunk.
+
+Design note: the reversed-order check compares chunk payloads individually
+after verifying the key sets match — a Godot `Dictionary`'s string form
+follows insertion order, so stringifying the whole box dict would report a
+false mismatch for an order-different-but-equal box.
 
 ## Player directional animation (2026-09-12)
 

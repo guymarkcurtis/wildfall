@@ -13,6 +13,15 @@ var current_seed: int = 0
 var configuration: WorldGenerationConfig = null
 var generation_context: WorldGenerationContext = null
 var content_registry: WorldContentRegistry = null
+## True while the most recent content discovery reported validation errors.
+## Guards the error report so a world that fails validation logs its
+## problems once per broken state instead of on every re-initialization.
+var content_validation_reported: bool = false
+## Memo of coherent-region cell decisions (WG-03). Keys are world-aligned
+## cell coordinates; values carry the cell's dominant biome plus its keep or
+## merge decision. Cleared whenever the world is (re)initialized, so a new
+## seed never reuses decisions computed under an old field.
+var _region_cell_cache: Dictionary = {}
 
 signal chunk_generated(chunk_coords: Vector2i, data: Dictionary)
 signal world_regenerated
@@ -22,6 +31,20 @@ func initialize(seed: int, config_override: WorldGenerationConfig = null) -> voi
 	configuration = config_override if config_override != null else _load_configuration()
 	content_registry = WorldContentRegistry.new()
 	content_registry.discover()
+	if content_registry.has_validation_errors():
+		# Content that fails validation must not silently shape a broken
+		# world. Report every offending asset path once, keep the engine up
+		# (query APIs still work), and let generate_chunk refuse to emit
+		# chunks until the assets are fixed and the world is regenerated.
+		if not content_validation_reported:
+			content_validation_reported = true
+			push_error("[WorldContentRegistry] World content failed validation (%d problem%s) — no chunks will be generated until the assets below are fixed:" % \
+					[content_registry.validation_errors.size(), "" if content_registry.validation_errors.size() == 1 else "s"])
+			for validation_error in content_registry.validation_errors:
+				push_error("[WorldContentRegistry] %s" % validation_error)
+	else:
+		content_validation_reported = false
+	_region_cell_cache.clear()
 	generation_context = WorldGenerationContext.new(seed, configuration)
 	if noise_layers != null and is_instance_valid(noise_layers):
 		noise_layers.reinitialize(seed, configuration.noise_settings)
@@ -73,6 +96,11 @@ func generate_chunk(chunk_coords: Vector2i, seed: int = -1) -> Dictionary:
 		seed = current_seed
 	if generation_context == null or current_seed != seed:
 		initialize(seed)
+	# A world whose content assets failed startup validation is not
+	# trustworthy; refuse to emit chunks the same way out-of-bounds chunks
+	# are refused. Fixing the assets and regenerating re-runs discovery.
+	if content_registry != null and content_registry.has_validation_errors():
+		return {}
 	if not get_configuration().is_chunk_in_bounds(chunk_coords):
 		return {}
 
@@ -92,7 +120,14 @@ func generate_chunk(chunk_coords: Vector2i, seed: int = -1) -> Dictionary:
 			water_tiles.append(Vector2i(world_x, world_y))
 		biome_map.append(_select_biome_at(elevation, moisture, fields["temperature"][index],
 				get_regional_noise_values(world_x, world_y)))
-
+	# Coherent-region stage (WG-03): merge raw biome fragments that are too
+	# small for the region sizes the data declares, and record the per-cell
+	# decisions so adjacent chunks provably agree at shared boundaries.
+	# Dormant (no-op, byte-identical map) for worlds whose biomes keep the
+	# default minimum_region_size of 0. The POI stage below sees the
+	# smoothed map.
+	var region_cells := _apply_region_coherence(chunk_coords, fields["world_start"],
+			biome_map, water_mask)
 	var data := {
 		"coords": chunk_coords,
 		"elevation": fields["elevation"],
@@ -104,6 +139,7 @@ func generate_chunk(chunk_coords: Vector2i, seed: int = -1) -> Dictionary:
 		"biome": _select_biome(fields["elevation"], fields["moisture"], fields["temperature"],
 				fields["world_start"] + Vector2i(size / 2, size / 2)),
 		"biomes": biome_map,
+		"region_cells": region_cells,
 		"terrain_features": {"water_tile_count": water_tiles.size()},
 		"poi_candidates": _generate_poi_candidates(chunk_coords, biome_map, water_mask),
 		"seed": generation_context.chunk_seed(chunk_coords),
@@ -146,7 +182,27 @@ func get_regional_noise_values(world_x: int, world_y: int) -> Dictionary:
 		"temperature": _normalized(noise_layers.get_temperature(float(world_x) * scale, float(world_y) * scale))
 	}
 
+## Biome at a tile after the coherent-region stage: the raw selection unless
+## the tile's region cell was merged into a neighbouring biome (WG-03).
+## On-demand queries share the same memoised cell decisions that chunk
+## payloads carry, so queried and rendered biomes never disagree. Water
+## tiles keep their raw biome in both paths: the stage rewrites land tiles
+## only, because water is a physical system carried by the water mask.
 func get_biome_at_world(world_x: int, world_y: int) -> String:
+	if noise_layers == null or not is_instance_valid(noise_layers):
+		initialize(current_seed)
+	var biome_id := _raw_biome_at_world(world_x, world_y)
+	if get_configuration().region_cell_size_tiles > 0 and not _region_minimum_sizes().is_empty() \
+			and not is_water_at_world(world_x, world_y):
+		var entry := _region_decision_for_cell(_cell_coords_for_tile(world_x, world_y))
+		if str(entry.get("source", "")) == "merged":
+			biome_id = str(entry.get("biome", biome_id))
+	return biome_id
+
+## Raw per-tile biome selection from the environmental fields, before the
+## coherent-region stage. Chunk generation and the deterministic halo around
+## a chunk both use this, so region decisions rest on one shared raw map.
+func _raw_biome_at_world(world_x: int, world_y: int) -> String:
 	var values := get_noise_values(float(world_x), float(world_y))
 	return _select_biome_at(values["elevation"], values["moisture"], values["temperature"],
 			get_regional_noise_values(world_x, world_y))
@@ -196,9 +252,19 @@ func _is_water(elevation: float, moisture: float, water_value: float) -> bool:
 		or (elevation < config.lake_level and moisture >= config.lake_moisture_threshold \
 		and water_value >= config.lake_noise_threshold)
 
+## Generic POI candidate stage. Every discovered POIDefinition contributes
+## candidates: anchors come from the POI's own spacing grid, eligibility from
+## its biome/environment constraints, and placement probability from its own
+## spawn_weight. Caves are one consumer of this stage, not the stage itself:
+## when a cave definition links to the POI, the candidate additionally scales
+## the chance by the biome's cave-entrance suitability and carries the stable
+## cave identity that CaveEntrance runtime nodes are built from. POIs with no
+## cave link get plain candidates (empty cave fields) that generic POI
+## runtime nodes load. No content name is special here; adding a POI asset is
+## all it takes for it to be discovered, generated, and loaded.
 func _generate_poi_candidates(chunk_coords: Vector2i, biome_map: PackedStringArray, water_mask: PackedByteArray) -> Array[Dictionary]:
 	var candidates: Array[Dictionary] = []
-	if get_cave_definitions().is_empty() or get_poi_definitions().is_empty():
+	if get_poi_definitions().is_empty():
 		return candidates
 	var size := get_configuration().chunk_size_tiles
 	var world_start := chunk_coords * size
@@ -206,8 +272,9 @@ func _generate_poi_candidates(chunk_coords: Vector2i, biome_map: PackedStringArr
 	poi_ids.sort()
 	for poi_id_variant in poi_ids:
 		var poi := get_content_registry().get_poi(str(poi_id_variant))
-		if poi == null or not _has_cave_for_poi(poi.id):
+		if poi == null:
 			continue
+		var cave_linked := _has_cave_for_poi(poi.id)
 		for tile in _poi_anchor_tiles_in_chunk(poi, world_start, size):
 			var local := tile - world_start
 			var index := local.y * size + local.x
@@ -220,21 +287,37 @@ func _generate_poi_candidates(chunk_coords: Vector2i, biome_map: PackedStringArr
 			var random := RandomNumberGenerator.new()
 			random.seed = generation_context.tile_seed(tile,
 					WorldGenerationContext.stable_string_seed(poi.id) ^ 0x45D9F3B)
-			var chance := clampf(biome.cave_entrance_suitability * maxf(0.0, poi.spawn_weight), 0.0, 1.0)
-			if random.randf() > chance:
-				continue
-			var cave := _choose_cave_for_biome(biome, random, poi.id)
-			if cave == null:
-				continue
-			candidates.append({
-				"poi_id": poi.id,
-				"poi_category": poi.category,
-				"cave_type_id": cave.id,
-				"cave_id": generation_context.cave_identity(tile, cave.id),
-				"x": tile.x,
-				"y": tile.y,
-				"biome": biome_id
-			})
+			if cave_linked:
+				var chance := clampf(biome.cave_entrance_suitability * maxf(0.0, poi.spawn_weight), 0.0, 1.0)
+				if random.randf() > chance:
+					continue
+				var cave := _choose_cave_for_biome(biome, random, poi.id)
+				if cave == null:
+					continue
+				candidates.append({
+					"poi_id": poi.id,
+					"poi_category": poi.category,
+					"poi_name": poi.display_name,
+					"cave_type_id": cave.id,
+					"cave_id": generation_context.cave_identity(tile, cave.id),
+					"x": tile.x,
+					"y": tile.y,
+					"biome": biome_id
+				})
+			else:
+				var chance := clampf(poi.spawn_weight, 0.0, 1.0)
+				if random.randf() > chance:
+					continue
+				candidates.append({
+					"poi_id": poi.id,
+					"poi_category": poi.category,
+					"poi_name": poi.display_name,
+					"cave_type_id": "",
+					"cave_id": "",
+					"x": tile.x,
+					"y": tile.y,
+					"biome": biome_id
+				})
 	return candidates
 
 ## Each POI uses a deterministic grid offset derived from its data ID. Anchor
@@ -264,6 +347,9 @@ func _poi_anchor_tiles_in_chunk(poi: POIDefinition, world_start: Vector2i, size:
 				anchors.append(anchor)
 	return anchors
 
+## Query for the cave consumer: true when any discovered cave definition
+## declares this POI as its entrance. Routing only — POIs no cave references
+## are still discovered, generated, and loaded as plain POIs.
 func _has_cave_for_poi(poi_id: String) -> bool:
 	for cave_id in get_cave_definitions():
 		var cave := get_cave(str(cave_id))
@@ -383,3 +469,289 @@ func _array_average(values: PackedFloat32Array) -> float:
 
 func _normalized(value: float) -> float:
 	return clampf((value + 1.0) / 2.0, 0.0, 1.0)
+
+## ---------------------------------------------------------------------------
+## Coherent-region stage (WG-03)
+## ---------------------------------------------------------------------------
+## Biome data may declare minimum_region_size: the fewest tiles a coherent
+## fragment of that biome should cover. This stage turns that metadata into
+## measurable geography. It works on a world-aligned grid of square cells
+## (WorldGenerationConfig.region_cell_size_tiles). Because that side divides
+## the chunk size, cells never straddle chunk boundaries: every chunk and
+## every on-demand biome query computes the same decisions from its own
+## coordinates alone, sampling a small deterministic halo of neighbouring
+## cells without loading neighbouring chunks.
+##
+## Per cell, the stage records the dominant biome among the cell's land
+## tiles (water tiles never count — water is a physical system, not a
+## biome). A cell whose dominant biome's connected cell window is smaller
+## than the cells that biome's minimum_region_size requires is infeasible:
+## a raw island of a biome the data says needs more room. Infeasible cells
+## are merged into a neighbouring cell's biome, preferring receivers the raw
+## biome lists in preferred_neighbors, then transition_biome_ids, then
+## adjacency count, then id order. The transition band the data allows a
+## biome to bleed across a border is derived from the same number:
+## minimum_region_size / 2 tiles.
+##
+## Decisions are single-pass and pure: every cell depends on the raw biome
+## field only, so chunks generated in any order agree at shared boundaries,
+## and (re)initializing the generator clears the memo. Worlds whose biomes
+## all keep the default minimum_region_size of 0 run the stage as a no-op
+## and keep byte-identical biome maps.
+
+func _tile_chunk_coords(world_x: int, world_y: int) -> Vector2i:
+	var size: int = get_configuration().chunk_size_tiles
+	return Vector2i(floori(float(world_x) / float(size)),
+			floori(float(world_y) / float(size)))
+
+func _cell_coords_for_tile(world_x: int, world_y: int) -> Vector2i:
+	var cell_size: int = get_configuration().region_cell_size_tiles
+	return Vector2i(floori(float(world_x) / float(cell_size)),
+			floori(float(world_y) / float(cell_size)))
+
+func _cell_axis_for_tile(tile_coord: int) -> int:
+	return floori(float(tile_coord) / float(get_configuration().region_cell_size_tiles))
+
+## Per-biome minimum region sizes read from the live content registry.
+## An empty map means no biome opts into the coherent-region stage, so it
+## stays dormant and biome maps remain byte-identical to raw selection.
+func _region_minimum_sizes() -> Dictionary:
+	var result: Dictionary = {}
+	if content_registry == null or not is_instance_valid(content_registry):
+		return result
+	for biome_id in get_biomes().keys():
+		var biome := get_biome(str(biome_id))
+		if biome != null and biome.minimum_region_size > 0:
+			result[str(biome_id)] = int(biome.minimum_region_size)
+	return result
+
+## Square window radius, in cells, around a cell that is large enough to
+## hold that cell's minimum fragment count.
+func _region_window_radius(min_region_size: int, cell_size: int) -> int:
+	var cells_needed: int = ceili(float(min_region_size) / float(cell_size * cell_size))
+	return maxi(1, ceili(sqrt(float(maxi(cells_needed, 1))) / 2.0))
+
+## Chunk-level coordinates of the world-aligned cell a tile belongs to, via
+## the tile's chunk. Used to skip cells entirely outside the finite world.
+func _is_tile_in_bounds(world_x: int, world_y: int) -> bool:
+	return get_configuration().is_chunk_in_bounds(_tile_chunk_coords(world_x, world_y))
+
+## Dominant biome of a world-aligned cell, counted over its land tiles.
+## Tiles inside an already-generated chunk reuse that chunk's raw map; every
+## other tile (the deterministic halo around the chunk) is sampled directly
+## from the field. Either way the answer is a pure function of tile
+## coordinates, so it is identical no matter which chunk or on-demand query
+## asked for it first. Water-only cells report the empty id.
+func _cell_dominant_biome(cell: Vector2i,
+		local_biome_map: PackedStringArray = PackedStringArray(),
+		local_water_mask: PackedByteArray = PackedByteArray(),
+		local_world_start: Vector2i = Vector2i.ZERO,
+		local_size: int = 0) -> String:
+	if _region_cell_cache.has(cell):
+		return str(_region_cell_cache[cell].get("dominant", ""))
+	var cell_size: int = get_configuration().region_cell_size_tiles
+	var origin := cell * cell_size
+	var counts: Dictionary = {}
+	for dy in range(cell_size):
+		for dx in range(cell_size):
+			var world_x: int = origin.x + dx
+			var world_y: int = origin.y + dy
+			if not _is_tile_in_bounds(world_x, world_y):
+				continue
+			var biome_id := ""
+			var is_water := false
+			if local_size > 0 \
+					and world_x >= local_world_start.x \
+					and world_x < local_world_start.x + local_size \
+					and world_y >= local_world_start.y \
+					and world_y < local_world_start.y + local_size:
+				var index: int = (world_y - local_world_start.y) * local_size \
+						+ (world_x - local_world_start.x)
+				if index >= 0 and index < local_biome_map.size():
+					biome_id = str(local_biome_map[index])
+					is_water = index < local_water_mask.size() \
+							and local_water_mask[index] != 0
+			else:
+				biome_id = _raw_biome_at_world(world_x, world_y)
+				is_water = is_water_at_world(world_x, world_y)
+			if is_water:
+				continue
+			counts[biome_id] = int(counts.get(biome_id, 0)) + 1
+	if counts.is_empty():
+		# Same key set as every other decision entry (including "raw"), so
+		# payload entries are schema-uniform no matter which path cached
+		# them first (this halo path or the decision path).
+		_region_cell_cache[cell] = {"cell": cell, "dominant": "", "raw": "", "biome": "", "source": "water"}
+		return ""
+	var best_count := -1
+	var tied: PackedStringArray = PackedStringArray()
+	for biome_id in counts:
+		var count := int(counts[biome_id])
+		if count > best_count:
+			best_count = count
+			tied.clear()
+			tied.append(str(biome_id))
+		elif count == best_count:
+			tied.append(str(biome_id))
+	var dominant := str(tied[0])
+	if tied.size() > 1:
+		# Ties fall back to the regional biome at the cell centre (the
+		# data-defined regional context), then to id order.
+		var regional_values := get_regional_noise_values(
+				origin.x + cell_size / 2, origin.y + cell_size / 2)
+		var regional := _select_biome_from_fields(
+				float(regional_values.get("elevation", 0.5)),
+				float(regional_values.get("moisture", 0.5)),
+				float(regional_values.get("temperature", 0.5)))
+		if regional != "" and regional in tied:
+			dominant = regional
+		else:
+			var sorted_tied := tied
+			sorted_tied.sort()
+			dominant = str(sorted_tied[0])
+	_region_cell_cache[cell] = {"cell": cell, "dominant": dominant}
+	return dominant
+
+## Complete the coherent-region decision for one cell: keep its dominant
+## biome, or merge the cell into a neighbouring cell's biome when the raw
+## fragment is smaller than that biome's data-defined minimum region size.
+## The returned entry (and the cached one it updates) carries:
+##   cell     — the world-aligned cell coordinate
+##   raw      — the dominant biome of the cell's land tiles
+##   biome    — the biome tiles in this cell should use after the stage
+##   source   — "kept", "merged", or "water" (no land tiles)
+func _region_decision_for_cell(cell: Vector2i,
+		local_biome_map: PackedStringArray = PackedStringArray(),
+		local_water_mask: PackedByteArray = PackedByteArray(),
+		local_world_start: Vector2i = Vector2i.ZERO,
+		local_size: int = 0) -> Dictionary:
+	if _region_cell_cache.has(cell) and _region_cell_cache[cell].has("source"):
+		var cached: Dictionary = _region_cell_cache[cell]
+		cached["cell"] = cell
+		return cached
+	var cell_size: int = get_configuration().region_cell_size_tiles
+	var dominant := _cell_dominant_biome(cell, local_biome_map, local_water_mask,
+			local_world_start, local_size)
+	var entry: Dictionary = _region_cell_cache.get(cell, {"dominant": dominant})
+	entry["cell"] = cell
+	if str(entry.get("dominant", "")) == "" or dominant == "":
+		entry["raw"] = ""
+		entry["biome"] = ""
+		entry["source"] = "water"
+		return entry
+	entry["raw"] = dominant
+	var biome := get_biome(dominant)
+	var min_size: int = biome.minimum_region_size if biome != null else 0
+	if min_size <= 0:
+		entry["biome"] = dominant
+		entry["source"] = "kept"
+		return entry
+	var window := _region_window_radius(min_size, cell_size)
+	# The window's dominants, each computed once and memoised, so the
+	# fragment measurement is a pure local function of the raw field.
+	var window_cells: Dictionary = {}
+	for dy in range(-window, window + 1):
+		for dx in range(-window, window + 1):
+			var neighbour := cell + Vector2i(dx, dy)
+			window_cells[neighbour] = _cell_dominant_biome(neighbour,
+					local_biome_map, local_water_mask, local_world_start, local_size)
+	# 8-connected component of the dominant biome, clipped to the window.
+	var visited: Dictionary = {cell: true}
+	var stack: Array[Vector2i] = [cell]
+	while not stack.is_empty():
+		var current: Vector2i = stack.pop_back()
+		for dx in range(-1, 2):
+			for dy in range(-1, 2):
+				if dx == 0 and dy == 0:
+					continue
+				var next_cell := current + Vector2i(dx, dy)
+				if visited.has(next_cell):
+					continue
+				if absi(next_cell.x - cell.x) > window or absi(next_cell.y - cell.y) > window:
+					continue
+				if str(window_cells.get(next_cell, "")) != dominant:
+					continue
+				visited[next_cell] = true
+				stack.append(next_cell)
+	if visited.size() * cell_size * cell_size >= min_size:
+		entry["biome"] = dominant
+		entry["source"] = "kept"
+		return entry
+	# The raw fragment is smaller than the data allows: merge into a
+	# neighbouring cell's biome. Preference follows the raw biome's
+	# neighbour metadata, then adjacency count, then id order.
+	var candidates: Dictionary = {}
+	for key in window_cells:
+		var offset: Vector2i = key - cell
+		if absi(offset.x) + absi(offset.y) != 1:
+			continue
+		var candidate := str(window_cells[key])
+		if candidate == "" or candidate == dominant:
+			continue
+		candidates[candidate] = int(candidates.get(candidate, 0)) + 1
+	if candidates.is_empty():
+		entry["biome"] = dominant
+		entry["source"] = "kept"
+		return entry
+	var best_candidate := ""
+	var best_score := -INF
+	for candidate_id in candidates:
+		var candidate_name := str(candidate_id)
+		var score := 0.0
+		if biome != null:
+			if biome.preferred_neighbors.has(candidate_name):
+				score += 2.0
+			elif biome.transition_biome_ids.has(candidate_name):
+				score += 1.0
+		score += 0.1 * float(candidates[candidate_name])
+		if score > best_score or (score == best_score and candidate_name < best_candidate):
+			best_score = score
+			best_candidate = candidate_name
+	entry["biome"] = best_candidate
+	entry["source"] = "merged"
+	return entry
+
+## Apply the coherent-region stage to one chunk: compute the decisions for
+## the cells the chunk intersects, rewrite the chunk's per-tile biome map
+## where a cell was merged, and return the per-cell decision records that
+## ride along in the chunk payload. Adjacent chunks compute the same records
+## for shared cells, so boundaries cannot disagree. A merged cell rewrites
+## its land tiles only — water tiles keep their raw biome in both the
+## payload and on-demand queries. Dormant (returns an empty array, leaves
+## the map untouched) when no biome opts in.
+func _apply_region_coherence(chunk_coords: Vector2i, world_start: Vector2i,
+		biome_map: PackedStringArray, water_mask: PackedByteArray) -> Array:
+	var config := get_configuration()
+	var cell_size: int = config.region_cell_size_tiles
+	if cell_size <= 0 or _region_minimum_sizes().is_empty():
+		return []
+	var size: int = config.chunk_size_tiles
+	var x_end: int = world_start.x + size - 1
+	var y_end: int = world_start.y + size - 1
+	var x0 := _cell_axis_for_tile(world_start.x)
+	var x1 := _cell_axis_for_tile(x_end)
+	var y0 := _cell_axis_for_tile(world_start.y)
+	var y1 := _cell_axis_for_tile(y_end)
+	var entries: Array = []
+	var merged_cells: Dictionary = {}
+	for cy in range(y0, y1 + 1):
+		for cx in range(x0, x1 + 1):
+			var cell := Vector2i(cx, cy)
+			var entry := _region_decision_for_cell(cell, biome_map, water_mask,
+					world_start, size)
+			entries.append(entry)
+			if str(entry.get("source", "")) == "merged" and str(entry.get("biome", "")) != "":
+				merged_cells[cell] = str(entry["biome"])
+	if not merged_cells.is_empty():
+		for index in range(size * size):
+			# Water tiles are never rewritten: their water-ness travels in
+			# the water mask, and on-demand queries keep the raw biome for
+			# water tiles too, so payload and query stay in agreement.
+			if water_mask[index] != 0:
+				continue
+			var tx: int = world_start.x + (index % size)
+			var ty: int = world_start.y + (index / size)
+			var cell := _cell_coords_for_tile(tx, ty)
+			if merged_cells.has(cell):
+				biome_map[index] = merged_cells[cell]
+	return entries

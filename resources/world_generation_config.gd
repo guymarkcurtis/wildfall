@@ -25,6 +25,12 @@ extends Resource
 @export_range(0.0, 8.0) var transition_biome_weight: float = 0.85
 @export_range(0.0, 8.0) var preferred_neighbor_weight: float = 0.4
 
+## Side length in tiles of the world-aligned square cells used by the
+## coherent-region stage to measure biome fragments. Cells are anchored to
+## world coordinates, so every chunk and every on-demand biome query compute
+## the same region decisions from their own coordinates alone.
+@export_range(1, 64) var region_cell_size_tiles: int = 8
+
 @export var resource_min_per_chunk: int = 5
 @export var resource_max_per_chunk: int = 15
 @export var resource_attempt_multiplier: int = 8

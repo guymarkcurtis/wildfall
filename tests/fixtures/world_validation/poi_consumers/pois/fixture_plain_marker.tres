@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="POIDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/poi_definition.gd" id="1_poi"]
+
+[resource]
+script = ExtResource("1_poi")
+id = "fixture_plain_marker"
+display_name = "Fixture Plain Marker"
+category = "marker"
+spawn_weight = 1.0
+min_spacing_tiles = 16

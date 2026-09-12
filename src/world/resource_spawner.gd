@@ -6,6 +6,12 @@ extends Node
 
 const CHUNK_SIZE: int = 16
 
+## Distribution modes the spawn engine understands. Resource assets are
+## validated against this list at startup by WorldContentRegistry; adding a
+## mode here is what makes it legal in content (an unknown mode would spawn
+## silently as uniform instead of failing).
+const DISTRIBUTION_MODES: Array[String] = ["uniform", "sparse", "clustered", "patch", "vein", "edge-biased", "elevation-biased"]
+
 var _resources: Dictionary = {}
 var _generated_chunks: Dictionary = {}
 var _seed: int = 0

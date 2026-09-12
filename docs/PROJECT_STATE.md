@@ -271,6 +271,79 @@ A 30-second headless run of the actual game also completed with 0 errors,
   mission checks, plus the reworked durability/mission blocks), 0
   failures, 0 script errors — green on two consecutive runs.
 
+## RECENTLY COMPLETED (2026-09-12 coherent regions — WG-03)
+
+- `BiomeDefinition.minimum_region_size` is now operative region-scale
+  metadata: after per-tile biome selection, a single-pass coherent-region
+  stage runs over world-aligned region cells (config
+  `region_cell_size_tiles`, default 8 — 8 divides the 16-tile chunk, so a
+  chunk holds a disjoint 2×2 of cells and no cell straddles a boundary).
+  A cell whose dominant biome declares `M > 0` and whose raw 8-connected
+  fragment (windowed to radius `ceil(sqrt(ceil(M/cell²)) / 2)`) is below
+  `ceil(M/cell²)` cells is merged into a neighbouring cell's dominant,
+  scored by the raw biome's authored adjacency (preferred +2.0, transition
+  +1.0, then adjacent-cell count, then id) — so a preferred receiver
+  always beats a transition one. Merged cells rewrite their land tiles
+  only; water tiles keep their raw biome in both the payload and on-demand
+  queries (water stays the physical mask, never a biome).
+- Decisions are pure functions of world coordinates, memoised in a
+  generator-level cell cache shared by chunk payloads and
+  `get_biome_at_world`: payloads carry a `region_cells` array (per cell:
+  raw/post-stage biome + `kept`/`merged`/`water` source), and a seam chunk
+  generated alone is byte-identical to the same chunk generated inside a
+  box — adjacent chunks provably match at boundaries, and the "same world
+  regardless of generation order" property now includes the region stage.
+  The stage is dormant while no biome declares `M > 0`: the shipped world
+  (all six biomes at 0) keeps byte-identical biome maps and empty
+  `region_cells`.
+- Adding or retuning a biome's region floor stays an asset-only workflow —
+  the new `region_coherence` fixture world (two M=256 biomes, one out of
+  stage) exercises the stage deterministically because the live seed's
+  regional fields suppress fragmentation. Harness grew 301 → **312
+  checks**, all passing with 0 script errors (see
+  `docs/TEST_RESULTS.md`); the region stage also now steers the renderer's
+  per-tile hot path, which reads the payload `biomes` array.
+
+## RECENTLY COMPLETED (2026-09-12 generic POI layer — WG-02)
+
+- POI candidate generation is now a generic stage over every discovered
+  `POIDefinition`: shared water/biome eligibility plus each asset's
+  data-defined spacing grid and spawn weight. Cave entrances are one
+  consumer of that candidate stream — cave-linked POIs scale by the host
+  biome's `cave_entrance_suitability` and each candidate carries the stable
+  per-tile cave identity the cave runtime consumes — instead of a
+  special-cased path. POIs no cave links to load as plain `PoiMarker`
+  debug nodes (spawning, chunk unloading, world reset, and cave
+  enter/exit visibility all handle them). RNG consumption for cave-linked
+  POIs is byte-identical to the old path, so existing cave placements and
+  old saves are unchanged.
+- `data/world/pois/survey_marker.tres` is the minimal shipped non-cave POI
+  (a debug marker — no gameplay content); authoring docs document the
+  add-a-POI data-only workflow and how a cave definition's
+  `entrance_poi_id` link turns a generic POI into a cave entrance.
+- Harness grew 291 → **301 checks**, all passing with 0 script errors; the
+  new `poi_consumers` fixture world verifies the cave consumer
+  deterministically, since the live seed can leave no tag-eligible biome
+  near the origin. See `docs/TEST_RESULTS.md`.
+
+## RECENTLY COMPLETED (2026-09-12 startup content validation — WG-01)
+
+- The world-content registry now validates all assets at startup and fails
+  clearly: duplicate/missing ids, unloadable or wrong-type assets, inverted or
+  out-of-bounds environment ranges, unsupported terrain ids (and `water` as a
+  biome), unknown distribution modes, unspawnable resource combinations,
+  inconsistent cave ranges, and dangling biome/cave/POI cross-references —
+  each reported as `"<asset path>: <problem>"` (see
+  `docs/WORLD_CONTENT_AUTHORING.md`).
+- While validation errors remain, the generator logs the report once and
+  generates no chunks (the world boots safely); re-seeding re-runs discovery,
+  so fixed assets recover without a restart. Generator code still contains no
+  content-name checks; vocabulary (terrain ids, distribution modes) is owned
+  by the consuming systems and referenced, never duplicated.
+- Harness grew 271 → **291 checks**, all passing with 0 script errors;
+  8 invalid-fixture scenarios under `tests/fixtures/world_validation/` cover
+  each rule family. See `docs/TEST_RESULTS.md`.
+
 ## NEXT TASKS
 
 (Sprite polish is done — all four generated-art requests in
@@ -278,7 +351,11 @@ A 30-second headless run of the actual game also completed with 0 errors,
 green. Durability and the mission system are done too — see
 RECENTLY COMPLETED below.)
 
-1. **Sound effects** (next open Phase 4 item in `docs/ROADMAP.md`) —
+1. **World-generation refactor — next card WG-04** (a generic terrain-
+   feature candidate layer) per `docs/WORLD_GENERATION_REFACTOR_PLAN.md`;
+   WG-03 is complete, and WG-07/WG-08 are also unblocked since WG-01 is
+   done.
+2. **Sound effects** (next open Phase 4 item in `docs/ROADMAP.md`) —
    the game currently has no audio: UI clicks, harvesting, combat
    hits, creature deaths, building placement/demolition, mission
    accept/complete toasts, and the day/night ambience hooks are the

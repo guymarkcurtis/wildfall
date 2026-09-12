@@ -64,6 +64,10 @@ var _creature_nodes: Array = []
 var _creatures_by_chunk: Dictionary = {}
 var _cave_entrance_nodes: Array[CaveEntrance] = []
 var _cave_entrances_by_chunk: Dictionary = {}
+# Generic runtime nodes for POIs no cave definition links to (sibling of the
+# player, same bookkeeping pattern as cave entrances).
+var _poi_marker_nodes: Array[PoiMarker] = []
+var _poi_markers_by_chunk: Dictionary = {}
 var _active_cave_space: CaveSpace = null
 var _active_cave_id: String = ""
 var _surface_position_before_cave: Vector2 = Vector2.ZERO
@@ -221,6 +225,11 @@ func _generate_world(seed: int) -> void:
 			entrance.queue_free()
 	_cave_entrance_nodes.clear()
 	_cave_entrances_by_chunk.clear()
+	for marker in _poi_marker_nodes:
+		if is_instance_valid(marker):
+			marker.queue_free()
+	_poi_marker_nodes.clear()
+	_poi_markers_by_chunk.clear()
 	if building_manager:
 		building_manager.clear_all()
 
@@ -269,7 +278,7 @@ func _process_one_chunk_visual() -> void:
 	terrain_renderer.update_chunk(chunk_coords, data)
 	_spawn_resources_for_chunk(chunk_coords)
 	_spawn_creatures_for_chunk(chunk_coords)
-	_spawn_cave_entrances_for_chunk(chunk_coords, data)
+	_spawn_pois_for_chunk(chunk_coords, data)
 	if performance_overlay != null:
 		performance_overlay.record_chunk_load(chunk_coords,
 				float(Time.get_ticks_usec() - start_usec) / 1000.0)
@@ -307,6 +316,13 @@ func _on_chunk_unloaded(chunk_coords: Vector2i) -> void:
 			_cave_entrance_nodes.erase(entrance)
 			entrance.queue_free()
 	_cave_entrances_by_chunk.erase(chunk_coords)
+	# Free that chunk's generic POI markers (same bookkeeping as entrances).
+	var markers: Array = _poi_markers_by_chunk.get(chunk_coords, [])
+	for marker in markers:
+		if is_instance_valid(marker):
+			_poi_marker_nodes.erase(marker)
+			marker.queue_free()
+	_poi_markers_by_chunk.erase(chunk_coords)
 	terrain_renderer.clear_chunk(chunk_coords)
 
 ## Spawn harvestable resources in a chunk (as siblings of the player).
@@ -370,13 +386,24 @@ func _spawn_creatures_for_chunk(chunk_coords: Vector2i) -> void:
 		_creatures_by_chunk[chunk_coords].append(creature)
 
 ## Populate intentional POIs emitted by the world-generation pipeline.
-func _spawn_cave_entrances_for_chunk(chunk_coords: Vector2i, chunk_data: Dictionary) -> void:
+## The routing is by data fields, not content names: a candidate that a
+## cave definition links to becomes a CaveEntrance (the cave consumer of
+## the generic POI layer); any other candidate becomes a plain PoiMarker.
+## New POI runtime types can attach here without a content-name branch.
+func _spawn_pois_for_chunk(chunk_coords: Vector2i, chunk_data: Dictionary) -> void:
 	var candidates: Array = chunk_data.get("poi_candidates", [])
 	for candidate in candidates:
-		# A cave link is an engine-level interface, while the POI's identity and
-		# category remain data owned. Other POI runtime types can use this stage
-		# later without a content-name branch here.
-		if str(candidate.get("cave_type_id", "")).is_empty():
+		var cave_type_id := str(candidate.get("cave_type_id", ""))
+		if cave_type_id.is_empty():
+			var marker := PoiMarker.new()
+			marker.setup(candidate)
+			marker.position = Vector2(marker.marker_tile) * float(TILE_SIZE) + Vector2(TILE_SIZE, TILE_SIZE) * 0.5
+			marker.set_meta("chunk_coords", chunk_coords)
+			add_child(marker)
+			_poi_marker_nodes.append(marker)
+			if not _poi_markers_by_chunk.has(chunk_coords):
+				_poi_markers_by_chunk[chunk_coords] = []
+			_poi_markers_by_chunk[chunk_coords].append(marker)
 			continue
 		var cave_id := str(candidate.get("cave_id", ""))
 		if cave_id.is_empty():
@@ -438,6 +465,9 @@ func enter_cave_from_entrance(entrance: CaveEntrance) -> bool:
 	for cave_entrance in _cave_entrance_nodes:
 		if is_instance_valid(cave_entrance):
 			cave_entrance.visible = false
+	for marker in _poi_marker_nodes:
+		if is_instance_valid(marker):
+			marker.visible = false
 	player.global_position = _active_cave_space.to_global(_active_cave_space.exit_position)
 	if hud != null:
 		hud.show_toast("Entered %s  (E near the entrance to leave)" % definition.display_name)
@@ -475,6 +505,9 @@ func _exit_cave(show_toast: bool = true) -> void:
 	for cave_entrance in _cave_entrance_nodes:
 		if is_instance_valid(cave_entrance):
 			cave_entrance.visible = true
+	for marker in _poi_marker_nodes:
+		if is_instance_valid(marker):
+			marker.visible = true
 	if show_toast and hud != null:
 		hud.show_toast("Returned to the surface")
 

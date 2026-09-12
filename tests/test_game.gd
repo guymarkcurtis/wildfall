@@ -226,6 +226,65 @@ func _run_checks() -> void:
 	var world_registry: WorldContentRegistry = world_gen.get_content_registry()
 	_check(world_registry.biomes.size() >= 6 and world_registry.resources.size() >= 8,
 		"Biome and resource content is discovered from data assets")
+	_check(world_registry.validation_errors.is_empty(),
+		"Shipped world content passes startup validation with no errors")
+	# Invalid-fixture suites: each points a fresh registry at a fixture dir
+	# and checks that the collected errors name the offending asset and the
+	# specific problem, so content authors get actionable failure messages.
+	var missing_id_registry := _fixture_registry("missing_id")
+	_check(_registry_errors_mention(missing_id_registry.validation_errors, "missing 'id'")
+			and _registry_errors_mention(missing_id_registry.validation_errors, "no_id_biome.tres"),
+		"Content asset without an id is reported with its path at startup")
+	var duplicate_registry := _fixture_registry("duplicate_id")
+	_check(_registry_errors_mention(duplicate_registry.validation_errors, "duplicate id")
+			and _registry_errors_mention(duplicate_registry.validation_errors, "shared_biome"),
+		"Duplicate content ids are reported at startup")
+	_check(_registry_errors_mention(duplicate_registry.validation_errors, "shared_alpha.tres")
+			and _registry_errors_mention(duplicate_registry.validation_errors, "shared_beta.tres"),
+		"Duplicate-id report names both assets that claim the id")
+	_check(duplicate_registry.biomes.has("ok_biome"),
+		"Valid assets still register when a sibling asset fails validation")
+	var invalid_range_registry := _fixture_registry("invalid_range")
+	_check(_registry_errors_mention(invalid_range_registry.validation_errors, "inverted")
+			and _registry_errors_mention(invalid_range_registry.validation_errors, "elevation_range"),
+		"Inverted biome environment ranges are rejected at startup")
+	_check(_registry_errors_mention(invalid_range_registry.validation_errors, "moisture_range")
+			and _registry_errors_mention(invalid_range_registry.validation_errors, "outside the normalized"),
+		"Environment ranges outside the 0..1 field are rejected at startup")
+	var unknown_terrain_registry := _fixture_registry("unknown_terrain")
+	_check(_registry_errors_mention(unknown_terrain_registry.validation_errors, "'crystal'"),
+		"Unknown terrain tile ids are rejected at startup")
+	_check(_registry_errors_mention(unknown_terrain_registry.validation_errors, "'void'"),
+		"Unknown high-elevation terrain ids are rejected at startup")
+	_check(_registry_errors_mention(unknown_terrain_registry.validation_errors, "water is a physical world system"),
+		"Water posing as a biome terrain is rejected at startup")
+	var dangling_registry := _fixture_registry("dangling_references")
+	_check(_registry_errors_mention(dangling_registry.validation_errors, "ghost_neighbor"),
+		"Dangling preferred-neighbor biome references are reported")
+	_check(_registry_errors_mention(dangling_registry.validation_errors, "ghost_transition"),
+		"Dangling transition biome references are reported")
+	_check(_registry_errors_mention(dangling_registry.validation_errors, "ghost_resource"),
+		"Dangling resource references from biomes are reported")
+	var distribution_registry := _fixture_registry("unknown_distribution")
+	_check(_registry_errors_mention(distribution_registry.validation_errors, "galactic")
+			and _registry_errors_mention(distribution_registry.validation_errors, "distribution_mode"),
+		"Unknown distribution modes are rejected at startup")
+	var cave_links_registry := _fixture_registry("broken_cave_links")
+	_check(_registry_errors_mention(cave_links_registry.validation_errors, "missing_poi"),
+		"Cave entrance links to missing POIs are reported")
+	_check(_registry_errors_mention(cave_links_registry.validation_errors, "allowed_biomes references unknown biome 'ghost_biome'"),
+		"Cave biome links to missing biomes are reported")
+	_check(_registry_errors_mention(cave_links_registry.validation_errors, "missing_ore"),
+		"Cave resource links to missing resources are reported")
+	_check(_registry_errors_mention(cave_links_registry.validation_errors, "ghost_poi"),
+		"Cave interior POI links to missing POIs are reported")
+	var combinations_registry := _fixture_registry("unspawnable_combinations")
+	_check(_registry_errors_mention(combinations_registry.validation_errors, "ghost_ore")
+			and _registry_errors_mention(combinations_registry.validation_errors, "can never spawn"),
+		"Resources disabled on both surface and underground are reported")
+	_check(_registry_errors_mention(combinations_registry.validation_errors, "deep_ore")
+			and _registry_errors_mention(combinations_registry.validation_errors, "not surface_spawnable"),
+		"Biomes listing underground-only resources are reported")
 	var regional_a: Dictionary = world_gen.get_regional_noise_values(137, -91)
 	var regional_b: Dictionary = world_gen.get_regional_noise_values(137, -91)
 	var adjacency_authored := false
@@ -257,6 +316,123 @@ func _run_checks() -> void:
 	var poi_chunk_b: Dictionary = world_gen.generate_chunk(Vector2i(0, 0))
 	_check(str(poi_chunk_a.get("poi_candidates", [])) == str(poi_chunk_b.get("poi_candidates", [])),
 		"POI candidates are stable regardless of generation order")
+	# --- 2b. Generic POI layer: a POI no cave links to (WG-02) ------------
+	# "survey_marker" is a minimal fixture that no cave definition references,
+	# so it exercises the plain-POI path end to end: discovered from data,
+	# generated with its own spacing grid, and loaded as a runtime node.
+	var marker_poi: POIDefinition = world_registry.get_poi("survey_marker")
+	var marker_cave_linked := false
+	for cave_id_variant in world_gen.get_cave_definitions():
+		var linked_cave: CaveDefinition = world_gen.get_cave(str(cave_id_variant))
+		if linked_cave != null and linked_cave.entrance_poi_id == "survey_marker":
+			marker_cave_linked = true
+	_check(marker_poi != null and not marker_cave_linked,
+			"POI with no cave definition is discovered from data alone")
+	var poi_region_chunks: Array[Vector2i] = []
+	for rx in range(-4, 5):
+		for ry in range(-4, 5):
+			poi_region_chunks.append(Vector2i(rx, ry))
+	var region_candidates_first: Dictionary = {}
+	var region_candidates_second: Dictionary = {}
+	for poi_chunk_coords in poi_region_chunks:
+		region_candidates_first[poi_chunk_coords] = (world_gen.generate_chunk(poi_chunk_coords) as Dictionary).get("poi_candidates", [])
+		region_candidates_second[poi_chunk_coords] = (world_gen.generate_chunk(poi_chunk_coords) as Dictionary).get("poi_candidates", [])
+	var marker_candidates: Array = []
+	var entrance_candidates: Array = []
+	for poi_chunk_coords in poi_region_chunks:
+		for candidate in region_candidates_first[poi_chunk_coords]:
+			if str(candidate.get("poi_id", "")) == "survey_marker":
+				marker_candidates.append(candidate)
+			elif str(candidate.get("poi_id", "")) == "cave_entrance":
+				entrance_candidates.append(candidate)
+	_check(not marker_candidates.is_empty(),
+			"POI with no cave definition generates candidates across the region (%d found)" % marker_candidates.size())
+	_check(str(region_candidates_first) == str(region_candidates_second),
+			"POI candidates including the non-cave POI are stable across regeneration")
+	# The live world's seed decides which biomes appear near the origin, so a
+	# presence assertion for cave-linked POIs there would flake on seeds whose
+	# origin region holds no eligible biome. A small fixture world (a
+	# disposable generator whose registry points at
+	# tests/fixtures/world_validation/poi_consumers) guarantees one cave-linked
+	# POI and one plain POI running through the same generic candidate stage,
+	# so the cave consumer is verified directly instead of by luck.
+	var fixture_gen := WorldGenerator.new()
+	fixture_gen.initialize(0, world_config)
+	fixture_gen.content_registry = _fixture_registry("poi_consumers")
+	var fixture_region_first: Dictionary = {}
+	var fixture_region_second: Dictionary = {}
+	for fx in range(-2, 3):
+		for fy in range(-2, 3):
+			var fixture_chunk_coords := Vector2i(fx, fy)
+			fixture_region_first[fixture_chunk_coords] = (fixture_gen.generate_chunk(fixture_chunk_coords) as Dictionary).get("poi_candidates", [])
+			fixture_region_second[fixture_chunk_coords] = (fixture_gen.generate_chunk(fixture_chunk_coords) as Dictionary).get("poi_candidates", [])
+	var fixture_cave_candidates: Array = []
+	var fixture_plain_candidates: Array = []
+	for fixture_chunk_coords in fixture_region_first:
+		for candidate in fixture_region_first[fixture_chunk_coords]:
+			if str(candidate.get("poi_id", "")) == "fixture_cave_entrance":
+				fixture_cave_candidates.append(candidate)
+			elif str(candidate.get("poi_id", "")) == "fixture_plain_marker":
+				fixture_plain_candidates.append(candidate)
+	var fixture_cave_identity_ok := not fixture_cave_candidates.is_empty()
+	for candidate in fixture_cave_candidates:
+		var fixture_cave_type := str(candidate.get("cave_type_id", ""))
+		if fixture_gen.get_cave(fixture_cave_type) == null \
+				or str(candidate.get("cave_id", "")) != fixture_gen.generation_context.cave_identity(
+					Vector2i(int(candidate.get("x", 0)), int(candidate.get("y", 0))), fixture_cave_type):
+			fixture_cave_identity_ok = false
+	_check(fixture_cave_identity_ok,
+			"Cave-linked POIs are one consumer of the generic candidate stage (%d cave candidates, stable identities)" % fixture_cave_candidates.size())
+	var fixture_plain_routing_ok := not fixture_plain_candidates.is_empty()
+	for candidate in fixture_plain_candidates:
+		if str(candidate.get("cave_type_id", "")) != "" or str(candidate.get("cave_id", "")) != "":
+			fixture_plain_routing_ok = false
+	_check(fixture_plain_routing_ok,
+			"Non-cave POIs are the other consumer of the same stage (%d candidates, no cave identity)" % fixture_plain_candidates.size())
+	_check(str(fixture_region_first) == str(fixture_region_second),
+			"Cave-linked and generic POI candidates are both deterministic across regeneration")
+	fixture_gen.free()
+	var poi_boundary_clash := false
+	var poi_claim_owner: Dictionary = {}
+	for poi_chunk_coords in poi_region_chunks:
+		for candidate in region_candidates_first[poi_chunk_coords]:
+			var claim_key := "%s@%d,%d" % [str(candidate.get("poi_id", "")), int(candidate.get("x", 0)), int(candidate.get("y", 0))]
+			if poi_claim_owner.has(claim_key) and poi_claim_owner[claim_key] != poi_chunk_coords:
+				poi_boundary_clash = true
+			elif not poi_claim_owner.has(claim_key):
+				poi_claim_owner[claim_key] = poi_chunk_coords
+	_check(not poi_boundary_clash, "No POI position is claimed by two different chunks across a chunk boundary")
+	var marker_spacing_ok := marker_poi != null
+	for first_index in range(marker_candidates.size()):
+		for second_index in range(first_index):
+			var first_tile := Vector2i(int(marker_candidates[first_index].get("x", 0)), int(marker_candidates[first_index].get("y", 0)))
+			var second_tile := Vector2i(int(marker_candidates[second_index].get("x", 0)), int(marker_candidates[second_index].get("y", 0)))
+			if maxi(absi(first_tile.x - second_tile.x), absi(first_tile.y - second_tile.y)) < marker_poi.min_spacing_tiles:
+				marker_spacing_ok = false
+	_check(marker_spacing_ok, "Non-cave POI candidates respect the asset's min_spacing_tiles across chunk boundaries")
+	# Live scene: deliberately drain the pending chunk visuals, then verify
+	# the generic POI consumer loaded the deterministic payload as nodes.
+	main.call("flush_pending_chunk_visuals")
+	var loaded_marker_nodes: Array = []
+	for child in main.get_children():
+		var marker_node: PoiMarker = child as PoiMarker
+		if marker_node != null:
+			loaded_marker_nodes.append(marker_node)
+	_check(not loaded_marker_nodes.is_empty(),
+			"Non-cave POIs load as runtime nodes in the live scene (%d markers)" % loaded_marker_nodes.size())
+	var marker_loads_match_payload := not loaded_marker_nodes.is_empty()
+	for marker_child in loaded_marker_nodes:
+		var loaded_chunk: Dictionary = chunk_system.get_chunk(marker_child.get_meta("chunk_coords"))
+		var payload_match := false
+		for candidate in loaded_chunk.get("poi_candidates", []):
+			if str(candidate.get("poi_id", "")) == "survey_marker" \
+					and int(candidate.get("x", 0)) == marker_child.marker_tile.x \
+					and int(candidate.get("y", 0)) == marker_child.marker_tile.y:
+				payload_match = true
+				break
+		if not payload_match:
+			marker_loads_match_payload = false
+	_check(marker_loads_match_payload, "Every loaded POI node matches the deterministic payload of its chunk")
 	var surface_ore_found := false
 	for resource_record in resource_spawner.get_all_resources().values():
 		var resource_type := str(resource_record.get("type", ""))
@@ -303,6 +479,217 @@ func _run_checks() -> void:
 	_check(not bool(main.call("is_in_cave")) and terrain_renderer.collision_enabled,
 		"Cave exit restores the surface space and terrain collision")
 	runtime_entrance.queue_free()
+
+	# --- 2c. Coherent regions: minimum_region_size becomes geography (WG-03) --
+	# The fixture world opts fx_meadow and fx_shrub into the coherent-region
+	# stage (minimum_region_size = 256 tiles = 4 region cells); fx_bare keeps
+	# the 0 default and stays out of it. The fixture's reduced biome weights
+	# leave raw shrub fragments below that floor, so the stage has raw
+	# islands to fold into neighbouring cells following the raw biome's
+	# adjacency metadata. Every check below is world-coordinate based, so it
+	# holds for any seed and any chunk box the world is grown in.
+	var region_config: WorldGenerationConfig = world_config.duplicate() as WorldGenerationConfig
+	region_config.regional_biome_weight = 0.25
+	region_config.transition_biome_weight = 0.1
+	region_config.preferred_neighbor_weight = 0.1
+	var region_gen := WorldGenerator.new()
+	region_gen.initialize(42, region_config)
+	region_gen.content_registry = _fixture_registry("region_coherence")
+	_check(region_gen.get_biomes().size() == 3 and region_gen.content_registry.validation_errors.is_empty(),
+		"Coherent-region fixture discovers three biomes with no validation errors")
+	_check(int(region_gen.get_biome("fx_meadow").minimum_region_size) == 256 \
+			and int(region_gen.get_biome("fx_shrub").minimum_region_size) == 256 \
+			and int(region_gen.get_biome("fx_bare").minimum_region_size) == 0,
+		"Minimum region sizes are read from biome data, not hard-coded")
+	var region_box: Dictionary = {}
+	for rx in range(-4, 5):
+		for ry in range(-4, 5):
+			region_box[Vector2i(rx, ry)] = region_gen.generate_chunk(Vector2i(rx, ry))
+	var region_box_complete := 0
+	for region_coords_key in region_box:
+		if not (region_box[region_coords_key] as Dictionary).is_empty():
+			region_box_complete += 1
+	_check(region_box_complete == 81, "Coherent-region fixture generates the full 9x9-chunk box")
+	var region_cell_size: int = region_config.region_cell_size_tiles
+	var cell_grid_ok := true
+	for region_coords_key in region_box:
+		var region_chunk_coords: Vector2i = region_coords_key
+		var region_entries: Array = (region_box[region_coords_key] as Dictionary).get("region_cells", [])
+		var region_cell_set: Dictionary = {}
+		for region_entry in region_entries:
+			region_cell_set[region_entry.get("cell")] = true
+		if region_cell_set.size() != 4:
+			cell_grid_ok = false
+			break
+		for region_dx in range(2):
+			for region_dy in range(2):
+				if not region_cell_set.has(Vector2i(region_chunk_coords.x * 2 + region_dx,
+						region_chunk_coords.y * 2 + region_dy)):
+					cell_grid_ok = false
+	_check(cell_grid_ok, "Region cells are world-aligned 8-tile squares: exactly 2x2 per chunk, none straddling a boundary")
+	# No raw fragment the data says is too small may survive the stage. The
+	# per-cell window is re-measured here against the same shared raw map the
+	# stage used (the generator's memo), so a kept cell is verified against
+	# the exact fragment it was decided on.
+	var region_min_sizes: Dictionary = {}
+	for region_biome_id in region_gen.get_biomes().keys():
+		var region_biome_definition := region_gen.get_biome(str(region_biome_id))
+		if region_biome_definition != null and region_biome_definition.minimum_region_size > 0:
+			region_min_sizes[str(region_biome_id)] = int(region_biome_definition.minimum_region_size)
+	var raw_island_violations := 0
+	var region_merged_count := 0
+	var region_kept_count := 0
+	for region_coords_key in region_box:
+		for region_entry in (region_box[region_coords_key] as Dictionary).get("region_cells", []):
+			var region_source := str(region_entry.get("source", ""))
+			if region_source == "merged":
+				region_merged_count += 1
+			if region_source != "kept":
+				continue
+			region_kept_count += 1
+			var region_raw_biome := str(region_entry.get("raw", ""))
+			if not region_min_sizes.has(region_raw_biome):
+				continue
+			var region_cell: Vector2i = region_entry.get("cell")
+			var region_cells_needed: int = ceili(float(region_min_sizes[region_raw_biome]) / float(region_cell_size * region_cell_size))
+			var region_window: int = maxi(1, ceili(sqrt(float(maxi(region_cells_needed, 1))) / 2.0))
+			var region_fragment_seen: Dictionary = {region_cell: true}
+			var region_fragment_stack: Array[Vector2i] = [region_cell]
+			while not region_fragment_stack.is_empty():
+				var region_current: Vector2i = region_fragment_stack.pop_back()
+				for region_fx in range(-1, 2):
+					for region_fy in range(-1, 2):
+						if region_fx == 0 and region_fy == 0:
+							continue
+						var region_neighbour_cell: Vector2i = region_current + Vector2i(region_fx, region_fy)
+						if region_fragment_seen.has(region_neighbour_cell):
+							continue
+						if absi(region_neighbour_cell.x - region_cell.x) > region_window or absi(region_neighbour_cell.y - region_cell.y) > region_window:
+							continue
+						if str(region_gen._cell_dominant_biome(region_neighbour_cell)) == region_raw_biome:
+							region_fragment_seen[region_neighbour_cell] = true
+							region_fragment_stack.append(region_neighbour_cell)
+			if region_fragment_seen.size() * region_cell_size * region_cell_size < int(region_min_sizes[region_raw_biome]):
+				raw_island_violations += 1
+	_check(raw_island_violations == 0, "No kept region cell leaves a raw fragment below its biome's minimum region size (%d/%d kept cells)" % [raw_island_violations, region_kept_count])
+	_check(region_merged_count > 0, "Raw fragments below the data floor are folded into neighbouring cells (%d merged in the box)" % region_merged_count)
+	# The receiver a merged cell joins follows the raw biome's authored
+	# adjacency: a preferred neighbour always wins (score 2.0 beats any
+	# 0.1-per-adjacency score), then a transition neighbour (1.0), then
+	# plain adjacency count, then id order.
+	var region_receiver_ok := true
+	for region_coords_key in region_box:
+		for region_entry in (region_box[region_coords_key] as Dictionary).get("region_cells", []):
+			if str(region_entry.get("source", "")) != "merged":
+				continue
+			var region_cell: Vector2i = region_entry.get("cell")
+			var region_raw_biome := str(region_entry.get("raw", ""))
+			var region_receiver := str(region_entry.get("biome", ""))
+			var region_raw_definition := region_gen.get_biome(region_raw_biome)
+			if region_raw_definition == null:
+				region_receiver_ok = false
+				continue
+			var region_neighbour_biomes: Dictionary = {}
+			for region_nx in range(-1, 2):
+				for region_ny in range(-1, 2):
+					if absi(region_nx) + absi(region_ny) != 1:
+						continue
+					var region_neighbour_biome := str(region_gen._cell_dominant_biome(region_cell + Vector2i(region_nx, region_ny)))
+					if region_neighbour_biome != "":
+						region_neighbour_biomes[region_neighbour_biome] = true
+			var region_has_preferred := false
+			var region_has_transition := false
+			for region_candidate_id in region_neighbour_biomes:
+				if region_raw_definition.preferred_neighbors.has(str(region_candidate_id)):
+					region_has_preferred = true
+				elif region_raw_definition.transition_biome_ids.has(str(region_candidate_id)):
+					region_has_transition = true
+			if region_has_preferred:
+				if not region_raw_definition.preferred_neighbors.has(region_receiver):
+					region_receiver_ok = false
+			elif region_has_transition:
+				if not region_raw_definition.transition_biome_ids.has(region_receiver):
+					region_receiver_ok = false
+			elif not region_neighbour_biomes.has(region_receiver):
+				region_receiver_ok = false
+	_check(region_receiver_ok, "Merged cells join a neighbouring cell's biome, preferring the raw biome's authored adjacency metadata")
+	# Payload and on-demand query are the same stage result, tile for tile,
+	# including water tiles (the stage rewrites land tiles only, and the
+	# query path keeps the raw biome under water).
+	var region_tile_disagreements := 0
+	var region_tiles_checked := 0
+	for region_coords_key in region_box:
+		var region_chunk_payload: Dictionary = region_box[region_coords_key]
+		var region_biomes: PackedStringArray = region_chunk_payload["biomes"]
+		var region_world_start: Vector2i = (region_coords_key as Vector2i) * region_config.chunk_size_tiles
+		for region_ty in range(region_config.chunk_size_tiles):
+			for region_tx in range(region_config.chunk_size_tiles):
+				region_tiles_checked += 1
+				if str(region_gen.get_biome_at_world(region_world_start.x + region_tx,
+						region_world_start.y + region_ty)) != str(region_biomes[region_ty * region_config.chunk_size_tiles + region_tx]):
+					region_tile_disagreements += 1
+	_check(region_tile_disagreements == 0, "Payload and on-demand biome queries agree at every tile of the region box, water included (%d tiles)" % region_tiles_checked)
+	# Seam stability: the same chunk generated alone (only its own halo) or
+	# inside the box (its neighbours' halos cached first) must produce the
+	# same payload — adjacent chunks therefore always match at boundaries.
+	var region_seam_alone_gen := WorldGenerator.new()
+	region_seam_alone_gen.initialize(42, region_config.duplicate() as WorldGenerationConfig)
+	region_seam_alone_gen.content_registry = _fixture_registry("region_coherence")
+	var region_seam_alone: Dictionary = region_seam_alone_gen.generate_chunk(Vector2i(0, 0))
+	region_seam_alone_gen.free()
+	var region_seam_in_box: Dictionary = region_box[Vector2i(0, 0)]
+	_check(str(region_seam_in_box.get("biomes", [])) == str(region_seam_alone.get("biomes", [])) \
+			and str(region_seam_in_box.get("region_cells", [])) == str(region_seam_alone.get("region_cells", [])),
+		"Seam chunk payload is identical whether generated alone or inside the region box")
+	var region_gen_reversed := WorldGenerator.new()
+	region_gen_reversed.initialize(42, region_config.duplicate() as WorldGenerationConfig)
+	region_gen_reversed.content_registry = _fixture_registry("region_coherence")
+	var region_box_reversed: Dictionary = {}
+	for rx in range(4, -5, -1):
+		for ry in range(4, -5, -1):
+			region_box_reversed[Vector2i(rx, ry)] = region_gen_reversed.generate_chunk(Vector2i(rx, ry))
+	region_gen_reversed.free()
+	region_gen.free()
+	# Compare per-chunk, not by stringifying the whole box: a Dictionary's
+	# string form follows insertion order, and the reversed run inserts its
+	# chunks in a different order. Per-chunk payloads are built by one code
+	# path, so their key order matches and the string comparison is a
+	# faithful content comparison.
+	var region_box_key_set: Dictionary = {}
+	for region_coords_key in region_box:
+		region_box_key_set[region_coords_key] = true
+	var region_reversed_key_set: Dictionary = {}
+	for region_coords_key in region_box_reversed:
+		region_reversed_key_set[region_coords_key] = true
+	var region_order_same := region_box_key_set == region_reversed_key_set
+	for region_coords_key in region_box:
+		if not region_order_same:
+			break
+		if str(region_box[region_coords_key]) != str(region_box_reversed[region_coords_key]):
+			region_order_same = false
+	_check(region_order_same,
+		"Region decisions and full chunk payloads are identical in reversed generation order")
+	# The shipped world's biomes all keep the 0 default, so the stage must
+	# stay dormant there: no region_cells records and byte-identical biomes
+	# versus the on-demand query, on the live seed.
+	var region_dormant_gen := WorldGenerator.new()
+	region_dormant_gen.initialize(world_gen.get_seed(), world_config)
+	region_dormant_gen.content_registry = world_gen.get_content_registry()
+	var region_dormant_chunk: Dictionary = region_dormant_gen.generate_chunk(Vector2i(3, 3))
+	var region_dormant_mismatches := 0
+	var region_dormant_noop := region_dormant_chunk.has("region_cells") \
+			and (region_dormant_chunk["region_cells"] as Array).is_empty()
+	if region_dormant_noop:
+		var region_dormant_start: Vector2i = Vector2i(3, 3) * world_config.chunk_size_tiles
+		var region_dormant_biomes: PackedStringArray = region_dormant_chunk["biomes"]
+		for region_dy in range(world_config.chunk_size_tiles):
+			for region_dx in range(world_config.chunk_size_tiles):
+				if str(region_dormant_gen.get_biome_at_world(region_dormant_start.x + region_dx,
+						region_dormant_start.y + region_dy)) != str(region_dormant_biomes[region_dy * world_config.chunk_size_tiles + region_dx]):
+					region_dormant_mismatches += 1
+	region_dormant_gen.free()
+	_check(region_dormant_noop and region_dormant_mismatches == 0,
+		"Shipped world keeps byte-identical biome maps with the stage dormant (all minimum region sizes 0)")
 
 	# --- 3. Terrain + resources --------------------------------------------
 	_check(terrain_renderer.get_used_cells().size() > 0, "Terrain rendered for initial chunks (%d tiles)" % terrain_renderer.get_used_cells().size())
@@ -918,4 +1305,19 @@ func _atlas_cell_has_art(atlas: Image, x: int, y: int) -> bool:
 		for px in range(32):
 			if atlas.get_pixel(x + px, y + py).a > 0.0:
 				return true
+	return false
+
+## Point a fresh registry at one validation fixture directory and return it.
+## Each fixture dir contains the standard content subdirectories, so the
+## unrelated kinds simply find nothing there.
+func _fixture_registry(fixture_name: String) -> WorldContentRegistry:
+	var registry := WorldContentRegistry.new()
+	registry.discover("res://tests/fixtures/world_validation/%s" % fixture_name)
+	return registry
+
+## True when at least one collected validation error contains the fragment.
+func _registry_errors_mention(errors: Array[String], fragment: String) -> bool:
+	for error in errors:
+		if error.contains(fragment):
+			return true
 	return false

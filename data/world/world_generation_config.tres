@@ -20,6 +20,7 @@ regional_field_coordinate_scale = 0.18
 regional_biome_weight = 2.0
 transition_biome_weight = 0.85
 preferred_neighbor_weight = 0.4
+region_cell_size_tiles = 8
 resource_min_per_chunk = 5
 resource_max_per_chunk = 15
 resource_attempt_multiplier = 8
