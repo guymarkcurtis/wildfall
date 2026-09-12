@@ -15,6 +15,10 @@ extends Node
 const TILE_SIZE: int = 32
 const CHUNK_SIZE: int = 16
 const INITIAL_CHUNK_RADIUS: int = 3
+const CAVE_SPACE_SCENE := preload("res://scenes/cave_space.tscn")
+# Cave spaces share the runtime scene tree but live outside the finite surface
+# coordinate range. This keeps surface physics and streamed content separate.
+const CAVE_SPACE_ORIGIN := Vector2(1000000.0, 1000000.0)
 
 @onready var world_generator: WorldGenerator = $WorldGenerator
 @onready var chunk_system: ChunkSystem = $ChunkSystem
@@ -58,11 +62,20 @@ var _recipe_defs: Array = []
 var _creature_nodes: Array = []
 # chunk_coords (Vector2i) -> Array of that chunk's creature nodes.
 var _creatures_by_chunk: Dictionary = {}
+var _cave_entrance_nodes: Array[CaveEntrance] = []
+var _cave_entrances_by_chunk: Dictionary = {}
+var _active_cave_space: CaveSpace = null
+var _active_cave_id: String = ""
+var _surface_position_before_cave: Vector2 = Vector2.ZERO
 # Spawn tiles removed by the player. The world itself is deterministic, so
 # saves only need this small mutation ledger instead of serializing every
 # generated resource and creature in every visited chunk.
 var _destroyed_resource_tiles: Dictionary = {}
 var _destroyed_creature_tiles: Dictionary = {}
+# Stable cave identity/change ledgers. Generation is deterministic; persistence
+# records only discoveries and future player-caused cave mutations.
+var _discovered_cave_ids: Dictionary = {}
+var _cave_changes: Dictionary = {}
 # Terrain, resources and creatures are visual/gameplay-heavy to construct.
 # Queue generated chunk content so crossing a boundary never builds a whole
 # strip of chunks in one frame.
@@ -182,8 +195,12 @@ func _on_world_seed_set(seed: int) -> void:
 func _generate_world(seed: int) -> void:
 	# A seed change starts a fresh world. Loading restores its mutation ledger
 	# immediately after this reset through the world_state save module.
+	if is_in_cave():
+		_exit_cave(false)
 	_destroyed_resource_tiles.clear()
 	_destroyed_creature_tiles.clear()
+	_discovered_cave_ids.clear()
+	_cave_changes.clear()
 	# Free the previous world's resource nodes and rendered terrain first.
 	for node in _resource_nodes:
 		if is_instance_valid(node):
@@ -199,13 +216,19 @@ func _generate_world(seed: int) -> void:
 			creature.queue_free()
 	_creature_nodes.clear()
 	_creatures_by_chunk.clear()
+	for entrance in _cave_entrance_nodes:
+		if is_instance_valid(entrance):
+			entrance.queue_free()
+	_cave_entrance_nodes.clear()
+	_cave_entrances_by_chunk.clear()
 	if building_manager:
 		building_manager.clear_all()
 
 	world_generator.initialize(seed)
 	resource_spawner.initialize(seed)
 	creature_spawner.initialize(seed)
-	chunk_system.initialize(seed)
+	chunk_system.initialize(seed, world_generator.get_configuration())
+	chunk_system.set_viewport_radius(world_generator.get_configuration().streaming_radius)
 
 	# Player returns to spawn; the chunk system loads the starting ring
 	# (chunk_generated signals drive terrain rendering + resource spawns).
@@ -246,6 +269,7 @@ func _process_one_chunk_visual() -> void:
 	terrain_renderer.update_chunk(chunk_coords, data)
 	_spawn_resources_for_chunk(chunk_coords)
 	_spawn_creatures_for_chunk(chunk_coords)
+	_spawn_cave_entrances_for_chunk(chunk_coords, data)
 	if performance_overlay != null:
 		performance_overlay.record_chunk_load(chunk_coords,
 				float(Time.get_ticks_usec() - start_usec) / 1000.0)
@@ -277,6 +301,12 @@ func _on_chunk_unloaded(chunk_coords: Vector2i) -> void:
 			creature.queue_free()
 	_creatures_by_chunk.erase(chunk_coords)
 	creature_spawner.remove_chunk(chunk_coords)
+	var entrances: Array = _cave_entrances_by_chunk.get(chunk_coords, [])
+	for entrance in entrances:
+		if is_instance_valid(entrance):
+			_cave_entrance_nodes.erase(entrance)
+			entrance.queue_free()
+	_cave_entrances_by_chunk.erase(chunk_coords)
 	terrain_renderer.clear_chunk(chunk_coords)
 
 ## Spawn harvestable resources in a chunk (as siblings of the player).
@@ -338,6 +368,115 @@ func _spawn_creatures_for_chunk(chunk_coords: Vector2i) -> void:
 		if not _creatures_by_chunk.has(chunk_coords):
 			_creatures_by_chunk[chunk_coords] = []
 		_creatures_by_chunk[chunk_coords].append(creature)
+
+## Populate intentional POIs emitted by the world-generation pipeline.
+func _spawn_cave_entrances_for_chunk(chunk_coords: Vector2i, chunk_data: Dictionary) -> void:
+	var candidates: Array = chunk_data.get("poi_candidates", [])
+	for candidate in candidates:
+		# A cave link is an engine-level interface, while the POI's identity and
+		# category remain data owned. Other POI runtime types can use this stage
+		# later without a content-name branch here.
+		if str(candidate.get("cave_type_id", "")).is_empty():
+			continue
+		var cave_id := str(candidate.get("cave_id", ""))
+		if cave_id.is_empty():
+			continue
+		var entrance := CaveEntrance.new()
+		entrance.setup(candidate)
+		entrance.position = Vector2(entrance.entrance_tile) * float(TILE_SIZE) + Vector2(TILE_SIZE, TILE_SIZE) * 0.5
+		entrance.set_meta("chunk_coords", chunk_coords)
+		entrance.entered.connect(_on_cave_entrance_entered)
+		add_child(entrance)
+		_cave_entrance_nodes.append(entrance)
+		if not _cave_entrances_by_chunk.has(chunk_coords):
+			_cave_entrances_by_chunk[chunk_coords] = []
+		_cave_entrances_by_chunk[chunk_coords].append(entrance)
+
+func get_cave_entrances() -> Array[CaveEntrance]:
+	return _cave_entrance_nodes.duplicate()
+
+func is_in_cave() -> bool:
+	return _active_cave_space != null and is_instance_valid(_active_cave_space)
+
+func _on_cave_entrance_entered(entrance: CaveEntrance) -> void:
+	enter_cave_from_entrance(entrance)
+
+## Enter a separate generated cave space from a stable surface entrance.
+func enter_cave_from_entrance(entrance: CaveEntrance) -> bool:
+	if is_in_cave() or entrance == null or not is_instance_valid(entrance):
+		return false
+	var definition: CaveDefinition = world_generator.get_cave(entrance.cave_type_id)
+	if definition == null:
+		return false
+	var generator := CaveSpaceGenerator.new()
+	var generated := generator.generate_cave(_world_seed, entrance.cave_id, entrance.entrance_tile,
+			definition, world_generator.get_content_registry().resources)
+	if generated.is_empty():
+		return false
+	_active_cave_id = entrance.cave_id
+	_surface_position_before_cave = player.global_position
+	_active_cave_space = CAVE_SPACE_SCENE.instantiate() as CaveSpace
+	if _active_cave_space == null:
+		return false
+	_active_cave_space.name = "ActiveCaveSpace"
+	_active_cave_space.z_index = -5
+	_active_cave_space.position = CAVE_SPACE_ORIGIN
+	_active_cave_space.setup(generated)
+	_active_cave_space.exit_requested.connect(_on_cave_exit_requested)
+	add_child(_active_cave_space)
+	_discovered_cave_ids[_active_cave_id] = true
+	terrain_renderer.set_world_visible(false)
+	if building_manager != null:
+		building_manager.visible = false
+	for node in _resource_nodes:
+		if is_instance_valid(node):
+			node.visible = false
+	for creature in _creature_nodes:
+		if is_instance_valid(creature):
+			creature.visible = false
+			creature.process_mode = Node.PROCESS_MODE_DISABLED
+	for cave_entrance in _cave_entrance_nodes:
+		if is_instance_valid(cave_entrance):
+			cave_entrance.visible = false
+	player.global_position = _active_cave_space.to_global(_active_cave_space.exit_position)
+	if hud != null:
+		hud.show_toast("Entered %s  (E near the entrance to leave)" % definition.display_name)
+	return true
+
+func interact_with_active_cave() -> bool:
+	if not is_in_cave():
+		return false
+	if _active_cave_space.contains_exit(player.global_position):
+		_active_cave_space.request_exit()
+		return true
+	return false
+
+func _on_cave_exit_requested() -> void:
+	_exit_cave(true)
+
+func _exit_cave(show_toast: bool = true) -> void:
+	if not is_in_cave():
+		return
+	if is_instance_valid(_active_cave_space):
+		_active_cave_space.queue_free()
+	_active_cave_space = null
+	_active_cave_id = ""
+	player.global_position = _surface_position_before_cave
+	terrain_renderer.set_world_visible(true)
+	if building_manager != null:
+		building_manager.visible = true
+	for node in _resource_nodes:
+		if is_instance_valid(node):
+			node.visible = true
+	for creature in _creature_nodes:
+		if is_instance_valid(creature):
+			creature.visible = true
+			creature.process_mode = Node.PROCESS_MODE_INHERIT
+	for cave_entrance in _cave_entrance_nodes:
+		if is_instance_valid(cave_entrance):
+			cave_entrance.visible = true
+	if show_toast and hud != null:
+		hud.show_toast("Returned to the surface")
 
 ## A creature was killed: remove it, hand the rolled loot to the player's
 ## inventory, announce the death on the event bus, and free the node.
@@ -481,8 +620,9 @@ func _on_toggle_crafting_ui() -> void:
 ## Per-frame: keep chunk loading in sync with the player, move the camera, keep the HUD
 ## in step with the seed editor, and update the debug overlay.
 func _process(delta: float) -> void:
-	chunk_system.update_player_position(player.get_world_position())
-	_process_one_chunk_visual()
+	if not is_in_cave():
+		chunk_system.update_player_position(player.get_world_position())
+		_process_one_chunk_visual()
 	# The camera is a plain Camera2D node that nothing else drives; without
 	# this it never follows the player.
 	if camera_controller != null and is_instance_valid(player):
@@ -731,17 +871,24 @@ func _apply_world(data: Variant) -> void:
 func _collect_world_state() -> Dictionary:
 	return {
 		"destroyed_resources": _serialize_tiles(_destroyed_resource_tiles),
-		"destroyed_creatures": _serialize_tiles(_destroyed_creature_tiles)
+		"destroyed_creatures": _serialize_tiles(_destroyed_creature_tiles),
+		"discovered_caves": _serialize_string_keys(_discovered_cave_ids),
+		"cave_changes": _cave_changes.duplicate(true)
 	}
 
 func _apply_world_state(data: Variant) -> void:
 	_destroyed_resource_tiles.clear()
 	_destroyed_creature_tiles.clear()
+	_discovered_cave_ids.clear()
+	_cave_changes.clear()
 	if typeof(data) != TYPE_DICTIONARY:
 		return
 	var state: Dictionary = data
 	_destroyed_resource_tiles = _deserialize_tiles(state.get("destroyed_resources", []))
 	_destroyed_creature_tiles = _deserialize_tiles(state.get("destroyed_creatures", []))
+	_discovered_cave_ids = _deserialize_string_keys(state.get("discovered_caves", []))
+	if typeof(state.get("cave_changes", {})) == TYPE_DICTIONARY:
+		_cave_changes = (state.get("cave_changes", {}) as Dictionary).duplicate(true)
 
 func _serialize_tiles(tiles: Dictionary) -> Array:
 	var out: Array = []
@@ -763,6 +910,22 @@ func _deserialize_tiles(data: Variant) -> Dictionary:
 		if typeof(entry) == TYPE_DICTIONARY:
 			tiles[Vector2i(int(entry.get("x", 0)), int(entry.get("y", 0)))] = true
 	return tiles
+
+func _serialize_string_keys(values: Dictionary) -> Array[String]:
+	var output: Array[String] = []
+	for key in values:
+		output.append(str(key))
+	output.sort()
+	return output
+
+func _deserialize_string_keys(data: Variant) -> Dictionary:
+	var values: Dictionary = {}
+	if typeof(data) != TYPE_ARRAY:
+		return values
+	for value in data:
+		if not str(value).is_empty():
+			values[str(value)] = true
+	return values
 
 func _collect_time() -> Dictionary:
 	return day_night.serialize() if day_night else {}

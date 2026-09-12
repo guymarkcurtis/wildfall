@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="WorldGenerationConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/world_generation_config.gd" id="1_config"]
+
+[resource]
+script = ExtResource("1_config")
+config_id = "riftwake_default"
+generation_version = 2
+tile_size_pixels = 32
+chunk_size_tiles = 16
+world_dimensions_chunks = Vector2i(128, 128)
+world_origin_chunk = Vector2i(-64, -64)
+streaming_radius = 3
+water_level = 0.3
+shoreline_level = 0.35
+lake_level = 0.24
+lake_moisture_threshold = 0.72
+lake_noise_threshold = 0.56
+regional_field_coordinate_scale = 0.18
+regional_biome_weight = 2.0
+transition_biome_weight = 0.85
+preferred_neighbor_weight = 0.4
+resource_min_per_chunk = 5
+resource_max_per_chunk = 15
+resource_attempt_multiplier = 8

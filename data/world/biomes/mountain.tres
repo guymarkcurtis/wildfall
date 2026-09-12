@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="BiomeDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/biome_definition.gd" id="1_biome"]
+
+[resource]
+script = ExtResource("1_biome")
+id = "mountain"
+display_name = "Mountain"
+elevation_range = Vector2(0.6, 0.9)
+moisture_range = Vector2(0.2, 0.5)
+temperature_range = Vector2(0.2, 0.5)
+rarity_weight = 0.9
+environment_tags = PackedStringArray("rocky", "mountainous", "highland")
+preferred_neighbors = PackedStringArray("grassland", "temperate_forest")
+transition_biome_ids = PackedStringArray("grassland", "temperate_forest")
+terrain_tile_id = "grass"
+high_elevation_terrain_tile_id = "stone"
+high_elevation_threshold = 0.5
+cave_entrance_suitability = 0.72
+ground_color = Color(0.5, 0.5, 0.5, 1)
+resource_types = PackedStringArray("rock", "rock")
+creature_types = PackedStringArray("wolf", "goat", "polar_bear")
+vegetation_types = PackedStringArray("rock")

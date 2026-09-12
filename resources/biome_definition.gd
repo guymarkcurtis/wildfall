@@ -18,8 +18,29 @@ extends Resource
 ## Temperature range (min, max) where this biome appears.
 @export var temperature_range: Vector2 = Vector2(0.0, 1.0)
 
+## Weight used when multiple definitions match the same environmental field.
+@export var rarity_weight: float = 1.0
+
+## Soft region-scale hint for future macro-region blending and authoring tools.
+@export var minimum_region_size: int = 0
+
+## Generic environment labels used by resources, POIs, and cave entrances.
+@export var environment_tags: PackedStringArray = []
+
+## IDs of environments this biome naturally prefers nearby. The generator
+## uses these as metadata; it never hard-codes a biome relationship.
+@export var preferred_neighbors: PackedStringArray = []
+@export var transition_biome_ids: PackedStringArray = []
+
 ## Base terrain tile ID for this biome.
 @export var terrain_tile_id: String = "grass"
+
+## Optional high-elevation terrain replacement. Empty means keep the base tile.
+@export var high_elevation_terrain_tile_id: String = ""
+@export var high_elevation_threshold: float = 0.7
+
+## Suitability for placing a cave entrance POI in this environment.
+@export_range(0.0, 1.0) var cave_entrance_suitability: float = 0.0
 
 ## Primary ground color (for placeholder rendering).
 @export var ground_color: Color = Color(0.2, 0.6, 0.2)

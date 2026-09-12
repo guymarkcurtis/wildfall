@@ -44,13 +44,14 @@ Options / Return to Title / Quit). F5 save, F9 load still work.
 | 2 | `format: wildfall-save`, `modules` map, migrations from v1 |
 | 3 | Added the `technology` module; missing research data safely uses starting unlocks |
 | 4 | Added `world_state`: destroyed resource and creature spawn tiles persist without serializing deterministic chunks |
+| 5 | Added tool durability and mission modules; cave ledgers remain optional world-state fields |
 
-## Current format (v4)
+## Current format (v5)
 
 ```json
 {
   "format": "wildfall-save",
-  "version": 4,
+  "version": 5,
   "kind": "manual",
   "game_mode": "survival",
   "timestamp": 1730000000,
@@ -58,7 +59,9 @@ Options / Return to Title / Quit). F5 save, F9 load still work.
     "world": { "seed": 12345 },
     "world_state": {
       "destroyed_resources": [{ "x": 4, "y": -2 }],
-      "destroyed_creatures": [{ "x": 7, "y": 1 }]
+      "destroyed_creatures": [{ "x": 7, "y": 1 }],
+      "discovered_caves": [],
+      "cave_changes": {}
     },
     "time": { "current_hour": 8.5, "current_day": 1 },
     "weather": { "weather": 0, "intensity": 0.0, "duration": 40.0, "next_change": 40.0 },
@@ -85,6 +88,13 @@ Apply order on load: `world` (regenerates chunks) → `world_state` (suppresses
 mutated deterministic spawns) → `time` → `weather` →
 `status` → `technology` → `buildings` → `player` → `camera`. World regen happens first so
 player position and buildings are restored after spawn reset.
+
+Cave fields are optional extensions to the existing world-state ledger, so old
+saves load with empty cave state. Cave geometry is regenerated from the world
+seed and stable cave identity. `discovered_caves` contains only stable cave
+IDs, while `cave_changes` is reserved for future player-caused cave mutations;
+neither serializes untouched cave geometry. Reset/depletion policy is not
+embedded in the generator.
 
 ## Adding a new system later
 

@@ -28,7 +28,7 @@
 - [x] Player collision with terrain (water blocks; rocky ground is walkable)
 - [x] Mouse-aimed ranged combat (face cursor, LMB fires bow/arrows)
 - [x] View rotation while moving (`,` / `.` 45° snaps, middle-mouse free rotate, Home reset)
-- [x] Mouse-relative WASD (W toward pointer, S away, A/D orbit)
+- [x] World-relative WASD (W north, A west, S south, D east)
 - [x] Creature AI (pathfinding, aggression / chase-attack for wolf, boar, polar bear)
 - [x] Build palette, placement, demolition, and four-story cutaway (`B`, LMB, `F`, `[` / `]`)
 - [x] Weather system

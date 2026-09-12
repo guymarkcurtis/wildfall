@@ -162,7 +162,7 @@ func migrate(data: Dictionary) -> Dictionary:
 				var slot_dict: Dictionary = slot5
 				var max_dur: int = int(item_database_ref.get_all_durations().get(str(item_id), 0))
 				if max_dur > 0 and not slot_dict.has("durability"):
-					slot_dict["durability"] = max_dur
+						slot_dict["durability"] = max_dur
 	current["version"] = SAVE_VERSION
 	current["format"] = FORMAT_ID
 	return current

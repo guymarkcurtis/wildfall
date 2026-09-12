@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ResourceDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/resource_definition.gd" id="1_resource"]
+
+[resource]
+script = ExtResource("1_resource")
+id = "tree"
+display_name = "Tree"
+spawn_weight = 1.0
+abundance = 0.8
+distribution_mode = "clustered"
+min_spacing_tiles = 1
+cluster_radius = 3
+base_health = 5.0
+yields = [{"item_id":"wood","min_qty":2,"max_qty":5,"chance":1.0},{"item_id":"fibre","min_qty":1,"max_qty":3,"chance":0.5}]

@@ -5,8 +5,8 @@ extends Node
 const CHUNK_SIZE: int = 16
 const TILE_SIZE: int = 32
 const PIXELS_PER_CHUNK: int = TILE_SIZE * CHUNK_SIZE
-const GENERATOR_VERSION: int = 1
-const DEFAULT_VIEWPORT_RADIUS: int = 2
+const GENERATOR_VERSION: int = 2
+const DEFAULT_VIEWPORT_RADIUS: int = 3
 
 # Chunk data storage
 var _chunks: Dictionary = {}  # str(Vector2i) -> Dictionary
@@ -18,6 +18,7 @@ var _viewport_radius: int = DEFAULT_VIEWPORT_RADIUS
 
 # World seed
 var _seed: int = 0
+var _config: WorldGenerationConfig = null
 
 # Signals
 signal chunk_generated(chunk_coords: Vector2i)
@@ -26,8 +27,13 @@ signal chunks_changed
 signal player_chunk_changed(old_chunk: Vector2i, new_chunk: Vector2i)
 
 ## Initialize with a world seed.
-func initialize(seed: int) -> void:
+func initialize(seed: int, config: WorldGenerationConfig = null) -> void:
 	_seed = seed
+	_config = config
+	if _config == null:
+		var world_gen := get_node_or_null("../WorldGenerator") as WorldGenerator
+		if world_gen != null:
+			_config = world_gen.get_configuration()
 	_chunks.clear()
 	_chunk_nodes.clear()
 	# Sentinel so the first update_player_position() call always triggers the
@@ -62,6 +68,8 @@ func generate_chunk(chunk_coords: Vector2i) -> Dictionary:
 	var key: String = _key(chunk_coords)
 	if _chunks.has(key):
 		return _chunks[key]
+	if not is_chunk_in_bounds(chunk_coords):
+		return {}
 
 	var world_gen := get_node_or_null("../WorldGenerator") as Node
 	if world_gen:
@@ -112,13 +120,20 @@ func get_chunk(chunk_coords: Vector2i) -> Dictionary:
 func get_seed() -> int:
 	return _seed
 
+func get_configuration() -> WorldGenerationConfig:
+	return _config
+
+func is_chunk_in_bounds(chunk_coords: Vector2i) -> bool:
+	return _config == null or _config.is_chunk_in_bounds(chunk_coords)
+
 ## Update chunks around the player.
 func _update_chunks() -> void:
 	# Generate chunks in viewport
 	for dx in range(-_viewport_radius, _viewport_radius + 1):
 		for dy in range(-_viewport_radius, _viewport_radius + 1):
 			var chunk_coords: Vector2i = _player_position + Vector2i(dx, dy)
-			generate_chunk(chunk_coords)
+			if is_chunk_in_bounds(chunk_coords):
+				generate_chunk(chunk_coords)
 
 	# Unload chunks outside viewport
 	var keys: Array = _chunks.keys()

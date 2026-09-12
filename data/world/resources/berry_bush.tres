@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ResourceDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/resource_definition.gd" id="1_resource"]
+
+[resource]
+script = ExtResource("1_resource")
+id = "berry_bush"
+display_name = "Berry Bush"
+spawn_weight = 0.8
+abundance = 0.7
+distribution_mode = "clustered"
+cluster_radius = 2
+base_health = 2.0
+yields = [{"item_id":"berry","min_qty":2,"max_qty":5,"chance":1.0}]

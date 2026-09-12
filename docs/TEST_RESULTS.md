@@ -1,7 +1,7 @@
 # Wildfall Test Results
 
 ## Test Run Summary
-- **Current verification**: 239 checks passed, 0 failures, 0 script errors (Godot 4.7.2 headless run after the generated-art pass; the two new atlases and the 7-column roster imported cleanly)
+- **Current verification**: 271 checks passed, 0 failures, 0 script errors (Godot 4.7.2 headless run after the data-driven world-generation, regional-biome, POI-spacing, cave-runtime, directional-animation, and fixed-world-direction control work; includes registry, large-world configuration, underground-mineral filtering, deterministic regional/POI/cave identity, underground cave deposits, cave entry/exit, discovery-ledger checks, authored player-direction/action frames, jumping, and all four fixed WASD axes)
 - **Godot Version**: 4.7.2.stable (linux.x86_64, official) — the project was upgraded to Godot 4.7 on 2026-09-11 (editor config sync from the Mac) and the Linux verification binary was upgraded to match
 - **Test Script**: `tests/test_game.gd` (SceneTree harness that boots the real `main.tscn`, validates world, UI, inventory, building, technology progression, texture-pack export/live switching, save persistence of player-caused world mutations, and resource accessibility, then exits with the failure count as its exit code)
 
@@ -16,6 +16,38 @@ XDG_CACHE_HOME=/tmp/godot-check/xdg \
 ```
 
 ## Engine upgrade: 4.6 → 4.7.2 (2026-09-11)
+
+## Data-driven world-generation refactor (2026-09-12)
+
+The world-generation foundation now discovers biome/resource/cave/POI Resource
+assets, derives stable world/chunk/tile/cave seeds, uses configurable finite
+bounds and streaming, emits a physical water mask and POI candidates, and
+filters underground-only mineral definitions out of surface spawning. The
+existing mutation-ledger save flow remains compatible. The harness grew from
+239 to **253 checks** and passes with 0 failures and 0 script errors. Regional
+biome fields and adjacency metadata are deterministic and data-defined; POI
+coverage includes deterministic cross-chunk spacing and stable candidate
+generation; cave coverage includes deterministic identity, data-defined
+underground deposit candidates, an entry chamber, entering/exiting a separate
+runtime space, and discovery-ledger persistence.
+
+## Player directional animation (2026-09-12)
+
+The player presentation now chooses authored PixelLab directional frames rather
+than rotating the body Sprite2D. Both Trailblazer appearances ship with eight
+cardinal/intercardinal walk, axe, pickaxe, sword, bow, and jump sets; the
+selector preserves a 16-slot facing model, mapping it to the nearest authored
+frame until 16-way art is supplied. Space triggers a short aimed hop that still
+respects terrain collision. Harness coverage verifies both appearances'
+complete action sets, east/south/north frame changes, jump lifecycle, and
+guards against reintroducing visual-node rotation.
+
+### Fixed world-direction controls (2026-09-12)
+
+Movement is world-relative: W always moves north, A west, S south, and D east,
+independent of mouse aim and animation facing. The mouse still controls
+directional animation, tool actions, and projectile firing; Space retains the
+short aimed hop. The harness verifies all four fixed movement axes.
 
 The project was bumped to `config/features = "4.7"` by the editor config
 sync from the Mac (commit `dfe7324`, alongside the illustrated-terrain

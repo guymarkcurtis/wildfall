@@ -52,8 +52,8 @@ reference and passes it into the systems it creates.
 
 ### Player
 CharacterBody2D with:
-- Mouse-relative WASD: W toward cursor, S away, A/D orbit; Sprint (Shift)
-- Faces the mouse pointer (orientation does not follow movement); LMB fires bow projectiles (arrows)
+- World-relative WASD: W north, A west, S south, D east; Sprint (Shift)
+- Faces the mouse pointer (orientation does not follow movement); LMB fires bow projectiles (arrows); Space performs a short aimed jump
 - Rocky ground is walkable; water retains terrain collision and blocking buildings collide
 - Health, hunger, and status-effect components
 - Inventory management (9-slot quick bar; durability lives in the
@@ -172,6 +172,28 @@ poison/heal/slow on the player.
   signals, no scene-tree access. See docs/MISSION_SYSTEM.md.
 
 ## Data-Driven Resources
+
+### World-generation content boundary
+
+The world-generation engine follows **code defines systems, data defines
+content**. `WorldContentRegistry` discovers `BiomeDefinition`,
+`ResourceDefinition`, `CaveDefinition`, and `POIDefinition` assets under
+`data/world/`. `WorldGenerationConfig` controls scale, bounds, streaming,
+water thresholds, and field settings. `WorldGenerationContext` derives stable
+world/chunk/tile/cave seeds without `hash()`.
+
+`WorldGenerator` emits base chunk fields, water masks, biome maps, and POI
+candidates. `ResourceSpawner` consumes generic resource rules and filters
+underground-only definitions from surface generation. Surface mineral names are
+not special-cased. Caves are separate generated spaces; entrance identity,
+space generation, and future cave reset/depletion policy are separate concerns.
+At runtime, a streamed cave-linked POI instantiates `CaveEntrance`; interaction
+opens the lightweight `CaveSpace` scene in a distinct coordinate space, then
+restores the saved surface position on exit. The world-state mutation ledger
+persists cave discovery and reserves `cave_changes` for future cave mutations,
+not the untouched generated layout. `CaveSpaceGenerator` also emits only
+underground-enabled, data-defined deposit candidates; their future harvesting
+and reset behavior remains outside base generation.
 
 All game content uses Resource subclasses:
 

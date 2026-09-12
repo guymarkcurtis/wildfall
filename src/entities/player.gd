@@ -11,6 +11,9 @@ const HARVEST_RANGE: float = 64.0
 const FIRE_COOLDOWN: float = 0.45
 const WATER_SPEED: float = 0.55
 const HOTBAR_SIZE := 9
+const JUMP_SPEED: float = 340.0
+const JUMP_DURATION: float = 0.24
+const JUMP_COOLDOWN: float = 0.38
 
 # Components (real component instances, not bare nodes)
 var inventory: InventoryComponent = null
@@ -37,6 +40,9 @@ var status_effects: StatusEffectSystem = null
 var _aim_dir: Vector2 = Vector2.RIGHT
 var _aim_locked: bool = false
 var _fire_cooldown: float = 0.0
+var _jump_remaining: float = 0.0
+var _jump_cooldown: float = 0.0
+var _jump_direction: Vector2 = Vector2.RIGHT
 var _facing: Polygon2D = null
 
 # Signals
@@ -92,16 +98,23 @@ func _spawn_at(position: Vector2) -> void:
 ## Handle input and movement.
 func _physics_process(delta: float) -> void:
 	_fire_cooldown = maxf(0.0, _fire_cooldown - delta)
+	_jump_cooldown = maxf(0.0, _jump_cooldown - delta)
 	_update_aim()
+	if Input.is_action_just_pressed("jump") and not _ui_blocks_world_input():
+		try_jump()
 
-	var direction: Vector2 = get_move_vector()
-	var speed: float = MOVE_SPEED
-	if Input.is_action_pressed("sprint") and direction != Vector2.ZERO:
-		speed = SPRINT_SPEED
-	speed *= _speed_multiplier()
-	if direction != Vector2.ZERO:
-		direction = direction.normalized()
-	velocity = direction * speed
+	if _jump_remaining > 0.0:
+		_jump_remaining = maxf(0.0, _jump_remaining - delta)
+		velocity = _jump_direction * JUMP_SPEED
+	else:
+		var direction: Vector2 = get_move_vector()
+		var speed: float = MOVE_SPEED
+		if Input.is_action_pressed("sprint") and direction != Vector2.ZERO:
+			speed = SPRINT_SPEED
+		speed *= _speed_multiplier()
+		if direction != Vector2.ZERO:
+			direction = direction.normalized()
+		velocity = direction * speed
 	move_and_slide()
 	if character_visual != null:
 		character_visual.update_animation(velocity, delta, _aim_dir)
@@ -130,22 +143,19 @@ func _physics_process(delta: float) -> void:
 		if event_bus:
 			event_bus.toggle_missions_ui.emit()
 
-## Mouse-relative move: W toward the pointer, S away, A/D orbit around it.
-## Facing stays on the cursor; movement never turns the character.
+## World-relative movement: W is north, A west, S south, and D east.
+## Facing stays on the cursor; movement never turns the character or changes
+## the meaning of WASD.
 func get_move_vector() -> Vector2:
-	var forward: Vector2 = _aim_dir
-	if forward == Vector2.ZERO:
-		forward = Vector2.RIGHT
-	var right: Vector2 = forward.rotated(PI * 0.5)
 	var direction: Vector2 = Vector2.ZERO
 	if Input.is_action_pressed("move_up"):
-		direction += forward
+		direction += Vector2.UP
 	if Input.is_action_pressed("move_down"):
-		direction -= forward
+		direction += Vector2.DOWN
 	if Input.is_action_pressed("move_right"):
-		direction += right
+		direction += Vector2.RIGHT
 	if Input.is_action_pressed("move_left"):
-		direction -= right
+		direction += Vector2.LEFT
 	return direction
 
 func get_aim_direction() -> Vector2:
@@ -160,6 +170,21 @@ func set_aim_locked(dir: Vector2) -> void:
 func clear_aim_lock() -> void:
 	_aim_locked = false
 
+## A short, collision-respecting hop in the current aim direction. It is an
+## evasive traversal move, not a way to bypass water or terrain collision.
+func try_jump() -> bool:
+	if _jump_remaining > 0.0 or _jump_cooldown > 0.0:
+		return false
+	_jump_direction = _aim_dir.normalized() if _aim_dir != Vector2.ZERO else Vector2.RIGHT
+	_jump_remaining = JUMP_DURATION
+	_jump_cooldown = JUMP_COOLDOWN
+	if character_visual != null:
+		character_visual.play_jump()
+	return true
+
+func is_jumping() -> bool:
+	return _jump_remaining > 0.0
+
 ## Update hunger over time.
 func _process(delta: float) -> void:
 	if hunger_component:
@@ -171,6 +196,16 @@ func _process(delta: float) -> void:
 func _handle_interaction() -> void:
 	var manager := get_parent().get_node_or_null("BuildingManager") as BuildingManager
 	if _ui_blocks_world_input() or (manager != null and manager.build_mode) or _fire_cooldown > 0.0:
+		return
+	var world := get_parent()
+	if world != null and world.has_method("is_in_cave") and world.is_in_cave():
+		_fire_cooldown = FIRE_COOLDOWN
+		world.call("interact_with_active_cave")
+		return
+	var entrances := _get_nearby_cave_entrances()
+	if not entrances.is_empty():
+		_fire_cooldown = FIRE_COOLDOWN
+		entrances[0].interact()
 		return
 	_fire_cooldown = FIRE_COOLDOWN
 	if character_visual != null:
@@ -228,6 +263,22 @@ func _get_nearby_creatures() -> Array[Creature]:
 			if child is Creature and not child.is_dead():
 				var dist: float = child.position.distance_to(global_position)
 				if dist <= HARVEST_RANGE:
+					nearby.append(child)
+	nearby.sort_custom(func(a, b): return a.position.distance_to(global_position) < b.position.distance_to(global_position))
+	return nearby
+
+## Cave entrances are intentional POIs, not harvestables or creatures. They
+## participate in the same proximity/aim interaction grammar without coupling
+## Player to a particular cave type or surface biome.
+func _get_nearby_cave_entrances() -> Array[CaveEntrance]:
+	var nearby: Array[CaveEntrance] = []
+	var parent := get_parent()
+	if parent:
+		for child in parent.get_children():
+			if child is CaveEntrance and child.visible:
+				var offset: Vector2 = child.global_position - global_position
+				var dist := offset.length()
+				if dist <= HARVEST_RANGE and (dist < 20.0 or offset.normalized().dot(_aim_dir) > 0.25):
 					nearby.append(child)
 	nearby.sort_custom(func(a, b): return a.position.distance_to(global_position) < b.position.distance_to(global_position))
 	return nearby

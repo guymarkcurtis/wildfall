@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ResourceDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/resource_definition.gd" id="1_resource"]
+
+[resource]
+script = ExtResource("1_resource")
+id = "gold_ore"
+display_name = "Gold Ore"
+spawn_weight = 0.25
+abundance = 0.2
+distribution_mode = "vein"
+cluster_radius = 5
+surface_spawnable = false
+underground_spawnable = true
+required_environment_tags = PackedStringArray("rocky", "highland")
+base_health = 12.0
+yields = [{"item_id":"gold_ore","min_qty":1,"max_qty":2,"chance":1.0},{"item_id":"stone","min_qty":1,"max_qty":2,"chance":0.5}]

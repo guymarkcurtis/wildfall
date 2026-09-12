@@ -100,7 +100,7 @@ A 30-second headless run of the actual game also completed with 0 errors,
 ## CURRENTLY WORKING (all verified by the test run above)
 
 - **Presentation**: Orthogonal 2D top-down (square 32px tiles, Camera2D). Not isometric.
-- **Player Movement**: Mouse-relative WASD (W toward cursor, S away, A/D orbit) + Sprint. Faces the pointer. Rocky ground is walkable; water retains terrain collision.
+- **Player Movement**: World-relative WASD (W north, A west, S south, D east) + Sprint and a short aimed Space-bar jump. Faces the pointer, which controls tool and ranged aim. Rocky ground is walkable; water retains terrain collision.
 - **Camera**: Smooth follow; `,`/`.` snap-rotate, middle-mouse free rotate, Home resets north-up.
 - **Ranged combat**: Face the cursor; LMB fires the wooden bow (consumes arrows).
 - **Buildings**: B opens the build palette. Select an owned part, LMB places it, wheel cycles parts, F demolishes, and [ / ] selects one of four stackable cutaway stories. Wood is available immediately; stone parts require Stone Construction research.
@@ -305,7 +305,7 @@ Exit code = number of failed checks (0 = green). Also run
 
 Manual:
 1. Open project in Godot 4.6+ (this machine: 4.7.2), run the main scene (F5)
-2. WASD is mouse-relative (W toward cursor, S away, A/D strafe), Shift to sprint
+2. WASD is world-relative (W north, A west, S south, D east), Shift sprints, and Space performs a short aimed jump
 3. Walk to a tree/rock/ore node and press E to harvest (matching tool doubles damage)
 4. Walk to a creature and press E to hunt (loot drops into inventory)
 5. Check inventory (I key) for collected resources
@@ -322,7 +322,7 @@ godot --headless --path . --script tests/test_game.gd
 ## IMPORTANT DECISIONS
 
 - **Graphics: orthogonal 2D top-down**, square tiles / Camera2D. Not isometric. A later 2.5D look is sprites + Y-sort on this same grid, not an iso or 3D rewrite.
-- **Controls: WASD is mouse-relative** (W toward pointer, S back, A/D orbit), **mouse aims** ranged weapons, **`,` / `.` and middle-mouse drag rotate the view**, Home resets north-up.
+- **Controls: WASD is world-relative** (W north, A west, S south, D east), **mouse aims** character-facing and ranged weapons, Space jumps, and **`,` / `.` and middle-mouse drag rotate the view**, Home resets north-up.
 - Project name is "Wildfall" (renamed from "2D Icarus")
 - HarvestableResource is an Area2D for proximity detection
 - Resource yields are configurable per type and biome

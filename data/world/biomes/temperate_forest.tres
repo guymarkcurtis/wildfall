@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="BiomeDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/biome_definition.gd" id="1_biome"]
+
+[resource]
+script = ExtResource("1_biome")
+id = "temperate_forest"
+display_name = "Temperate Forest"
+elevation_range = Vector2(0.3, 0.6)
+moisture_range = Vector2(0.4, 0.7)
+temperature_range = Vector2(0.3, 0.6)
+rarity_weight = 1.0
+environment_tags = PackedStringArray("woodland", "humid")
+preferred_neighbors = PackedStringArray("grassland", "mountain")
+transition_biome_ids = PackedStringArray("grassland", "mountain")
+terrain_tile_id = "forest"
+high_elevation_terrain_tile_id = "stone"
+high_elevation_threshold = 0.7
+cave_entrance_suitability = 0.12
+ground_color = Color(0.15, 0.45, 0.15, 1)
+rain_chance = 0.5
+resource_types = PackedStringArray("tree", "tree", "fibre", "berry_bush", "rock", "plant")
+creature_types = PackedStringArray("rabbit", "deer", "boar")
+vegetation_types = PackedStringArray("tree", "fibre", "berry_bush", "plant")

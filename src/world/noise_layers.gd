@@ -17,37 +17,46 @@ const TEMPERATURE_GAIN: float = 0.5
 var elevation_noise: FastNoiseLite
 var moisture_noise: FastNoiseLite
 var temperature_noise: FastNoiseLite
+var water_noise: FastNoiseLite
 
 # Current seed
 var _seed: int = 0
 
 ## Initialize noise generators with a seed.
-func initialize(seed: int) -> void:
+func initialize(seed: int, settings: Dictionary = {}) -> void:
 	_seed = seed
 
 	elevation_noise = FastNoiseLite.new()
 	elevation_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
 	elevation_noise.seed = seed
-	elevation_noise.frequency = 0.005
-	elevation_noise.fractal_octaves = ELEVATION_OCTAVES
-	elevation_noise.fractal_lacunarity = ELEVATION_LACUNARITY
-	elevation_noise.fractal_gain = ELEVATION_GAIN
+	elevation_noise.frequency = float(settings.get("elevation_frequency", 0.005))
+	elevation_noise.fractal_octaves = int(settings.get("elevation_octaves", ELEVATION_OCTAVES))
+	elevation_noise.fractal_lacunarity = float(settings.get("elevation_lacunarity", ELEVATION_LACUNARITY))
+	elevation_noise.fractal_gain = float(settings.get("elevation_gain", ELEVATION_GAIN))
 
 	moisture_noise = FastNoiseLite.new()
 	moisture_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
 	moisture_noise.seed = seed + 1000
-	moisture_noise.frequency = 0.003
-	moisture_noise.fractal_octaves = MOISTURE_OCTAVES
-	moisture_noise.fractal_lacunarity = MOISTURE_LACUNARITY
-	moisture_noise.fractal_gain = MOISTURE_GAIN
+	moisture_noise.frequency = float(settings.get("moisture_frequency", 0.003))
+	moisture_noise.fractal_octaves = int(settings.get("moisture_octaves", MOISTURE_OCTAVES))
+	moisture_noise.fractal_lacunarity = float(settings.get("moisture_lacunarity", MOISTURE_LACUNARITY))
+	moisture_noise.fractal_gain = float(settings.get("moisture_gain", MOISTURE_GAIN))
 
 	temperature_noise = FastNoiseLite.new()
 	temperature_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
 	temperature_noise.seed = seed + 2000
-	temperature_noise.frequency = 0.002
-	temperature_noise.fractal_octaves = TEMPERATURE_OCTAVES
-	temperature_noise.fractal_lacunarity = TEMPERATURE_LACUNARITY
-	temperature_noise.fractal_gain = TEMPERATURE_GAIN
+	temperature_noise.frequency = float(settings.get("temperature_frequency", 0.002))
+	temperature_noise.fractal_octaves = int(settings.get("temperature_octaves", TEMPERATURE_OCTAVES))
+	temperature_noise.fractal_lacunarity = float(settings.get("temperature_lacunarity", TEMPERATURE_LACUNARITY))
+	temperature_noise.fractal_gain = float(settings.get("temperature_gain", TEMPERATURE_GAIN))
+
+	water_noise = FastNoiseLite.new()
+	water_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	water_noise.seed = seed + 3000
+	water_noise.frequency = float(settings.get("water_frequency", 0.0015))
+	water_noise.fractal_octaves = int(settings.get("water_octaves", 2))
+	water_noise.fractal_lacunarity = float(settings.get("water_lacunarity", 2.0))
+	water_noise.fractal_gain = float(settings.get("water_gain", 0.5))
 
 ## Get elevation value at world position.
 func get_elevation(x: float, y: float) -> float:
@@ -61,12 +70,16 @@ func get_moisture(x: float, y: float) -> float:
 func get_temperature(x: float, y: float) -> float:
 	return temperature_noise.get_noise_2d(x, y)
 
+func get_water(x: float, y: float) -> float:
+	return water_noise.get_noise_2d(x, y)
+
 ## Get raw noise values for debug overlay.
 func get_noise_values(x: float, y: float) -> Dictionary:
 	return {
 		"elevation": elevation_noise.get_noise_2d(x, y),
 		"moisture": moisture_noise.get_noise_2d(x, y),
 		"temperature": temperature_noise.get_noise_2d(x, y)
+		,"water": water_noise.get_noise_2d(x, y)
 	}
 
 ## Get the current seed.
@@ -74,6 +87,6 @@ func get_seed() -> int:
 	return _seed
 
 ## Reinitialize with a new seed.
-func reinitialize(seed: int) -> void:
+func reinitialize(seed: int, settings: Dictionary = {}) -> void:
 	_seed = seed
-	initialize(seed)
+	initialize(seed, settings)

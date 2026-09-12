@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="BiomeDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/biome_definition.gd" id="1_biome"]
+
+[resource]
+script = ExtResource("1_biome")
+id = "desert"
+display_name = "Desert"
+elevation_range = Vector2(0.2, 0.4)
+moisture_range = Vector2(0.0, 0.2)
+temperature_range = Vector2(0.6, 1.0)
+rarity_weight = 0.85
+environment_tags = PackedStringArray("arid", "open")
+preferred_neighbors = PackedStringArray("grassland", "mountain")
+transition_biome_ids = PackedStringArray("grassland", "mountain")
+terrain_tile_id = "sand"
+ground_color = Color(0.8, 0.7, 0.4, 1)
+resource_types = PackedStringArray("rock", "rock")
+creature_types = PackedStringArray("rabbit", "boar")
+vegetation_types = PackedStringArray("rock")

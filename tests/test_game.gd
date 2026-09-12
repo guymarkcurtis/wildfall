@@ -18,7 +18,7 @@ var _failed: int = 0
 var _done: bool = false
 # Dynamic phases after the static checks:
 # 0 -> panel starts hidden, press C      1 -> wait for panel to open, press C
-# 2 -> wait for panel to close, walk     3 -> walk until far enough, check
+# 2 -> wait for panel to close, walk east 3 -> walk until far enough, check
 # 4 -> free the tree, then quit
 var _phase: int = 0
 var _phase_frame: int = 0
@@ -80,7 +80,7 @@ func _process(_delta: float) -> bool:
 				Input.action_release("toggle_crafting")
 				_walk_start = _main.get_node("Player").global_position
 				(_main.get_node("Player") as Player).set_aim_locked(Vector2.RIGHT)
-				Input.action_press("move_up")
+				Input.action_press("move_right")
 				_phase = 3
 				_phase_frame = _frames
 			elif _frames > _phase_frame + 20:
@@ -91,7 +91,7 @@ func _process(_delta: float) -> bool:
 			var pos: Vector2 = _main.get_node("Player").global_position
 			if pos.x > _walk_start.x + 1050.0 or _frames > _phase_frame + 3600:
 				_run_walk_checks(pos)
-				Input.action_release("move_up")
+				Input.action_release("move_right")
 				(_main.get_node("Player") as Player).clear_aim_lock()
 				# Free a couple of frames later: queued frees flush at the
 				# end of the frame, so exiting immediately would report
@@ -218,6 +218,91 @@ func _run_checks() -> void:
 		for dy in range(-3, 4):
 			seen_biomes[world_gen.get_biome_at_world(dx * 16, dy * 16)] = true
 	_check(seen_biomes.size() > 1, "Biome map is varied across the region (%d distinct biomes)" % seen_biomes.size())
+	var world_config: WorldGenerationConfig = world_gen.get_configuration()
+	_check(world_config.world_dimensions_chunks.x >= 64 and world_config.world_dimensions_chunks.y >= 64,
+		"World bounds are configured as a large finite world")
+	_check(world_config.streaming_radius >= 1 and world_config.chunk_size_tiles == 16,
+		"Chunk size and streaming radius come from world configuration")
+	var world_registry: WorldContentRegistry = world_gen.get_content_registry()
+	_check(world_registry.biomes.size() >= 6 and world_registry.resources.size() >= 8,
+		"Biome and resource content is discovered from data assets")
+	var regional_a: Dictionary = world_gen.get_regional_noise_values(137, -91)
+	var regional_b: Dictionary = world_gen.get_regional_noise_values(137, -91)
+	var adjacency_authored := false
+	for biome_definition in world_registry.biomes.values():
+		if not biome_definition.preferred_neighbors.is_empty() or not biome_definition.transition_biome_ids.is_empty():
+			adjacency_authored = true
+			break
+	_check(regional_a == regional_b and adjacency_authored and world_config.regional_biome_weight > 0.0,
+		"Regional biome fields and adjacency metadata are deterministic and data-defined")
+	var poi_ids := world_registry.pois.keys()
+	poi_ids.sort()
+	var poi_definition: POIDefinition = world_registry.get_poi(str(poi_ids[0])) if not poi_ids.is_empty() else null
+	var poi_anchors: Array = []
+	if poi_definition != null:
+		for chunk_x in range(-8, 9):
+			for chunk_y in range(-8, 9):
+				var anchors: Array = world_gen.call("_poi_anchor_tiles_in_chunk", poi_definition,
+						Vector2i(chunk_x * 16, chunk_y * 16), 16)
+				poi_anchors.append_array(anchors)
+	var poi_spacing_ok := poi_definition != null and not poi_anchors.is_empty()
+	for first_index in range(poi_anchors.size()):
+		var first: Vector2i = poi_anchors[first_index]
+		for second_index in range(first_index):
+			var second: Vector2i = poi_anchors[second_index]
+			if maxi(abs(first.x - second.x), abs(first.y - second.y)) < poi_definition.min_spacing_tiles:
+				poi_spacing_ok = false
+	_check(poi_spacing_ok, "POI asset spacing is deterministic across chunk boundaries")
+	var poi_chunk_a: Dictionary = world_gen.generate_chunk(Vector2i(0, 0))
+	var poi_chunk_b: Dictionary = world_gen.generate_chunk(Vector2i(0, 0))
+	_check(str(poi_chunk_a.get("poi_candidates", [])) == str(poi_chunk_b.get("poi_candidates", [])),
+		"POI candidates are stable regardless of generation order")
+	var surface_ore_found := false
+	for resource_record in resource_spawner.get_all_resources().values():
+		var resource_type := str(resource_record.get("type", ""))
+		if resource_type in ["iron_ore", "coal", "gold_ore"]:
+			surface_ore_found = true
+	_check(not surface_ore_found, "Underground-only mineral definitions do not spawn on the surface")
+	var cave_definition: CaveDefinition = world_gen.get_cave("mountain_cave")
+	var cave_generator := CaveSpaceGenerator.new()
+	var cave_a: Dictionary = cave_generator.generate_cave(world_gen.get_seed(), "mountain_cave@4,4", Vector2i(4, 4), cave_definition, world_registry.resources)
+	var cave_b: Dictionary = cave_generator.generate_cave(world_gen.get_seed(), "mountain_cave@4,4", Vector2i(4, 4), cave_definition, world_registry.resources)
+	_check(cave_definition != null and cave_a.get("cave_id", "") == cave_b.get("cave_id", "") and cave_a.get("seed", -1) == cave_b.get("seed", -2),
+		"Cave spaces have stable deterministic identities and seeds")
+	var cave_deposits: Array = cave_a.get("resource_candidates", [])
+	var cave_deposits_are_underground := not cave_deposits.is_empty() and str(cave_deposits) == str(cave_b.get("resource_candidates", []))
+	for deposit in cave_deposits:
+		var deposit_definition: ResourceDefinition = world_registry.get_resource(str(deposit.get("resource_id", "")))
+		if deposit_definition == null or not deposit_definition.underground_spawnable:
+			cave_deposits_are_underground = false
+			break
+	_check(cave_deposits_are_underground, "Cave deposits are deterministic and use only underground resource data")
+	var cave_rooms: Array = cave_a.get("rooms", [])
+	_check(not cave_rooms.is_empty() and cave_rooms[0].get("center", Vector2i.ONE) == Vector2i.ZERO,
+		"Cave entrance chamber is anchored at the runtime exit")
+	var runtime_entrance := CaveEntrance.new()
+	runtime_entrance.setup({
+		"cave_id": "mountain_cave@4,4",
+		"cave_type_id": "mountain_cave",
+		"x": 4,
+		"y": 4,
+		"biome": "test"
+	})
+	main.add_child(runtime_entrance)
+	runtime_entrance.entered.connect(Callable(main, "_on_cave_entrance_entered"))
+	runtime_entrance.interact()
+	_check(bool(main.call("is_in_cave")) and main.get_node_or_null("ActiveCaveSpace") is CaveSpace,
+		"Surface cave entrance opens a separate generated cave space")
+	var active_cave: CaveSpace = main.get_node_or_null("ActiveCaveSpace") as CaveSpace
+	_check(active_cave != null and not (active_cave.cave_data.get("resource_candidates", []) as Array).is_empty(),
+		"Entering a cave carries its deterministic underground deposit candidates")
+	var cave_state: Dictionary = main.call("_collect_world_state") as Dictionary
+	_check((cave_state.get("discovered_caves", []) as Array).has("mountain_cave@4,4"),
+		"Entering a cave records only its stable discovery identity")
+	main.call("interact_with_active_cave")
+	_check(not bool(main.call("is_in_cave")) and terrain_renderer.collision_enabled,
+		"Cave exit restores the surface space and terrain collision")
+	runtime_entrance.queue_free()
 
 	# --- 3. Terrain + resources --------------------------------------------
 	_check(terrain_renderer.get_used_cells().size() > 0, "Terrain rendered for initial chunks (%d tiles)" % terrain_renderer.get_used_cells().size())
@@ -242,7 +327,9 @@ func _run_checks() -> void:
 	var station_texture := TexturePackManager.get_texture("res://assets/tiles/wildfall-crafting-stations.png")
 	_check(station_texture != null and station_texture.get_width() == 128 and station_texture.get_height() == 32, "Crafting-station atlas has four 32px cells")
 	# --- Generated art sheets (external image pipeline) ----------------------
-	var artreq_roster_img: Image = TexturePackManager.get_image("res://assets/creatures/alien-creature-roster.png")
+	# Inspect the built-in source sheet so a user's active texture-pack choice
+	# cannot make this asset-contract check fail.
+	var artreq_roster_img: Image = TexturePackManager.get_stock_image("res://assets/creatures/alien-creature-roster.png")
 	_check(artreq_roster_img != null and artreq_roster_img.get_size() == Vector2i(2688, 1024), "Creature roster atlas is the full 7x2 sheet")
 	_check(CreatureVisual.COLUMNS == 7, "CreatureVisual samples the roster as seven columns")
 	var artreq_species_columns: Dictionary = CreatureVisual.SPECIES_COLUMNS
@@ -493,6 +580,7 @@ func _run_checks() -> void:
 	_check(InputMap.has_action("rotate_cw"), "rotate_cw input action exists")
 	_check(InputMap.has_action("reset_view"), "reset_view input action exists")
 	_check(InputMap.has_action("fire"), "fire input action exists")
+	_check(InputMap.has_action("jump"), "jump input action exists (Space)")
 	_check(InputMap.has_action("toggle_build"), "toggle_build input action exists")
 	var camera: CameraController = camera_controller as CameraController
 	var player_ent: Player = player as Player
@@ -500,19 +588,45 @@ func _run_checks() -> void:
 	_check(abs(camera.rotation - PI * 0.5) < 0.01, "Camera rotate_view applies radians")
 	camera.reset_view()
 	_check(is_zero_approx(camera.rotation), "reset_view returns north-up")
+	var player_visual: CharacterVisual = player_ent.character_visual
+	player_visual.update_animation(Vector2.ZERO, 0.0, Vector2.RIGHT)
+	var east_texture := player_visual.get_active_texture()
+	_check(player_visual.get_facing_direction() == "east" and player_visual.get_facing_direction_slot() == 0,
+			"Player visual selects the east authored directional frame")
+	_check(is_zero_approx(player_visual.rotation), "Player body does not rotate its sprite node when aiming")
+	player_visual.update_animation(Vector2.ZERO, 0.0, Vector2.DOWN)
+	_check(player_visual.get_facing_direction() == "south" and player_visual.get_active_texture() != east_texture,
+			"Player visual swaps to a distinct south authored directional frame")
+	player_visual.update_animation(Vector2.ZERO, 0.0, Vector2.UP)
+	_check(player_visual.get_facing_direction() == "north" and is_zero_approx(player_visual.rotation),
+			"Player visual retains a non-rotated north facing frame")
+	for appearance_gender in ["female", "male"]:
+		player_visual.set_appearance(appearance_gender, "base")
+		for animation_type in ["axe", "pickaxe", "sword", "bow", "jump"]:
+			_check(player_visual.has_complete_directional_animation(animation_type),
+					"%s player visual has a complete eight-way %s animation" % [appearance_gender.capitalize(), animation_type])
+	player_visual.set_appearance(player_ent.character_gender, player_ent.character_outfit)
+	player_ent.set_aim_locked(Vector2.RIGHT)
+	_check(player_ent.try_jump() and player_ent.is_jumping(), "Player can start an aimed jump")
+	player_ent._physics_process(Player.JUMP_DURATION + 0.01)
+	_check(not player_ent.is_jumping(), "Player jump finishes after its configured duration")
 	player_ent.set_aim_locked(Vector2.RIGHT)
 	Input.action_press("move_up")
-	var toward: Vector2 = player_ent.get_move_vector()
+	var north: Vector2 = player_ent.get_move_vector()
 	Input.action_release("move_up")
-	_check(toward.x > 0.5, "W moves toward the aim/mouse (%s)" % str(toward))
+	_check(north.y < -0.5, "W always moves north (%s)" % str(north))
 	Input.action_press("move_down")
-	var away: Vector2 = player_ent.get_move_vector()
+	var south: Vector2 = player_ent.get_move_vector()
 	Input.action_release("move_down")
-	_check(away.x < -0.5, "S moves away from the aim/mouse (%s)" % str(away))
+	_check(south.y > 0.5, "S always moves south (%s)" % str(south))
+	Input.action_press("move_left")
+	var west: Vector2 = player_ent.get_move_vector()
+	Input.action_release("move_left")
+	_check(west.x < -0.5, "A always moves west (%s)" % str(west))
 	Input.action_press("move_right")
-	var orbit: Vector2 = player_ent.get_move_vector()
+	var east: Vector2 = player_ent.get_move_vector()
 	Input.action_release("move_right")
-	_check(orbit.y > 0.5, "D strafes around the pointer (%s)" % str(orbit))
+	_check(east.x > 0.5, "D always moves east (%s)" % str(east))
 	_check(_player_has_shape(player_ent), "Player has a collision shape for terrain")
 	var tileset: TileSet = (terrain_renderer as TerrainRenderer).tile_set
 	_check(tileset != null and tileset.get_physics_layers_count() > 0,
@@ -715,7 +829,8 @@ func _run_checks() -> void:
 	player.inventory.damage_tool("wooden_axe", 12)
 	_check(int(player.inventory.get_tool_durability("wooden_axe")["current"]) == 38, "Wear accumulates across uses")
 	_check(main.call("save_game"), "Worn tool durability can be saved")
-	_check(main.call("load_game"), "Worn tool durability can be loaded")
+	var durability_save_path: String = ss.last_save_path
+	_check(main.call("load_game", durability_save_path), "Worn tool durability can be loaded")
 	_check(int(player.inventory.get_tool_durability("wooden_axe")["current"]) == 38, "Worn durability survives a save/load round trip")
 	player.inventory.add_item("wood", 1)
 

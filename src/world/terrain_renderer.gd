@@ -54,6 +54,16 @@ func _create_visual_layers() -> void:
 	_detail_layer.z_index = -10
 	parent.call_deferred("add_child", _detail_layer)
 
+## Hide/show the surface as a whole when the player enters a separate world
+## space. The logical TileMap remains hidden during normal play, so this owns
+## the visible layers and collision state together.
+func set_world_visible(enabled: bool) -> void:
+	if _surface_layer != null:
+		_surface_layer.visible = enabled
+	if _detail_layer != null:
+		_detail_layer.visible = enabled
+	collision_enabled = enabled
+
 ## True when the given world tile is currently drawn as water.
 func is_water_cell(world_tile: Vector2i) -> bool:
 	return _water_cells.has(world_tile)
@@ -133,6 +143,7 @@ func _render_chunk(chunk_coords: Vector2i, data: Dictionary) -> void:
 	var world_start: Vector2i = _chunk_coords_to_world_start(chunk_coords)
 	var elevation: PackedFloat32Array = data["elevation"]
 	var moisture: PackedFloat32Array = data["moisture"]
+	var water_mask: PackedByteArray = data.get("water_mask", PackedByteArray())
 	var tile_ids := PackedInt32Array()
 
 	for y in range(CHUNK_SIZE):
@@ -148,7 +159,8 @@ func _render_chunk(chunk_coords: Vector2i, data: Dictionary) -> void:
 			if world_generator != null and is_instance_valid(world_generator) \
 					and world_generator.has_method("get_biome_at_world"):
 				biome_id = world_generator.get_biome_at_world(world_x, world_y)
-			var tile_id: int = _get_tile_id(elev, moist, biome_id)
+			var is_water: bool = tile_index < water_mask.size() and water_mask[tile_index] != 0
+			var tile_id: int = _get_tile_id(elev, moist, biome_id, is_water)
 			tile_ids.append(tile_id)
 			var cell := world_start + Vector2i(x, y)
 			# Water has four animated source textures; the other terrain source IDs
@@ -246,40 +258,37 @@ func _detail_for_tile(tile_id: int, random: RandomNumberGenerator) -> int:
 ## Get tile ID based on elevation, moisture, and the tile's biome.
 ## Water and sand shoreline are shared by all biomes; the biome then picks
 ## the ground cover so each of the six biomes reads distinctly on the map.
-func _get_tile_id(elevation: float, moisture: float, biome: String) -> int:
-	if elevation < 0.3:
+func _get_tile_id(elevation: float, moisture: float, biome_id: String, is_water: bool = false) -> int:
+	var config: WorldGenerationConfig = world_generator.get_configuration() if world_generator != null and world_generator.has_method("get_configuration") else null
+	if is_water or (config != null and elevation < config.water_level) or (config == null and elevation < 0.3):
 		return TILE_WATER
-	if elevation < 0.35:
+	var shoreline: float = config.shoreline_level if config != null else 0.35
+	if elevation < shoreline:
 		return TILE_SAND  # shoreline
-	match biome:
-		"arctic":
-			return TILE_SNOW
-		"desert":
-			if elevation > 0.7:
-				return TILE_STONE  # rocky high desert
-			return TILE_SAND
-		"mountain":
-			if elevation > 0.5:
-				return TILE_STONE
-			return TILE_GRASS  # foothills
-		"swamp":
-			if moisture > 0.3:
-				return TILE_MUD
-			return TILE_GRASS
-		"temperate_forest":
-			if elevation > 0.7:
-				return TILE_STONE
-			if moisture > 0.3:
-				return TILE_FOREST
-			return TILE_GRASS
-		"grassland", _:
-			if elevation > 0.7:
-				return TILE_STONE
-			if moisture > 0.6:
-				return TILE_MUD  # wet meadow
-			if elevation > 0.5:
-				return TILE_DIRT
-			return TILE_GRASS
+	var biome_definition: BiomeDefinition = null
+	if world_generator != null and world_generator.has_method("get_biome_definition"):
+		biome_definition = world_generator.get_biome_definition(biome_id)
+	if biome_definition == null:
+		return TILE_GRASS
+	var terrain_id := biome_definition.terrain_tile_id
+	if not biome_definition.high_elevation_terrain_tile_id.is_empty() \
+			and elevation >= biome_definition.high_elevation_threshold:
+		terrain_id = biome_definition.high_elevation_terrain_tile_id
+	return _tile_id_from_content_id(terrain_id)
+
+## Terrain IDs are renderer vocabulary, not biome/resource content. New visual
+## terrain types can be added here without adding biome-specific branches.
+func _tile_id_from_content_id(terrain_id: String) -> int:
+	return {
+		"water": TILE_WATER,
+		"sand": TILE_SAND,
+		"grass": TILE_GRASS,
+		"forest": TILE_FOREST,
+		"dirt": TILE_DIRT,
+		"stone": TILE_STONE,
+		"snow": TILE_SNOW,
+		"mud": TILE_MUD
+	}.get(terrain_id, TILE_GRASS)
 
 ## Convert chunk coords to world start position.
 func _chunk_coords_to_world_start(chunk_coords: Vector2i) -> Vector2i:

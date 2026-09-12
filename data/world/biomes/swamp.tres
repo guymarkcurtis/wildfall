@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="BiomeDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/biome_definition.gd" id="1_biome"]
+
+[resource]
+script = ExtResource("1_biome")
+id = "swamp"
+display_name = "Swamp"
+elevation_range = Vector2(0.2, 0.4)
+moisture_range = Vector2(0.7, 1.0)
+temperature_range = Vector2(0.4, 0.7)
+rarity_weight = 0.8
+environment_tags = PackedStringArray("wetland", "humid")
+preferred_neighbors = PackedStringArray("temperate_forest", "grassland")
+transition_biome_ids = PackedStringArray("temperate_forest", "grassland")
+terrain_tile_id = "mud"
+ground_color = Color(0.3, 0.4, 0.2, 1)
+rain_chance = 0.8
+resource_types = PackedStringArray("fibre", "berry_bush", "rock", "plant")
+creature_types = PackedStringArray("rabbit", "boar")
+vegetation_types = PackedStringArray("fibre", "berry_bush", "plant")

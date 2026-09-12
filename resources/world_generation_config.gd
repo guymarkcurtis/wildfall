@@ -1,0 +1,60 @@
+## Data-driven knobs for the world-generation engine.
+## Content assets should reference this configuration rather than changing the
+## generator when the initial world scale or field balance changes.
+class_name WorldGenerationConfig
+extends Resource
+
+@export var config_id: String = "default_world"
+@export var generation_version: int = 2
+@export var tile_size_pixels: int = 32
+@export var chunk_size_tiles: int = 16
+@export var world_dimensions_chunks: Vector2i = Vector2i(128, 128)
+@export var world_origin_chunk: Vector2i = Vector2i(-64, -64)
+@export var streaming_radius: int = 3
+
+@export var water_level: float = 0.30
+@export var shoreline_level: float = 0.35
+@export var lake_level: float = 0.24
+@export var lake_moisture_threshold: float = 0.72
+@export var lake_noise_threshold: float = 0.56
+
+## Low-frequency regional sampling keeps biome regions broad while preserving
+## local environmental variation at their boundaries.
+@export_range(0.01, 1.0) var regional_field_coordinate_scale: float = 0.18
+@export_range(0.0, 8.0) var regional_biome_weight: float = 2.0
+@export_range(0.0, 8.0) var transition_biome_weight: float = 0.85
+@export_range(0.0, 8.0) var preferred_neighbor_weight: float = 0.4
+
+@export var resource_min_per_chunk: int = 5
+@export var resource_max_per_chunk: int = 15
+@export var resource_attempt_multiplier: int = 8
+
+## Noise settings are dictionaries so designers can tune fields without
+## editing procedural-generation code. Missing keys use NoiseLayers defaults.
+@export var noise_settings: Dictionary = {
+	"elevation_frequency": 0.005,
+	"elevation_octaves": 4,
+	"elevation_lacunarity": 2.0,
+	"elevation_gain": 0.5,
+	"moisture_frequency": 0.003,
+	"moisture_octaves": 3,
+	"moisture_lacunarity": 2.0,
+	"moisture_gain": 0.5,
+	"temperature_frequency": 0.002,
+	"temperature_octaves": 2,
+	"temperature_lacunarity": 1.5,
+	"temperature_gain": 0.5,
+	"water_frequency": 0.0015,
+	"water_octaves": 2,
+	"water_lacunarity": 2.0,
+	"water_gain": 0.5
+}
+
+func is_chunk_in_bounds(coords: Vector2i) -> bool:
+	return coords.x >= world_origin_chunk.x \
+		and coords.y >= world_origin_chunk.y \
+		and coords.x < world_origin_chunk.x + world_dimensions_chunks.x \
+		and coords.y < world_origin_chunk.y + world_dimensions_chunks.y
+
+func get_world_max_chunk() -> Vector2i:
+	return world_origin_chunk + world_dimensions_chunks - Vector2i.ONE

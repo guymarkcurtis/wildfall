@@ -93,14 +93,13 @@ Depth and “2.5D” later means taller sprites, Y-sort, shadows, and height off
 
 ## Controls
 
-Movement is **mouse-relative**. The character sprite **always faces the cursor**. **W** walks toward the pointer, **S** walks away without turning the sprite, **A** / **D** strafe in a circle around the pointer. View rotation does not change this.
+Movement is **world-relative**: **W** is north, **A** west, **S** south, and **D** east regardless of facing or view rotation. The character sprite **always faces the cursor**, which also controls tool use and ranged aim.
 
 | Input | Action | Status |
 |-----|--------|--------|
-| W | Move toward the mouse pointer | Implemented |
-| S | Move away from the pointer (no turn) | Implemented |
-| A / D | Strafe / orbit around the pointer | Implemented |
+| W / A / S / D | Move north / west / south / east | Implemented |
 | Shift | Sprint | Implemented |
+| Space | Short aimed jump (respects terrain collision) | Implemented |
 | Mouse pointer | Aim ranged weapons | Implemented |
 | Left mouse (hold) | Use selected tool; fire when bow is selected | Implemented |
 | `,` / `.` | Rotate view 45° CCW / CW | Implemented |

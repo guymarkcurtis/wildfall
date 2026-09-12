@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="BiomeDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/biome_definition.gd" id="1_biome"]
+
+[resource]
+script = ExtResource("1_biome")
+id = "grassland"
+display_name = "Grassland"
+elevation_range = Vector2(0.3, 0.5)
+moisture_range = Vector2(0.3, 0.5)
+temperature_range = Vector2(0.3, 0.6)
+rarity_weight = 1.0
+environment_tags = PackedStringArray("open", "meadow")
+preferred_neighbors = PackedStringArray("temperate_forest", "mountain")
+transition_biome_ids = PackedStringArray("temperate_forest", "mountain")
+terrain_tile_id = "grass"
+ground_color = Color(0.3, 0.65, 0.2, 1)
+resource_types = PackedStringArray("fibre", "berry_bush", "berry_bush", "rock", "plant")
+creature_types = PackedStringArray("rabbit", "deer", "boar")
+vegetation_types = PackedStringArray("fibre", "berry_bush", "plant")
