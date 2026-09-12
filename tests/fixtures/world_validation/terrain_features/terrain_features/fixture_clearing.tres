@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="TerrainFeatureDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/terrain_feature_definition.gd" id="1_clearing"]
+
+[resource]
+script = ExtResource("1_clearing")
+id = "fixture_clearing"
+display_name = "Fixture Clearing"
+category = "clearing"
+spawn_weight = 1.0
+min_spacing_tiles = 24
+footprint_radius_tiles = 2
+allowed_biomes = PackedStringArray("fixture_meadow")
+influence_tags = PackedStringArray("open_ground")

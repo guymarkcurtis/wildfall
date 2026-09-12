@@ -12,6 +12,13 @@ const CHUNK_SIZE: int = 16
 ## silently as uniform instead of failing).
 const DISTRIBUTION_MODES: Array[String] = ["uniform", "sparse", "clustered", "patch", "vein", "edge-biased", "elevation-biased"]
 
+## Tag vocabulary owned by this system (see docs/WORLD_CONTENT_AUTHORING.md):
+## a terrain-feature definition that lists this influence tag declares its
+## footprint not to be a valid surface-resource spawn site. The spawner is
+## the consumer; feature assets opt in by data, and adding a new feature is
+## an asset-only change.
+const NO_SPAWN_FEATURE_TAG := "no_spawn"
+
 var _resources: Dictionary = {}
 var _generated_chunks: Dictionary = {}
 var _seed: int = 0
@@ -89,7 +96,7 @@ func deserialize(data: Dictionary) -> void:
 
 ## Generate surface resources for one chunk. The record shape remains
 ## compatible with HarvestableResource/Main.
-func generate_chunk_resources(chunk_coords: Vector2i, seed: int = 0) -> Array[Dictionary]:
+func generate_chunk_resources(chunk_coords: Vector2i, seed: int = 0, feature_candidates: Array = []) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	if _generated_chunks.has(chunk_coords):
 		return results
@@ -112,6 +119,13 @@ func generate_chunk_resources(chunk_coords: Vector2i, seed: int = 0) -> Array[Di
 			random.randi_range(0, _chunk_size() - 1), random.randi_range(0, _chunk_size() - 1)
 		)
 		if _resources.has(tile) or not is_walkable_spawn_tile(tile):
+			continue
+		# WG-04: the terrain-feature mask carried by the chunk payload can
+		# veto a tile (a feature whose influence tags include this spawner's
+		# spawn-block tag covers it). Worlds with no feature assets pass an
+		# empty list, so placement is unchanged. The check consumes no random
+		# rolls, so allowed tiles roll exactly as before.
+		if is_feature_blocked_tile(tile, feature_candidates):
 			continue
 		var biome_id := world_generator.get_biome_at_world(tile.x, tile.y)
 		var biome := world_generator.get_biome(biome_id)
@@ -163,6 +177,23 @@ func _pick_resource_definition(biome: BiomeDefinition, random: RandomNumberGener
 		if roll <= 0.0:
 			return definition
 	return eligible.back()
+
+## Pure mask query: true when any feature candidate whose footprint covers
+## `tile` declares this spawner's spawn-block tag. Consumers pass the
+## feature_candidates array of the chunk being populated — the payload
+## includes halo candidates anchored in neighbouring chunks whose footprints
+## cross into it, so the per-chunk view is complete.
+static func is_feature_blocked_tile(tile: Vector2i, feature_candidates: Array) -> bool:
+	for candidate in feature_candidates:
+		var radius := int(candidate.get("footprint_radius_tiles", 0))
+		if absi(int(candidate.get("x", 0)) - tile.x) > radius:
+			continue
+		if absi(int(candidate.get("y", 0)) - tile.y) > radius:
+			continue
+		var tags = candidate.get("influence_tags", PackedStringArray())
+		if tags is PackedStringArray and (tags as PackedStringArray).has(NO_SPAWN_FEATURE_TAG):
+			return true
+	return false
 
 func _respects_spacing(tile: Vector2i, spacing: int) -> bool:
 	if spacing <= 0:

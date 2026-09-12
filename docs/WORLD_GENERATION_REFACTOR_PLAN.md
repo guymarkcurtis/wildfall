@@ -234,7 +234,31 @@ chunks agree without requiring all chunks to load.
 **Done when:** fixed-seed tests show no tiny prohibited islands, neighbouring
 chunks agree at borders, and adding a biome remains an asset-only workflow.
 
-### WG-04 — Add a generic terrain-feature candidate layer
+### WG-04 — Add a generic terrain-feature candidate layer — COMPLETE (2026-09-12)
+
+Delivered: `TerrainFeatureDefinition` content (id, spacing grid, footprint
+radius, spawn weight, biome/environment eligibility, influence tags)
+discovered from `data/world/terrain_features/` and validated by
+`WorldContentRegistry` like every other content kind. A new
+`_generate_feature_candidates` stage in `WorldGenerator` sits between
+coherent regions and the POI stage and emits per-chunk
+`feature_candidates` (anchor, owner flag, copied influence tags) through
+the same world-pure anchor-grid machinery as POIs, with a footprint halo
+so neighbouring chunks' masks agree at borders. `ResourceSpawner` owns
+the `no_spawn` influence tag and vetoes covered tiles (no extra RNG
+consumption, so dormant worlds are byte-identical); `Main` books one
+`TerrainFeatureMarker` per candidate in its owning chunk. The harness adds
+a 2d section: two fixture feature assets generate deterministic masks with
+zero generator code changes (the done-when seam), with checks for asset
+discovery/validation, data-driven fields, regeneration + seam-chunk +
+reversed-order stability, halo/owner invariants, min-spacing, the spawner
+mask helper, an end-to-end veto (228 placed, 0 on vetoed tiles), live
+dormancy, marker node identity, and a dangling-biome validation fixture.
+Limitations: terrain-presentation influence is a documented tag seam not
+yet consumed by the renderer this card; the shipped world ships no feature
+assets, so live payloads are unchanged apart from an empty
+`feature_candidates` key; the marker is a neutral placeholder outline, and
+per-category presentation is future data/scene content.
 
 **Goal:** create the seam for cliffs, clearings, scree, and similar structure.
 

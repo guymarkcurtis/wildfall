@@ -69,6 +69,37 @@ If no cave definition references the POI id, its candidates load as plain
 identity, category, and display name). The shipped `survey_marker` asset is a
 minimal example of exactly that.
 
+## Add a terrain feature
+
+Terrain-feature placement is generic in exactly the same sense as POIs: drop
+a `TerrainFeatureDefinition` asset into `data/world/terrain_features/` and
+the generator discovers it, validates it at startup, and emits deterministic
+feature candidates from it — no source change required. The asset drives:
+
+- `min_spacing_tiles` — a stable world-space anchor grid (owning per-feature
+  grid offset), guaranteeing spacing across chunk boundaries.
+- `footprint_radius_tiles` — the square mask radius around each anchor
+  (0 = single-tile marker). Footprints crossing a chunk boundary appear in
+  the neighbour's payload as halo entries, so every chunk's local mask is
+  complete.
+- `spawn_weight` — the placement chance per anchor (clamped to 0..1).
+- `allowed_biomes` (empty = all biomes) and `required_environment_tags`
+  (every listed tag must be present on the anchor biome); candidates are
+  never placed on physical water tiles.
+- `influence_tags` — the seam into consumer systems. Tag **vocabularies are
+  owned by the consumers**: the `ResourceSpawner` understands `no_spawn`
+  (its footprint is not a valid surface-resource spawn site); any other tag
+  is free vocabulary for a future consumer (e.g. the renderer's presentation
+  modifiers) to interpret. Listing a tag no consumer reads is legal — the
+  feature just has no effect from it yet.
+
+Runtime, one neutral `TerrainFeatureMarker` node spawns per candidate in the
+chunk that owns the anchor (a generic outline sized to the footprint plus a
+name label; per-category presentation is future scene content, not
+placement code). The shipped world currently carries no feature assets, so
+the stage is dormant there and adding your first feature changes placement
+only where your asset's tags are consumed.
+
 ## Caves and POIs
 
 POI and cave assets are separate from surface biomes. A cave definition links
@@ -126,7 +157,10 @@ Rules checked (all generic; no content names appear in the checks):
   regions, so negative or nonsensical values would silently weaken it.
 - Cross-references must resolve: biome `preferred_neighbors` /
   `transition_biome_ids` / `resource_types`, cave `entrance_poi_id`,
-  `allowed_biomes`, `resource_ids`, and `poi_ids`, and POI `allowed_biomes`.
+  `allowed_biomes`, `resource_ids`, and `poi_ids`, and POI `allowed_biomes`,
+  and terrain-feature `allowed_biomes` (plus a per-feature check that
+  `min_spacing_tiles`, `footprint_radius_tiles`, and `spawn_weight` stay in
+  their legal ranges).
   A biome listing a resource that is not `surface_spawnable`, or a cave
   listing a resource that is not `underground_spawnable`, is reported as an
   impossible combination.

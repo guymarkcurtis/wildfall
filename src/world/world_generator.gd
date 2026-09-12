@@ -1,6 +1,7 @@
 ## Deterministic, data-driven world-generation pipeline.
 ## This class defines how fields and stages are interpreted. It does not contain
-## knowledge of particular biome, resource, cave, or POI names.
+## knowledge of particular biome, resource, cave, POI, or terrain-feature
+## names.
 class_name WorldGenerator
 extends Node
 
@@ -89,7 +90,11 @@ func get_cave(cave_id: String) -> CaveDefinition:
 func get_poi_definitions() -> Dictionary:
 	return get_content_registry().pois
 
-## Generate one chunk through environment, water, biome, and POI stages.
+func get_terrain_feature_definitions() -> Dictionary:
+	return get_content_registry().terrain_features
+
+## Generate one chunk through environment, water, biome, coherent-region,
+## terrain-feature, and POI stages.
 ## Runtime resource/creature nodes are populated by Main after this base data.
 func generate_chunk(chunk_coords: Vector2i, seed: int = -1) -> Dictionary:
 	if seed < 0:
@@ -140,6 +145,7 @@ func generate_chunk(chunk_coords: Vector2i, seed: int = -1) -> Dictionary:
 				fields["world_start"] + Vector2i(size / 2, size / 2)),
 		"biomes": biome_map,
 		"region_cells": region_cells,
+		"feature_candidates": _generate_feature_candidates(chunk_coords, biome_map, water_mask),
 		"terrain_features": {"water_tile_count": water_tiles.size()},
 		"poi_candidates": _generate_poi_candidates(chunk_coords, biome_map, water_mask),
 		"seed": generation_context.chunk_seed(chunk_coords),
@@ -346,6 +352,120 @@ func _poi_anchor_tiles_in_chunk(poi: POIDefinition, world_start: Vector2i, size:
 					and anchor.y >= world_start.y and anchor.y <= world_end.y:
 				anchors.append(anchor)
 	return anchors
+
+## ---------------------------------------------------------------------------
+## Terrain-feature candidate stage (WG-04)
+## ---------------------------------------------------------------------------
+## Terrain features (cliffs, clearings, scree, ...) are content: each
+## TerrainFeatureDefinition asset declares its own spacing grid, spawn
+## probability, biome/environment eligibility, a footprint radius, and
+## influence tags. This stage turns every discovered asset into deterministic
+## per-tile candidates — the generic seam for larger ground structure.
+##
+## A feature's footprint may extend past the chunk the anchor sits in, so a
+## chunk's payload also carries halo candidates anchored in neighbouring
+## chunks (each candidate marks which chunk owns the anchor). The runtime
+## spawns one marker per feature, only in the owning chunk, so every feature
+## exists exactly once; mask consumers (e.g. the resource spawner's
+## spawn-block tag) read every entry.
+##
+## Candidates are world-pure: anchor, eligibility, and roll depend on the
+## anchor tile and the asset's data alone, so chunks generated in any order
+## agree everywhere, including at boundaries. Out-of-world anchors are
+## skipped (features exist only inside the finite world). With no feature
+## assets the stage emits nothing and payloads are unchanged apart from an
+## empty feature_candidates key.
+func _generate_feature_candidates(chunk_coords: Vector2i, biome_map: PackedStringArray, water_mask: PackedByteArray) -> Array[Dictionary]:
+	var candidates: Array[Dictionary] = []
+	if get_terrain_feature_definitions().is_empty():
+		return candidates
+	var size := get_configuration().chunk_size_tiles
+	var world_start := chunk_coords * size
+	var feature_ids := get_terrain_feature_definitions().keys()
+	feature_ids.sort()
+	for feature_id_variant in feature_ids:
+		var feature := get_content_registry().get_terrain_feature(str(feature_id_variant))
+		if feature == null:
+			continue
+		for tile in _feature_anchor_tiles_in_chunk(feature, world_start, size):
+			if not _is_tile_in_bounds(tile.x, tile.y):
+				continue
+			var radius := maxi(0, feature.footprint_radius_tiles)
+			if tile.x + radius < world_start.x or tile.x - radius > world_start.x + size - 1 \
+					or tile.y + radius < world_start.y or tile.y - radius > world_start.y + size - 1:
+				continue
+			var in_chunk := tile.x >= world_start.x and tile.x < world_start.x + size \
+					and tile.y >= world_start.y and tile.y < world_start.y + size
+			var biome_id := ""
+			if in_chunk:
+				var index := (tile.y - world_start.y) * size + (tile.x - world_start.x)
+				if index < 0 or index >= water_mask.size() or water_mask[index] != 0:
+					continue
+				biome_id = str(biome_map[index])
+			else:
+				if is_water_at_world(tile.x, tile.y):
+					continue
+				biome_id = get_biome_at_world(tile.x, tile.y)
+			var biome := get_biome(biome_id)
+			if biome == null or not _feature_allows_biome(feature, biome):
+				continue
+			var random := RandomNumberGenerator.new()
+			random.seed = generation_context.tile_seed(tile,
+					WorldGenerationContext.stable_string_seed(feature.id) ^ 0x9C3B6F1E)
+			if random.randf() > clampf(feature.spawn_weight, 0.0, 1.0):
+				continue
+			candidates.append({
+				"feature_id": feature.id,
+				"feature_category": feature.category,
+				"feature_name": feature.display_name,
+				"feature_identity": "%s@%d,%d" % [feature.id, tile.x, tile.y],
+				"footprint_radius_tiles": radius,
+				"in_chunk": in_chunk,
+				"influence_tags": feature.influence_tags.duplicate(),
+				"x": tile.x,
+				"y": tile.y,
+				"biome": biome_id
+			})
+	return candidates
+
+## Each feature uses a deterministic grid offset derived from its data ID so
+## anchors from different features do not align. Because a feature's
+## footprint can cross a chunk boundary, the grid is sampled over the chunk
+## expanded by the footprint radius; the caller keeps only anchors whose
+## footprint actually touches the chunk.
+func _feature_anchor_tiles_in_chunk(feature: TerrainFeatureDefinition, world_start: Vector2i, size: int) -> Array[Vector2i]:
+	var spacing := maxi(1, feature.min_spacing_tiles)
+	var radius := maxi(0, feature.footprint_radius_tiles)
+	var offset_random := RandomNumberGenerator.new()
+	offset_random.seed = generation_context.tile_seed(Vector2i.ZERO,
+			WorldGenerationContext.stable_string_seed(feature.id) ^ 0x5A7D2E94)
+	var offset := Vector2i(offset_random.randi_range(0, spacing - 1), offset_random.randi_range(0, spacing - 1))
+	var scan_start := world_start - Vector2i(radius, radius)
+	var scan_end := world_start + Vector2i(size - 1, size - 1) + Vector2i(radius, radius)
+	var first_cell := Vector2i(
+		floori(float(scan_start.x - offset.x) / float(spacing)),
+		floori(float(scan_start.y - offset.y) / float(spacing))
+	)
+	var last_cell := Vector2i(
+		floori(float(scan_end.x - offset.x) / float(spacing)),
+		floori(float(scan_end.y - offset.y) / float(spacing))
+	)
+	var anchors: Array[Vector2i] = []
+	for cell_y in range(first_cell.y, last_cell.y + 1):
+		for cell_x in range(first_cell.x, last_cell.x + 1):
+			var anchor := Vector2i(cell_x * spacing, cell_y * spacing) + offset
+			if anchor.x >= scan_start.x and anchor.x <= scan_end.x \
+					and anchor.y >= scan_start.y and anchor.y <= scan_end.y:
+				anchors.append(anchor)
+	return anchors
+
+func _feature_allows_biome(feature: TerrainFeatureDefinition, biome: BiomeDefinition) -> bool:
+	if not feature.allowed_biomes.is_empty() and not feature.allowed_biomes.has(biome.id):
+		return false
+	for required_tag in feature.required_environment_tags:
+		if not biome.environment_tags.has(required_tag):
+			return false
+	return true
 
 ## Query for the cave consumer: true when any discovered cave definition
 ## declares this POI as its entrance. Routing only — POIs no cave references

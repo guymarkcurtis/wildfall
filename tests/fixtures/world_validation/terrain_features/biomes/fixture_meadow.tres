@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="BiomeDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/biome_definition.gd" id="1_meadow"]
+
+[resource]
+script = ExtResource("1_meadow")
+id = "fixture_meadow"
+display_name = "Fixture Meadow"
+moisture_range = Vector2(0.5, 1.0)
+environment_tags = PackedStringArray("open")
+terrain_tile_id = "grass"
+resource_types = PackedStringArray("fixture_berry")

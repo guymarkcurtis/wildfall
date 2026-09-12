@@ -691,6 +691,167 @@ func _run_checks() -> void:
 	_check(region_dormant_noop and region_dormant_mismatches == 0,
 		"Shipped world keeps byte-identical biome maps with the stage dormant (all minimum region sizes 0)")
 
+	# --- 2d. Terrain-feature candidate layer: the seam for structure (WG-04)
+	# Terrain features (cliffs, clearings, scree, ...) become generic mask
+	# layers between biome selection and the placement stages: each feature
+	# definition discovered from data emits deterministic candidates through
+	# the same anchor-grid machinery as POIs, and the payload's
+	# feature_candidates array feeds both the runtime marker and the
+	# resource spawner's spawn veto. The shipped world carries no feature
+	# assets, so the stage is dormant there. The fixture world below adds
+	# two feature assets with zero generator code changes — that is the
+	# done-when witness for this card.
+	var feature_registry := _fixture_registry("terrain_features")
+	var fixture_scree: TerrainFeatureDefinition = feature_registry.get_terrain_feature("fixture_scree")
+	var fixture_clearing: TerrainFeatureDefinition = feature_registry.get_terrain_feature("fixture_clearing")
+	_check(fixture_scree != null and fixture_clearing != null and feature_registry.validation_errors.is_empty(),
+			"Terrain-feature definitions are discovered from data and pass startup validation (2 assets, 0 errors)")
+	_check(world_registry.terrain_features.is_empty(),
+			"Shipped world carries no terrain-feature assets, so the stage is dormant there")
+	_check(fixture_scree != null and fixture_scree.min_spacing_tiles == 16 and fixture_scree.footprint_radius_tiles == 1
+			and (fixture_scree.influence_tags as PackedStringArray).has("no_spawn")
+			and fixture_clearing != null and fixture_clearing.min_spacing_tiles == 24 and fixture_clearing.footprint_radius_tiles == 2
+			and (fixture_clearing.influence_tags as PackedStringArray).has("open_ground"),
+			"Feature spacing, footprint, and influence tags are data, not code")
+	var feature_gen := WorldGenerator.new()
+	feature_gen.initialize(42, world_config.duplicate() as WorldGenerationConfig)
+	feature_gen.content_registry = feature_registry
+	var feature_box_first: Dictionary = {}
+	var feature_box_second: Dictionary = {}
+	for ftx in range(-2, 3):
+		for fty in range(-2, 3):
+			var feature_chunk_coords := Vector2i(ftx, fty)
+			feature_box_first[feature_chunk_coords] = feature_gen.generate_chunk(feature_chunk_coords)
+			feature_box_second[feature_chunk_coords] = feature_gen.generate_chunk(feature_chunk_coords)
+	var feature_scree_candidates: Array = []
+	var feature_clearing_candidates: Array = []
+	for feature_chunk_coords in feature_box_first:
+		for candidate in feature_box_first[feature_chunk_coords].get("feature_candidates", []):
+			if str(candidate.get("feature_id", "")) == "fixture_scree":
+				feature_scree_candidates.append(candidate)
+			elif str(candidate.get("feature_id", "")) == "fixture_clearing":
+				feature_clearing_candidates.append(candidate)
+	_check(not feature_scree_candidates.is_empty() and not feature_clearing_candidates.is_empty(),
+			"Both feature assets emit candidates with no generator code change (%d scree, %d clearing) — the done-when seam" % [feature_scree_candidates.size(), feature_clearing_candidates.size()])
+	_check(str(feature_box_first) == str(feature_box_second),
+			"Feature candidates (including halo entries from neighbouring chunks) are stable across regeneration")
+	var feature_seam_gen := WorldGenerator.new()
+	feature_seam_gen.initialize(42, world_config.duplicate() as WorldGenerationConfig)
+	feature_seam_gen.content_registry = _fixture_registry("terrain_features")
+	var feature_seam_alone: Dictionary = feature_seam_gen.generate_chunk(Vector2i(0, 0))
+	feature_seam_gen.free()
+	_check(str(feature_box_first[Vector2i(0, 0)]) == str(feature_seam_alone),
+			"Seam chunk payload (biomes, region cells, feature mask) is identical generated alone vs inside the box")
+	var feature_gen_reversed := WorldGenerator.new()
+	feature_gen_reversed.initialize(42, world_config.duplicate() as WorldGenerationConfig)
+	feature_gen_reversed.content_registry = _fixture_registry("terrain_features")
+	var feature_box_reversed: Dictionary = {}
+	for rtx in range(2, -3, -1):
+		for rty in range(2, -3, -1):
+			feature_box_reversed[Vector2i(rtx, rty)] = feature_gen_reversed.generate_chunk(Vector2i(rtx, rty))
+	feature_gen_reversed.free()
+	var feature_order_same := (feature_box_first as Dictionary).size() == (feature_box_reversed as Dictionary).size()
+	for feature_coords_key in feature_box_first:
+		if not feature_order_same:
+			break
+		if not feature_box_reversed.has(feature_coords_key) \
+				or str(feature_box_first[feature_coords_key]) != str(feature_box_reversed[feature_coords_key]):
+			feature_order_same = false
+	_check(feature_order_same,
+			"Feature masks and complete chunk payloads are identical in reversed generation order")
+	var feature_owner_clash := false
+	for feature_chunk_coords in feature_box_first:
+		var feature_candidates_list: Array = feature_box_first[feature_chunk_coords].get("feature_candidates", [])
+		for candidate in feature_candidates_list:
+			var feature_anchor := Vector2i(int(candidate.get("x", 0)), int(candidate.get("y", 0)))
+			var feature_owner := Vector2i(floori(float(feature_anchor.x) / float(world_config.chunk_size_tiles)),
+					floori(float(feature_anchor.y) / float(world_config.chunk_size_tiles)))
+			if bool(candidate.get("in_chunk", false)) != (feature_chunk_coords == feature_owner):
+				feature_owner_clash = true
+	_check(not feature_owner_clash,
+			"Halo candidates always report their anchor's own chunk, and in_chunk marks exactly the owners")
+	var feature_spacing_ok := true
+	for first_index in range(feature_scree_candidates.size()):
+		for second_index in range(first_index):
+			var first_tile := Vector2i(int(feature_scree_candidates[first_index].get("x", 0)), int(feature_scree_candidates[first_index].get("y", 0)))
+			var second_tile := Vector2i(int(feature_scree_candidates[second_index].get("x", 0)), int(feature_scree_candidates[second_index].get("y", 0)))
+			if maxi(absi(first_tile.x - second_tile.x), absi(first_tile.y - second_tile.y)) < fixture_scree.min_spacing_tiles:
+				feature_spacing_ok = false
+	_check(fixture_scree != null and feature_spacing_ok,
+			"Feature candidates respect the asset's min_spacing_tiles across chunk boundaries")
+	var feature_block_probe := false
+	var feature_block_probe_found := false
+	for feature_chunk_coords in feature_box_first:
+		var probe_candidates: Array = feature_box_first[feature_chunk_coords].get("feature_candidates", [])
+		for candidate in probe_candidates:
+			if str(candidate.get("feature_id", "")) != "fixture_scree" or not bool(candidate.get("in_chunk", false)):
+				continue
+			var probe_tile := Vector2i(int(candidate.get("x", 0)), int(candidate.get("y", 0)))
+			var probe_radius := int(candidate.get("footprint_radius_tiles", 0))
+			feature_block_probe = ResourceSpawner.is_feature_blocked_tile(probe_tile, probe_candidates) \
+					and ResourceSpawner.is_feature_blocked_tile(Vector2i(probe_tile.x + probe_radius, probe_tile.y), probe_candidates) \
+					and not ResourceSpawner.is_feature_blocked_tile(Vector2i(probe_tile.x + probe_radius + 1, probe_tile.y), probe_candidates)
+			feature_block_probe_found = true
+			break
+		if feature_block_probe_found:
+			break
+	_check(feature_block_probe_found and feature_block_probe,
+			"The spawner's mask helper vetoes exactly the tiles a no_spawn feature's footprint covers")
+	var fixture_spawner := ResourceSpawner.new()
+	fixture_spawner.world_generator = feature_gen
+	fixture_spawner.initialize(42)
+	var fixture_spawned_total := 0
+	var fixture_spawned_blocked := 0
+	for feature_chunk_coords in feature_box_first:
+		var spawned: Array = fixture_spawner.generate_chunk_resources(feature_chunk_coords, 42,
+				feature_box_first[feature_chunk_coords].get("feature_candidates", []))
+		fixture_spawned_total += spawned.size()
+		var blocked_tiles: Dictionary = {}
+		for candidate in feature_box_first[feature_chunk_coords].get("feature_candidates", []):
+			var candidate_tags = candidate.get("influence_tags", PackedStringArray())
+			if not (candidate_tags is PackedStringArray and (candidate_tags as PackedStringArray).has(ResourceSpawner.NO_SPAWN_FEATURE_TAG)):
+				continue
+			var candidate_anchor_x := int(candidate.get("x", 0))
+			var candidate_anchor_y := int(candidate.get("y", 0))
+			var candidate_radius := int(candidate.get("footprint_radius_tiles", 0))
+			for dy in range(-candidate_radius, candidate_radius + 1):
+				for dx in range(-candidate_radius, candidate_radius + 1):
+					blocked_tiles[Vector2i(candidate_anchor_x + dx, candidate_anchor_y + dy)] = true
+		for record in spawned:
+			var tile := Vector2i(int(record.get("x", 0)), int(record.get("y", 0)))
+			if blocked_tiles.has(tile):
+				fixture_spawned_blocked += 1
+	_check(fixture_spawned_total > 0 and fixture_spawned_blocked == 0,
+			"Resources spawn in the fixture world and none on tiles vetoed by the no_spawn feature mask (%d placed, %d vetoed)" % [fixture_spawned_total, fixture_spawned_blocked])
+	fixture_spawner.free()
+	feature_gen.free()
+	var live_feature_markers := 0
+	for child in main.get_children():
+		if child is TerrainFeatureMarker:
+			live_feature_markers += 1
+	_check(live_feature_markers == 0,
+			"Live scene spawns no feature markers while the shipped world carries no feature assets")
+	var live_feature_payload: Dictionary = chunk_system.get_chunk(Vector2i(0, 0))
+	_check((live_feature_payload.get("feature_candidates", []) as Array).is_empty(),
+			"Live chunk payloads carry an empty feature layer while the stage is dormant")
+	var feature_marker_probe := TerrainFeatureMarker.new()
+	main.add_child(feature_marker_probe)
+	var feature_marker_setup_ok := false
+	if not feature_clearing_candidates.is_empty():
+		feature_marker_probe.setup(feature_clearing_candidates[0])
+		feature_marker_setup_ok = feature_marker_probe.marker_tile == Vector2i(int(feature_clearing_candidates[0].get("x", 0)),
+				int(feature_clearing_candidates[0].get("y", 0))) \
+				and feature_marker_probe.footprint_radius_tiles == int(feature_clearing_candidates[0].get("footprint_radius_tiles", 0)) \
+				and feature_marker_probe.feature_id == "fixture_clearing" \
+				and feature_marker_probe.feature_identity == "%s@%d,%d" % [str(feature_marker_probe.feature_id), feature_marker_probe.marker_tile.x, feature_marker_probe.marker_tile.y]
+	feature_marker_probe.queue_free()
+	_check(feature_marker_setup_ok,
+			"TerrainFeatureMarker nodes carry stable identity and footprint from the payload")
+	var invalid_feature_registry := _fixture_registry("invalid_feature")
+	_check(invalid_feature_registry.has_validation_errors() \
+			and _registry_errors_mention(invalid_feature_registry.validation_errors, "missing_biome"),
+			"Feature assets with dangling biome references fail startup validation like other content")
+
 	# --- 3. Terrain + resources --------------------------------------------
 	_check(terrain_renderer.get_used_cells().size() > 0, "Terrain rendered for initial chunks (%d tiles)" % terrain_renderer.get_used_cells().size())
 	_check(TileSetGenerator.MATERIAL_PIXELS_PER_TILE == 4, "Stock terrain keeps its lightweight streaming resolution")
@@ -903,7 +1064,7 @@ func _run_checks() -> void:
 		int(floor(float(destroyed_creature_tile.x) / 16.0)),
 		int(floor(float(destroyed_creature_tile.y) / 16.0))
 	)
-	main.call("_spawn_resources_for_chunk", destroyed_resource_chunk)
+	main.call("_spawn_resources_for_chunk", destroyed_resource_chunk, chunk_system.get_chunk(destroyed_resource_chunk))
 	main.call("_spawn_creatures_for_chunk", destroyed_creature_chunk)
 	_check(player.global_position.distance_to(Vector2(123.0, -77.0)) < 1.0, \
 		"Player position restored from save (%s)" % str(player.global_position))

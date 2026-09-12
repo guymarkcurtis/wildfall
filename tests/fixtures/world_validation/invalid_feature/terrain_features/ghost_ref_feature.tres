@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="TerrainFeatureDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/terrain_feature_definition.gd" id="1_ghost"]
+
+[resource]
+script = ExtResource("1_ghost")
+id = "ghost_ref_feature"
+display_name = "Ghost Reference Feature"
+category = "structure"
+spawn_weight = 1.0
+min_spacing_tiles = 32
+footprint_radius_tiles = 0
+allowed_biomes = PackedStringArray("missing_biome")

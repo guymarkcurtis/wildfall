@@ -1,7 +1,7 @@
 # Wildfall Test Results
 
 ## Test Run Summary
-- **Current verification**: 312 checks passed, 0 failures, 0 script errors (Godot 4.7.2 headless run after the data-driven world-generation, regional-biome, POI-spacing, cave-runtime, directional-animation, fixed-world-direction control, startup content-validation (WG-01), the generic POI layer (WG-02), and the coherent-region stage (WG-03) work; includes registry, large-world configuration, underground-mineral filtering, deterministic regional/POI/cave identity, underground cave deposits, cave entry/exit, discovery-ledger checks, authored player-direction/action frames, jumping, all four fixed WASD axes, the 20-check invalid-content validation suite, and the 11-check coherent-region suite (fixture data-driven region floors, world-aligned cell grid, no sub-floor fragments, metadata-respecting merges, tile-for-tile payload/query agreement, seam-chunk and reversed-order stability, and a live-seed dormant no-op))
+- **Current verification**: 327 checks passed, 0 failures, 0 script errors (Godot 4.7.2 headless run after the data-driven world-generation, regional-biome, POI-spacing, cave-runtime, directional-animation, fixed-world-direction control, startup content-validation (WG-01), the generic POI layer (WG-02), the coherent-region stage (WG-03), and the terrain-feature candidate layer (WG-04) work; includes registry, large-world configuration, underground-mineral filtering, deterministic regional/POI/cave identity, underground cave deposits, cave entry/exit, discovery-ledger checks, authored player-direction/action frames, jumping, all four fixed WASD axes, the 20-check invalid-content validation suite, the 11-check coherent-region suite (fixture data-driven region floors, world-aligned cell grid, no sub-floor fragments, metadata-respecting merges, tile-for-tile payload/query agreement, seam-chunk and reversed-order stability, and a live-seed dormant no-op), and the 15-check terrain-feature suite (asset discovery/validation, dormant live world, regeneration + seam + reversed-order stability, halo/owner invariants, min-spacing, and the spawner's no_spawn veto end-to-end))
 - **Godot Version**: 4.7.2.stable (linux.x86_64, official) — the project was upgraded to Godot 4.7 on 2026-09-11 (editor config sync from the Mac) and the Linux verification binary was upgraded to match
 - **Test Script**: `tests/test_game.gd` (SceneTree harness that boots the real `main.tscn`, validates world, UI, inventory, building, technology progression, texture-pack export/live switching, save persistence of player-caused world mutations, and resource accessibility, then exits with the failure count as its exit code)
 
@@ -151,6 +151,62 @@ Design note: the reversed-order check compares chunk payloads individually
 after verifying the key sets match — a Godot `Dictionary`'s string form
 follows insertion order, so stringifying the whole box dict would report a
 false mismatch for an order-different-but-equal box.
+
+## Terrain-feature candidate layer — WG-04 (2026-09-12)
+
+`TerrainFeatureDefinition` is now a first-class content kind: discovered from
+`data/world/terrain_features/`, validated at startup, and interpreted by a
+new generic stage in `WorldGenerator`. It runs after the coherent-region
+stage and before the POI stage, so every discovered feature emits
+deterministic candidates from its own anchor grid (per-feature grid offset),
+biome/environment eligibility, and `spawn_weight` roll. Each candidate claims
+a square footprint of `footprint_radius_tiles`; a chunk's payload carries
+halo candidates anchored in neighbouring chunks (out-of-world anchors
+skipped) so every chunk holds a complete local mask, and `in_chunk` marks
+the owner — the runtime spawns exactly one `TerrainFeatureMarker` per
+candidate, in the owning chunk. `ResourceSpawner` owns the `no_spawn`
+influence tag and vetoes covered tiles without consuming random rolls, so
+dormant-world placement is byte-identical.
+
+Harness grew 312 → **327 checks**, all passing with **0 failures and
+0 script errors** (exit 0). The section 2d checks:
+
+- The fixture world `tests/fixtures/world_validation/terrain_features/`
+  discovers 2 feature assets with 0 validation errors, and spacing,
+  footprint, and influence-tag values are read from the assets, not code.
+- The live registry carries 0 features — the dormancy premise.
+- In a 5×5-chunk box (fixed seed 42) both feature assets emit candidates
+  (13 scree, 3 clearing) — the done-when seam: the second asset joins the
+  same generic stage with no `WorldGenerator` modification.
+- Regeneration stability: generating the box twice produces identical
+  payloads, halo entries included.
+- Seam stability: chunk (0,0) generated alone (its own halo only) versus
+  inside the box produces an identical full payload — the feature mask,
+  like regions, is independent of generation history.
+- Full-payload equality in reversed generation order (the documented
+  "same world regardless of generation order" property, now including the
+  feature stage).
+- Halo/owner invariant: every halo candidate reports its anchor's own chunk
+  and `in_chunk` marks exactly the owners, so no feature is ever double-
+  spawned or lost.
+- Same-feature candidates in the box respect the asset's
+  `min_spacing_tiles` (Chebyshev) across chunk boundaries.
+- The spawner's pure mask helper vetoes exactly the tiles a `no_spawn`
+  feature's footprint covers (inside, on the edge, and one tile past it).
+- End-to-end: a spawner pointed at the fixture world places 228 resources
+  and none on tiles the mask vetoes — real spawn-eligibility influence, not
+  a vacuous pass.
+- Live dormancy: the live scene spawns 0 `TerrainFeatureMarker` nodes and
+  live chunk payloads carry an empty `feature_candidates` layer.
+- The runtime marker built from a fixture payload candidate carries stable
+  identity (`id@x,y`) and footprint.
+- A feature asset referencing a missing biome fails startup validation like
+  other content (`tests/fixtures/world_validation/invalid_feature/`).
+
+Design note: influence-tag vocabularies are owned by the consumers —
+`no_spawn` belongs to the spawner. The renderer's presentation-consumption
+of feature masks is a documented seam, not yet wired this card; the live
+world is byte-identical apart from the new (empty) payload key.
 
 ## Player directional animation (2026-09-12)
 

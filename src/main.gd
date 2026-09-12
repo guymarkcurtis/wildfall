@@ -68,6 +68,10 @@ var _cave_entrances_by_chunk: Dictionary = {}
 # player, same bookkeeping pattern as cave entrances).
 var _poi_marker_nodes: Array[PoiMarker] = []
 var _poi_markers_by_chunk: Dictionary = {}
+# Generic runtime nodes for terrain features (sibling of the player, same
+# bookkeeping pattern as POI markers).
+var _feature_marker_nodes: Array[TerrainFeatureMarker] = []
+var _feature_markers_by_chunk: Dictionary = {}
 var _active_cave_space: CaveSpace = null
 var _active_cave_id: String = ""
 var _surface_position_before_cave: Vector2 = Vector2.ZERO
@@ -230,6 +234,11 @@ func _generate_world(seed: int) -> void:
 			marker.queue_free()
 	_poi_marker_nodes.clear()
 	_poi_markers_by_chunk.clear()
+	for feature in _feature_marker_nodes:
+		if is_instance_valid(feature):
+			feature.queue_free()
+	_feature_marker_nodes.clear()
+	_feature_markers_by_chunk.clear()
 	if building_manager:
 		building_manager.clear_all()
 
@@ -276,9 +285,10 @@ func _process_one_chunk_visual() -> void:
 		return
 	var start_usec := Time.get_ticks_usec()
 	terrain_renderer.update_chunk(chunk_coords, data)
-	_spawn_resources_for_chunk(chunk_coords)
+	_spawn_resources_for_chunk(chunk_coords, data)
 	_spawn_creatures_for_chunk(chunk_coords)
 	_spawn_pois_for_chunk(chunk_coords, data)
+	_spawn_features_for_chunk(chunk_coords, data)
 	if performance_overlay != null:
 		performance_overlay.record_chunk_load(chunk_coords,
 				float(Time.get_ticks_usec() - start_usec) / 1000.0)
@@ -323,11 +333,21 @@ func _on_chunk_unloaded(chunk_coords: Vector2i) -> void:
 			_poi_marker_nodes.erase(marker)
 			marker.queue_free()
 	_poi_markers_by_chunk.erase(chunk_coords)
+	# Free that chunk's terrain-feature markers (same bookkeeping as POIs).
+	var feature_nodes: Array = _feature_markers_by_chunk.get(chunk_coords, [])
+	for feature in feature_nodes:
+		if is_instance_valid(feature):
+			_feature_marker_nodes.erase(feature)
+			feature.queue_free()
+	_feature_markers_by_chunk.erase(chunk_coords)
 	terrain_renderer.clear_chunk(chunk_coords)
 
 ## Spawn harvestable resources in a chunk (as siblings of the player).
-func _spawn_resources_for_chunk(chunk_coords: Vector2i) -> void:
-	var resources: Array = resource_spawner.generate_chunk_resources(chunk_coords, _world_seed)
+## The chunk payload's terrain-feature mask (WG-04) is handed to the spawner:
+## features whose influence tags include its spawn-block tag veto tiles.
+func _spawn_resources_for_chunk(chunk_coords: Vector2i, chunk_data: Dictionary) -> void:
+	var feature_candidates: Array = chunk_data.get("feature_candidates", [])
+	var resources: Array = resource_spawner.generate_chunk_resources(chunk_coords, _world_seed, feature_candidates)
 	var spawn_count: int = 0
 	for res_data in resources:
 		var x_val: int = int(res_data.get("x", 0))
@@ -418,6 +438,25 @@ func _spawn_pois_for_chunk(chunk_coords: Vector2i, chunk_data: Dictionary) -> vo
 		if not _cave_entrances_by_chunk.has(chunk_coords):
 			_cave_entrances_by_chunk[chunk_coords] = []
 		_cave_entrances_by_chunk[chunk_coords].append(entrance)
+
+## Populate terrain features emitted by the world-generation pipeline. Only
+## candidates whose anchor is inside this chunk get a marker here — halo
+## entries (footprints crossing in from neighbouring chunks) supply the mask
+## for placement but are marked by their owning chunk exactly once.
+func _spawn_features_for_chunk(chunk_coords: Vector2i, chunk_data: Dictionary) -> void:
+	var candidates: Array = chunk_data.get("feature_candidates", [])
+	for candidate in candidates:
+		if not bool(candidate.get("in_chunk", false)):
+			continue
+		var marker := TerrainFeatureMarker.new()
+		marker.setup(candidate)
+		marker.position = Vector2(marker.marker_tile) * float(TILE_SIZE) + Vector2(TILE_SIZE, TILE_SIZE) * 0.5
+		marker.set_meta("chunk_coords", chunk_coords)
+		add_child(marker)
+		_feature_marker_nodes.append(marker)
+		if not _feature_markers_by_chunk.has(chunk_coords):
+			_feature_markers_by_chunk[chunk_coords] = []
+		_feature_markers_by_chunk[chunk_coords].append(marker)
 
 func get_cave_entrances() -> Array[CaveEntrance]:
 	return _cave_entrance_nodes.duplicate()

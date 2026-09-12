@@ -271,6 +271,37 @@ A 30-second headless run of the actual game also completed with 0 errors,
   mission checks, plus the reworked durability/mission blocks), 0
   failures, 0 script errors — green on two consecutive runs.
 
+## RECENTLY COMPLETED (2026-09-12 terrain-feature seam — WG-04)
+
+- `TerrainFeatureDefinition` is now a first-class data-driven content kind:
+  discovered from `data/world/terrain_features/`, validated at startup
+  (negative spacing/footprint, out-of-range weight, dangling
+  `allowed_biomes`), and interpreted by a generic terrain-feature candidate
+  stage between the coherent-region stage and the POI stage — adding a
+  cliff, clearing, or scree field is an asset-only change; `WorldGenerator`
+  gains no content-name branches.
+- Each feature anchors candidates on its own data-defined spacing grid
+  (per-feature grid offset), and each candidate claims a
+  `footprint_radius_tiles` square and carries the asset's `influence_tags`.
+  Payloads also include halo candidates anchored in neighbouring chunks
+  (out-of-world anchors skipped), and `in_chunk` marks the owner: the
+  runtime spawns exactly one `TerrainFeatureMarker` per feature, in the
+  owning chunk, so no feature is double-spawned or lost across a boundary.
+- Consumers own their tag vocabulary: the `ResourceSpawner` understands
+  `no_spawn` (a covered tile is not a valid surface-resource site; the check
+  consumes no RNG, so dormant-world placement stays byte-identical), while
+  the renderer's terrain-presentation influence is a documented seam not
+  yet wired this card. Any other tag is free vocabulary for future
+  consumers.
+- The shipped world carries no feature assets: the stage emits nothing,
+  payloads gain only an empty `feature_candidates` key, live placement and
+  rendering are byte-identical to the pre-stage world, and zero markers
+  spawn.
+- The new `terrain_features` fixture world (2 biomes, 2 feature assets, 2
+  resources) exercises the seam end-to-end. Harness grew 312 → **327
+  checks**, all passing with 0 script errors (see
+  `docs/TEST_RESULTS.md`).
+
 ## RECENTLY COMPLETED (2026-09-12 coherent regions — WG-03)
 
 - `BiomeDefinition.minimum_region_size` is now operative region-scale
@@ -351,10 +382,10 @@ A 30-second headless run of the actual game also completed with 0 errors,
 green. Durability and the mission system are done too — see
 RECENTLY COMPLETED below.)
 
-1. **World-generation refactor — next card WG-04** (a generic terrain-
-   feature candidate layer) per `docs/WORLD_GENERATION_REFACTOR_PLAN.md`;
-   WG-03 is complete, and WG-07/WG-08 are also unblocked since WG-01 is
-   done.
+1. **World-generation refactor — next card WG-05** (complete water
+   classification and shore influences) per
+   `docs/WORLD_GENERATION_REFACTOR_PLAN.md`; WG-01–WG-04 are complete, and
+   WG-07/WG-08 are also unblocked since WG-01 is done.
 2. **Sound effects** (next open Phase 4 item in `docs/ROADMAP.md`) —
    the game currently has no audio: UI clicks, harvesting, combat
    hits, creature deaths, building placement/demolition, mission

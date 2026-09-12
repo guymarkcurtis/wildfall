@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="TerrainFeatureDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/terrain_feature_definition.gd" id="1_scree"]
+
+[resource]
+script = ExtResource("1_scree")
+id = "fixture_scree"
+display_name = "Fixture Scree"
+category = "scree"
+spawn_weight = 1.0
+min_spacing_tiles = 16
+footprint_radius_tiles = 1
+allowed_biomes = PackedStringArray("fixture_rockfield")
+influence_tags = PackedStringArray("no_spawn", "rocky_ground")

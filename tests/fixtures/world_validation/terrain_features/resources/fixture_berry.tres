@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="ResourceDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/resource_definition.gd" id="1_berry"]
+
+[resource]
+script = ExtResource("1_berry")
+id = "fixture_berry"
+display_name = "Fixture Berry"
+spawn_weight = 1.0
+abundance = 1.0
+distribution_mode = "uniform"
+surface_spawnable = true
+underground_spawnable = false
+allowed_biomes = PackedStringArray("fixture_meadow")
+base_health = 5.0
+yields = [{"item_id":"berry","min_qty":1,"max_qty":2,"chance":1.0}]

@@ -1,6 +1,6 @@
 ## Automatic discovery and validation of world-content Resource assets.
-## Adding a normal biome/resource/cave/POI is an asset operation, not a code
-## change to the procedural engine.
+## Adding a normal biome/resource/cave/POI/terrain-feature is an asset
+## operation, not a code change to the procedural engine.
 ##
 ## discover() loads every content asset below the base directory; validate()
 ## then checks the result. Failures are collected as "<asset path>: <problem>"
@@ -14,11 +14,13 @@ const BIOME_SUBDIR := "biomes"
 const RESOURCE_SUBDIR := "resources"
 const CAVE_SUBDIR := "caves"
 const POI_SUBDIR := "pois"
+const FEATURE_SUBDIR := "terrain_features"
 
 var biomes: Dictionary = {}
 var resources: Dictionary = {}
 var caves: Dictionary = {}
 var pois: Dictionary = {}
+var terrain_features: Dictionary = {}
 
 ## "<asset path>: <problem>" messages collected while loading and
 ## cross-checking the discovered content. Empty when the content is valid.
@@ -30,6 +32,7 @@ var biome_paths: Dictionary = {}
 var resource_paths: Dictionary = {}
 var cave_paths: Dictionary = {}
 var poi_paths: Dictionary = {}
+var feature_paths: Dictionary = {}
 
 ## True once discover() has run; re-discovering keeps the registry fresh when
 ## the world is (re)generated.
@@ -41,11 +44,13 @@ func discover(base_directory: String = DEFAULT_BASE_DIR) -> void:
 	resource_paths.clear()
 	cave_paths.clear()
 	poi_paths.clear()
+	feature_paths.clear()
 	validation_errors.clear()
 	biomes = _discover_directory(base_directory.path_join(BIOME_SUBDIR), BiomeDefinition, biome_paths)
 	resources = _discover_directory(base_directory.path_join(RESOURCE_SUBDIR), ResourceDefinition, resource_paths)
 	caves = _discover_directory(base_directory.path_join(CAVE_SUBDIR), CaveDefinition, cave_paths)
 	pois = _discover_directory(base_directory.path_join(POI_SUBDIR), POIDefinition, poi_paths)
+	terrain_features = _discover_directory(base_directory.path_join(FEATURE_SUBDIR), TerrainFeatureDefinition, feature_paths)
 	discovered = true
 	# Append (never replace): _discover_directory already reported load
 	# failures, missing ids, and duplicates here; validate() adds the
@@ -71,6 +76,10 @@ func get_cave(id: String) -> CaveDefinition:
 
 func get_poi(id: String) -> POIDefinition:
 	return pois.get(id) as POIDefinition
+
+
+func get_terrain_feature(id: String) -> TerrainFeatureDefinition:
+	return terrain_features.get(id) as TerrainFeatureDefinition
 
 
 ## Load every content asset below one directory, keyed by id. Assets that fail
@@ -122,6 +131,8 @@ func validate() -> Array[String]:
 		errors.append_array(_validate_cave(caves.get(cave_id) as CaveDefinition, str(cave_paths[cave_id])))
 	for poi_id in poi_paths:
 		errors.append_array(_validate_poi(pois.get(poi_id) as POIDefinition, str(poi_paths[poi_id])))
+	for feature_id in feature_paths:
+		errors.append_array(_validate_terrain_feature(terrain_features.get(feature_id) as TerrainFeatureDefinition, str(feature_paths[feature_id])))
 	errors.append_array(_validate_cross_references())
 	return errors
 
@@ -188,6 +199,19 @@ func _validate_poi(poi: POIDefinition, path: String) -> Array[String]:
 	return errors
 
 
+func _validate_terrain_feature(feature: TerrainFeatureDefinition, path: String) -> Array[String]:
+	var errors: Array[String] = []
+	if feature == null:
+		return errors
+	if feature.min_spacing_tiles < 0:
+		errors.append("%s: min_spacing_tiles (%d) is negative" % [path, feature.min_spacing_tiles])
+	if feature.footprint_radius_tiles < 0:
+		errors.append("%s: footprint_radius_tiles (%d) is negative" % [path, feature.footprint_radius_tiles])
+	if feature.spawn_weight < 0.0 or feature.spawn_weight > 1.0:
+		errors.append("%s: spawn_weight %.2f is outside the 0..1 range" % [path, feature.spawn_weight])
+	return errors
+
+
 ## Cross-asset link checks: every reference between content assets must
 ## resolve. Dangling references are authoring mistakes the engine would
 ## otherwise skip silently.
@@ -239,6 +263,14 @@ func _validate_cross_references() -> Array[String]:
 			continue
 		var path := str(poi_paths[poi_id])
 		for biome_id in poi.allowed_biomes:
+			if not biomes.has(biome_id):
+				errors.append("%s: allowed_biomes references unknown biome '%s'" % [path, biome_id])
+	for feature_id in feature_paths:
+		var feature := terrain_features.get(feature_id) as TerrainFeatureDefinition
+		if feature == null:
+			continue
+		var path := str(feature_paths[feature_id])
+		for biome_id in feature.allowed_biomes:
 			if not biomes.has(biome_id):
 				errors.append("%s: allowed_biomes references unknown biome '%s'" % [path, biome_id])
 	return errors

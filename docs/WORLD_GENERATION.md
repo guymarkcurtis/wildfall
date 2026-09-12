@@ -5,7 +5,8 @@
 World generation is now a reusable engine driven by data assets. The source
 code owns field sampling, deterministic seed mixing, chunk lifecycle, water
 masking, distribution algorithms, and generation stages. Biome, resource, cave,
-POI, and world-balance content is discovered from `data/world/` Resource assets.
+POI, terrain-feature, and world-balance content is discovered from
+`data/world/` Resource assets.
 Adding an ordinary biome or resource should therefore not require modifying
 `WorldGenerator` or `ResourceSpawner`; see `WORLD_CONTENT_AUTHORING.md`.
 
@@ -105,6 +106,49 @@ The authored `M` also maps to a visual transition band of `M/2` tiles: a
 merged fragment's land tiles sit at most that many tiles from a genuine edge
 of the raw biome.
 
+## Terrain-feature candidate stage
+
+Terrain features (cliffs, clearings, scree, ...) are **content**, placed by
+the same generic machinery as POIs. The stage runs after coherent regions and
+before the POI stage, and is driven entirely by discovered
+`TerrainFeatureDefinition` assets (`data/world/terrain_features/`): each
+feature contributes candidates from its own spacing grid
+(`min_spacing_tiles`, a per-feature deterministic grid offset), its biome /
+environment eligibility, and its `spawn_weight` roll. Adding a feature is an
+asset-only change to `WorldGenerator`.
+
+- **Anchors and footprints.** A candidate is anchored on one tile and claims
+  a square footprint of `footprint_radius_tiles` around it (0 = single-tile
+  marker). Because a footprint can cross a chunk boundary, a chunk's payload
+  also carries **halo candidates** anchored in neighbouring chunks whose
+  footprint intersects the chunk; out-of-world anchors are skipped (features
+  exist only inside the finite world).
+- **Ownership.** Every candidate records whether its anchor lies in the
+  reporting chunk (`in_chunk`). The runtime spawns exactly one
+  `TerrainFeatureMarker` per candidate — in the owning chunk — so each
+  feature exists once in the world; halo entries exist only to keep every
+  chunk's local view of the mask complete.
+- **Mask consumption.** Candidates carry the asset's `influence_tags`.
+  Consumer systems own small tag vocabularies: the `ResourceSpawner` vetoes
+  surface-resource spawns on any tile covered by a candidate whose tags
+  include its `no_spawn` tag (the check consumes no random rolls, so allowed
+  tiles roll exactly as before). Terrain *presentation* influence (colour,
+  texture, collision modifiers) is the same seam — a documented tag the
+  renderer will consume; it is not wired this stage.
+- **Determinism.** Anchor, eligibility, and roll depend only on the anchor
+  tile and the asset's data (world-pure), so payloads are identical
+  generated alone vs inside a box, in any generation order, and stable
+  across regeneration. `influence_tags` are copied into the payload, never
+  shared with the asset.
+- **Dormancy.** The shipped world carries no feature assets: the stage emits
+  nothing and payloads are unchanged apart from an empty `feature_candidates`
+  key, so live placement and rendering are byte-identical to the pre-stage
+  world.
+
+Chunk payloads therefore carry a `feature_candidates` array (per candidate:
+feature id/category/name, stable `id@x,y` identity, anchor, radius, owner
+flag, copied influence tags, and the anchor tile's biome).
+
 ## Generation Layers
 
 The `FastNoiseLite` instances (Godot 4.x API), all using
@@ -171,6 +215,14 @@ a chunk data dictionary:
                                          # source kept/merged/water; empty
                                          # while no biome declares a minimum
                                          # region size
+    "feature_candidates": Array,        # terrain-feature stage: one entry per
+                                         # feature whose footprint touches this
+                                         # chunk (halo entries included) —
+                                         # {feature_id, feature_category,
+                                         # feature_name, feature_identity
+                                         # (id@x,y), x, y, footprint_radius_tiles,
+                                         # in_chunk, influence_tags, biome};
+                                         # empty while no feature assets exist
     "poi_candidates": Array,            # generic POI candidates; cave-linked
                                          # ones carry cave_type_id/cave_id
     "biome":   String,   # chunk-level biome id (from averages)
