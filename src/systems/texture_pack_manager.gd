@@ -88,7 +88,7 @@ static func get_texture(stock_path: String) -> Texture2D:
 	if _texture_cache.has(cache_key):
 		return _texture_cache[cache_key]
 	var image: Image = get_image(stock_path)
-	var texture: Texture2D = ImageTexture.create_from_image(image) if image != null and not image.is_empty() else load(stock_path)
+	var texture: Texture2D = ImageTexture.create_from_image(image) if image != null and not image.is_empty() else null
 	_texture_cache[cache_key] = texture
 	return texture
 
@@ -116,6 +116,8 @@ static func get_stock_image(path: String) -> Image:
 		# Hand-authored station art ships in the repo; the procedural fallback
 		# only exists for fresh checkouts before that sheet lands.
 		return _create_crafting_station_atlas()
+	if not ResourceLoader.exists(path):
+		return null
 	var texture: Texture2D = load(path)
 	return texture.get_image() if texture != null else null
 

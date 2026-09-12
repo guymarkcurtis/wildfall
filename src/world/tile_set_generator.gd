@@ -16,6 +16,19 @@ const TERRAIN_ATLAS_PATH := "res://assets/tiles/wildfall-terrain-atlas.png"
 const RESOURCE_ATLAS_PATH := "res://assets/tiles/wildfall-resources-atlas.png"
 const WATER_ANIMATION_PATH := "res://assets/tiles/wildfall-water-animation.png"
 const GROUND_DETAILS_PATH := "res://assets/tiles/wildfall-ground-details.png"
+const TRANSITION_PATH := "res://assets/tiles/transitions/%s.png"
+const TRANSITION_PAIRS := {
+	"water-sand": [TILE_WATER, TILE_SAND],
+	"sand-grass": [TILE_SAND, TILE_GRASS],
+	"sand-forest": [TILE_SAND, TILE_FOREST],
+	"grass-forest": [TILE_GRASS, TILE_FOREST],
+	"grass-stone": [TILE_GRASS, TILE_STONE],
+	"forest-stone": [TILE_FOREST, TILE_STONE],
+	"stone-snow": [TILE_STONE, TILE_SNOW],
+	"grass-mud": [TILE_GRASS, TILE_MUD]
+}
+const PACK_BLEND_PIXELS := 8
+const WANG_BLEND_STRENGTH := 0.12
 
 const WATER_FRAME_SOURCE_IDS := [100, 101, 102, 103]
 
@@ -25,11 +38,13 @@ const WATER_FRAME_SOURCE_IDS := [100, 101, 102, 103]
 static var _resource_texture_cache: Dictionary = {}
 static var _ground_detail_texture_cache: Dictionary = {}
 static var _surface_images: Dictionary = {}
+static var _transition_images: Dictionary = {}
 
 static func clear_texture_caches() -> void:
 	_resource_texture_cache.clear()
 	_ground_detail_texture_cache.clear()
 	_surface_images.clear()
+	_transition_images.clear()
 
 # Terrain tile IDs
 const TILE_WATER: int = 0
@@ -199,6 +214,7 @@ func _create_full_resolution_pack_chunk(world_start: Vector2i, tile_ids: PackedI
 					for pixel_x in range(TILE_SIZE):
 						image.set_pixel(destination.x + pixel_x, destination.y + pixel_y,
 							surface.get_pixel(posmod(source_x + pixel_x, surface.get_width()), posmod(source_y + pixel_y, surface.get_height())))
+	_apply_wang_transitions(image, tile_ids, chunk_size)
 	_feather_pack_tile_edges(image, tile_ids, chunk_size)
 	return image
 
@@ -208,7 +224,81 @@ func _pack_surface_image(tile_id: int) -> Image:
 		_surface_images[tile_id] = TexturePackManager.get_image(path)
 	return _surface_images[tile_id] as Image
 
-## Preserve a one-pixel soft boundary between neighbouring material types.
+## PixelLab Wang sheets are packed as a 4x4 atlas whose cell index is a
+## four-corner upper-terrain bit mask: NW=1, NE=2, SW=4, SE=8.
+func _apply_wang_transitions(image: Image, tile_ids: PackedInt32Array, chunk_size: int) -> void:
+	for tile_y in range(1, chunk_size):
+		for tile_x in range(1, chunk_size):
+			var corners := [
+				_tile_id_at(tile_ids, chunk_size, tile_x - 1, tile_y - 1),
+				_tile_id_at(tile_ids, chunk_size, tile_x, tile_y - 1),
+				_tile_id_at(tile_ids, chunk_size, tile_x - 1, tile_y),
+				_tile_id_at(tile_ids, chunk_size, tile_x, tile_y)
+			]
+			var key := _transition_key_for_corners(corners)
+			if key.is_empty():
+				continue
+			var pair: Array = TRANSITION_PAIRS[key]
+			var upper: int = pair[1]
+			var bit_mask := 0
+			for index in range(corners.size()):
+				if corners[index] == upper:
+					bit_mask |= 1 << index
+			if bit_mask == 0 or bit_mask == 15:
+				continue
+			var atlas := _transition_image(key)
+			if atlas == null or atlas.is_empty():
+				continue
+			var cell_width := atlas.get_width() / 4
+			var cell_height := atlas.get_height() / 4
+			if cell_width < TILE_SIZE or cell_height < TILE_SIZE:
+				continue
+			var source := Rect2i(posmod(bit_mask, 4) * cell_width, (bit_mask / 4) * cell_height, cell_width, cell_height)
+			var transition := atlas.get_region(source)
+			transition.resize(TILE_SIZE, TILE_SIZE, Image.INTERPOLATE_NEAREST)
+			_blend_transition_tile(image, transition, Vector2i(tile_x * TILE_SIZE, tile_y * TILE_SIZE))
+
+## The generated Wang art supplies local shore/soil detail. Blend it over the
+## continuous material surfaces instead of replacing them, so independently
+## generated palettes cannot create a dark outlined border.
+func _blend_transition_tile(image: Image, transition: Image, destination: Vector2i) -> void:
+	for y in range(TILE_SIZE):
+		for x in range(TILE_SIZE):
+			var position := destination + Vector2i(x, y)
+			var base := image.get_pixelv(position)
+			var detail := transition.get_pixel(x, y)
+			image.set_pixelv(position, base.lerp(detail, WANG_BLEND_STRENGTH))
+
+func _tile_id_at(tile_ids: PackedInt32Array, chunk_size: int, x: int, y: int) -> int:
+	if x < 0 or y < 0 or x >= chunk_size or y >= chunk_size:
+		return -1
+	var index := y * chunk_size + x
+	return tile_ids[index] if index < tile_ids.size() else -1
+
+func _transition_key_for_corners(corners: Array) -> String:
+	for key in TRANSITION_PAIRS:
+		var pair: Array = TRANSITION_PAIRS[key]
+		var lower: int = pair[0]
+		var upper: int = pair[1]
+		var matches := true
+		var has_lower := false
+		var has_upper := false
+		for terrain_id in corners:
+			if terrain_id != lower and terrain_id != upper:
+				matches = false
+				break
+			has_lower = has_lower or terrain_id == lower
+			has_upper = has_upper or terrain_id == upper
+		if matches and has_lower and has_upper:
+			return key
+	return ""
+
+func _transition_image(key: String) -> Image:
+	if not _transition_images.has(key):
+		_transition_images[key] = TexturePackManager.get_image(TRANSITION_PATH % key)
+	return _transition_images[key] as Image
+
+## Preserve a soft four-pixel boundary beneath the authored Wang edge art.
 func _feather_pack_tile_edges(image: Image, tile_ids: PackedInt32Array, chunk_size: int) -> void:
 	for tile_y in range(chunk_size):
 		for tile_x in range(1, chunk_size):
@@ -216,18 +306,26 @@ func _feather_pack_tile_edges(image: Image, tile_ids: PackedInt32Array, chunk_si
 				continue
 			var edge_x := tile_x * TILE_SIZE
 			for pixel_y in range(tile_y * TILE_SIZE, (tile_y + 1) * TILE_SIZE):
-				var blend := image.get_pixel(edge_x - 1, pixel_y).lerp(image.get_pixel(edge_x, pixel_y), 0.5)
-				image.set_pixel(edge_x - 1, pixel_y, blend)
-				image.set_pixel(edge_x, pixel_y, blend)
+				_blend_pack_edge(image, Vector2i(edge_x, pixel_y), Vector2i(-1, 0), Vector2i(1, 0))
 	for tile_y in range(1, chunk_size):
 		for tile_x in range(chunk_size):
 			if tile_ids[tile_y * chunk_size + tile_x] == tile_ids[(tile_y - 1) * chunk_size + tile_x]:
 				continue
 			var edge_y := tile_y * TILE_SIZE
 			for pixel_x in range(tile_x * TILE_SIZE, (tile_x + 1) * TILE_SIZE):
-				var blend := image.get_pixel(pixel_x, edge_y - 1).lerp(image.get_pixel(pixel_x, edge_y), 0.5)
-				image.set_pixel(pixel_x, edge_y - 1, blend)
-				image.set_pixel(pixel_x, edge_y, blend)
+				_blend_pack_edge(image, Vector2i(pixel_x, edge_y), Vector2i(0, -1), Vector2i(0, 1))
+
+func _blend_pack_edge(image: Image, edge: Vector2i, lower_direction: Vector2i, upper_direction: Vector2i) -> void:
+	for depth in range(PACK_BLEND_PIXELS):
+		var lower := edge + lower_direction * (depth + 1)
+		var upper := edge + upper_direction * depth
+		if lower.x < 0 or lower.y < 0 or upper.x >= image.get_width() or upper.y >= image.get_height():
+			continue
+		var lower_colour := image.get_pixelv(lower)
+		var upper_colour := image.get_pixelv(upper)
+		var strength := float(PACK_BLEND_PIXELS - depth) / float(PACK_BLEND_PIXELS + 1)
+		image.set_pixelv(lower, lower_colour.lerp(upper_colour, strength * 0.5))
+		image.set_pixelv(upper, upper_colour.lerp(lower_colour, strength * 0.5))
 
 func _nearest_different_neighbour(tile_ids: PackedInt32Array, chunk_size: int,
 		tile_x: int, tile_y: int, pixel_x: int, pixel_y: int, tile_id: int) -> int:

@@ -48,6 +48,18 @@ assets/tiles/wildfall-crafting-stations.png
 assets/resources/wildfall-forage-plants.png
 assets/characters/explorer-base-walk.png
 assets/characters/explorer-storm-walk.png
+assets/characters/actions/male-axe.png
+assets/characters/actions/male-pickaxe.png
+assets/characters/actions/male-sword.png
+assets/characters/actions/male-bow.png
+assets/characters/actions/male-hoe.png
+assets/characters/actions/male-hammer.png
+assets/characters/actions/female-axe.png
+assets/characters/actions/female-pickaxe.png
+assets/characters/actions/female-sword.png
+assets/characters/actions/female-bow.png
+assets/characters/actions/female-hoe.png
+assets/characters/actions/female-hammer.png
 assets/creatures/alien-creature-roster.png
 ```
 
@@ -64,6 +76,14 @@ dimensions—terrain 4×2, water 4×1, resources 4×2, ground details 4×2, and
 forage 2×2. The game retains its TileSet cell IDs, water collision, and
 automatic terrain-edge/corner blending while the artwork changes, so a pack
 cannot accidentally change navigation or resource reachability.
+
+Character action sheets are optional four-frame strips. They are shared by
+tool category, so `male-axe.png`, for example, plays for wooden, stone, and
+iron axes alike. Each strip reads left to right as wind-up, impact/release,
+follow-through, and recovery. Packs may replace only the character sheets and
+these action strips, leaving all world art stock; switching to **Stock**
+immediately restores the original explorer models and lightweight stock tool
+drawings.
 
 `wildfall-crafting-stations.png` is a 4×1 atlas of 32×32 cells in this exact
 order: **campfire, furnace, workbench, anvil**. These are the visuals for the

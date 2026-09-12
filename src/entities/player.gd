@@ -446,6 +446,8 @@ func _fire_ranged() -> void:
 	var bolt := Projectile.new()
 	get_parent().add_child(bolt)
 	bolt.setup(global_position + _aim_dir * 16.0, _aim_dir, damage)
+	if character_visual != null:
+		character_visual.play_tool_swing()
 	_consume_tool_durability()
 	if event_bus:
 		event_bus.projectile_fired.emit(global_position, _aim_dir)
