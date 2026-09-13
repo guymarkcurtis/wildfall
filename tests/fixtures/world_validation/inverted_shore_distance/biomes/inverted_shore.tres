@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="BiomeDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/biome_definition.gd" id="1_inverted"]
+
+[resource]
+script = ExtResource("1_inverted")
+id = "inverted_shore"
+display_name = "Inverted Shore Distance"
+min_distance_to_water = 5
+max_distance_to_water = 2

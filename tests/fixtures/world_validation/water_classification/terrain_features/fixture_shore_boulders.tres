@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="TerrainFeatureDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/terrain_feature_definition.gd" id="1_boulders"]
+
+[resource]
+script = ExtResource("1_boulders")
+id = "fixture_shore_boulders"
+display_name = "Fixture Shore Boulders"
+category = "structure"
+spawn_weight = 1.0
+min_spacing_tiles = 8
+footprint_radius_tiles = 3
+allowed_biomes = PackedStringArray("fixture_shore")
+max_distance_to_water = 1

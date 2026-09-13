@@ -271,6 +271,54 @@ A 30-second headless run of the actual game also completed with 0 errors,
   mission checks, plus the reworked durability/mission blocks), 0
   failures, 0 script errors — green on two consecutive runs.
 
+## RECENTLY COMPLETED (2026-09-12 water classification + shore distance — WG-05)
+
+- Water is now a classified physical system: every tile of every chunk
+  carries a `water_class` — a water tile is `coast` when any of its 8
+  neighbours is land, else `deep_water`; a land tile is `shore` when any of
+  its 8 neighbours is water, else `land` — and water tiles additionally
+  carry a `water_origin`: `ocean` when their elevation is strictly below
+  `water_level`, `lake` when it is at or above it (lake water sits above the
+  sea level).
+- Every chunk also carries a Chebyshev `distance_to_water`
+  field: 0 on water tiles, 1..cap-1 exact, and the cap value meaning "no
+  water within cap - 1 tiles"; `distance_to_water_cap_tiles` in
+  `world_generation_config.tres` sets the cap (live 16, 0 disables the
+  field). The field is computed inside the existing per-chunk rect pass
+  (the rect extends cap tiles past the chunk), with one BFS per chunk shared
+  by the payload and the on-demand queries — no second pass.
+- Content side: biome, POI, terrain-feature, and resource definitions each
+  gain optional `min_distance_to_water` / `max_distance_to_water` (tiles;
+  per-side -1 = unconstrained). `WorldContentRegistry` rejects `min < -1`,
+  `max < -1`, `min > max`, and a `surface_spawnable` resource pinned to
+  `max_distance_to_water = 0` (impossible — every distance-0 tile is
+  water). Biome selection and the resource spawner veto
+  distance-failing candidates before any RNG roll, so placements stay
+  deterministic; water tiles pass the -1 input, so unconstrained content is
+  never vetoed. No generation branch mentions a water name.
+- Public on-demand queries `get_water_class_at_world` /
+  `get_water_origin_at_world` / `get_distance_to_water_at_world` mirror the
+  payload exactly; the on-demand distance BFS is memo-gated on the registry
+  instance and only runs once at least one definition constrains distance.
+  The live world ships no such content, so every live selection input stays
+  -1: live content (biomes, POIs, features, resources, caves) is
+  byte-identical to the pre-WG-05 world — payloads only gain the three
+  keys.
+- New `water_classification` fixture world (6x6 chunks, 96x96 tiles, seed
+  42, cap 8, lake level above sea level so both origins occur) and an
+  `inverted_shore_distance` invalid-fixture scenario under
+  `tests/fixtures/world_validation/`.
+- Harness section 2e: 28 checks (harness grew 327 to 355) — all tile classes
+  and origins over the whole fixture world against an independent
+  world-wide BFS reference (112x112 halo-expanded), the full distance field
+  with cap saturation, chunk-alone / reversed-order / lone-corner-chunk
+  determinism, POI + feature + spawner consumption of the distance
+  constraints at probe-verified anchors (23 POI candidates, 4 feature
+  anchors plus halo copies), open-gate on-demand agreement, the
+  invalid-fixture validation, and the live audit.
+- See `WORLD_GENERATION.md` ("Water classification and shore distance") and
+  `WORLD_CONTENT_AUTHORING.md` for the authoring side.
+
 ## RECENTLY COMPLETED (2026-09-12 terrain-feature seam — WG-04)
 
 - `TerrainFeatureDefinition` is now a first-class data-driven content kind:
@@ -382,10 +430,9 @@ A 30-second headless run of the actual game also completed with 0 errors,
 green. Durability and the mission system are done too — see
 RECENTLY COMPLETED below.)
 
-1. **World-generation refactor — next card WG-05** (complete water
-   classification and shore influences) per
-   `docs/WORLD_GENERATION_REFACTOR_PLAN.md`; WG-01–WG-04 are complete, and
-   WG-07/WG-08 are also unblocked since WG-01 is done.
+1. **World-generation refactor — next card WG-06** (add deterministic
+   rivers and streams) per `docs/WORLD_GENERATION_REFACTOR_PLAN.md`.
+   WG-01–WG-05 are complete, and WG-07/WG-08 remain unblocked.
 2. **Sound effects** (next open Phase 4 item in `docs/ROADMAP.md`) —
    the game currently has no audio: UI clicks, harvesting, combat
    hits, creature deaths, building placement/demolition, mission

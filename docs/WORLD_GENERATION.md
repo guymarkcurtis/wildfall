@@ -13,8 +13,10 @@ Adding an ordinary biome or resource should therefore not require modifying
 The current world is finite and chunk-streamed using the dimensions and radius
 in `data/world/world_generation_config.tres`. Coordinates and seed derivation
 remain independent of those bounds so a future effectively infinite world can
-reuse the same generation APIs. Water is produced as a physical mask with
-coastline and inland-lake rules, not as a normal biome.
+reuse the same generation APIs. Water is a physical system, not a normal biome: a coastline/inland-lake
+mask, a per-tile class (land / shore / coast / deep_water), an origin
+(ocean or lake), and a Chebyshev shore-distance field that content can
+constrain against (see the WG-05 section below).
 
 POI candidate generation is a generic stage: every discovered
 `POIDefinition` contributes candidates from its own spacing grid, biome and
@@ -149,6 +151,61 @@ Chunk payloads therefore carry a `feature_candidates` array (per candidate:
 feature id/category/name, stable `id@x,y` identity, anchor, radius, owner
 flag, copied influence tags, and the anchor tile's biome).
 
+## Water classification and shore distance (WG-05)
+
+Water is a physical system, not a biome, and the generator now says so
+in its data:
+
+- **Class** — every tile of every chunk carries a `water_class`,
+  recounted from the water mask by 8-neighbourhood: a water tile is
+  `coast` when any of its 8 neighbours is land, else `deep_water`; a
+  land tile is `shore` when any of its 8 neighbours is water, else
+  `land`.
+- **Origin** — water tiles additionally carry a `water_origin`:
+  `ocean` when the tile's elevation is strictly below `water_level`,
+  `lake` at or above it (a lake is elevation water — water above sea
+  level). In the live world the lake level (0.24) sits below the water
+  level (0.30), so every live water tile is structurally ocean-origin;
+  fixture worlds may raise the lake level above the water level to
+  exercise both.
+- **Shore distance** — every chunk also carries a `distance_to_water`
+  field (Chebyshev, in tiles): 0 on water tiles, 1..cap-1 exact, and
+  the cap value when no water lies within cap - 1 tiles (saturated).
+  The cap comes from
+  `world_generation_config.tres:distance_to_water_cap_tiles` (live 16;
+  0 disables the field). The field is computed inside the existing
+  per-chunk rect pass — the rect extends cap tiles past the chunk, and
+  tiles outside the finite world are sampled from the same noise field —
+  so every core tile's distance is exact with no second pass, and one
+  BFS per chunk feeds both the payload and the on-demand queries.
+
+All three values ride the chunk payload as new keys (see Chunk Structure
+below) and are mirrored by the public on-demand queries
+`get_water_class_at_world`, `get_water_origin_at_world`, and
+`get_distance_to_water_at_world`. The on-demand distance BFS is
+memo-gated on the registry instance and runs only once at least one
+content definition actually constrains a distance to water; an
+unconstrained world reads -1 from those queries.
+
+Content consumes the field through the generic `min_distance_to_water`
+/ `max_distance_to_water` fields (per-side -1 = unconstrained,
+min <= max, validated by `WorldContentRegistry`; a `surface_spawnable`
+resource pinned to max distance 0 is rejected as impossible). Biome
+selection and the resource spawner veto distance-failing candidates
+before any RNG roll, so placements stay deterministic; a -1 side never
+vetoes — water tiles pass the -1 input, so unconstrained content is
+never vetoed. No generation branch special-cases a water name; the
+generator's only "water" awareness is the generic mask/class/field
+itself.
+
+Live-world impact: the shipped live world has no content that constrains
+a distance to water, so every live selection input stays -1, the
+on-demand BFS stays dormant, and live content (biomes, POIs, features,
+resources, caves) is byte-identical to the pre-WG-05 world — payloads
+only gain the three new keys. Not wired this card: renderer
+presentation of the new classes (water still renders from the mask) and
+exact (unsaturated) distances beyond the cap.
+
 ## Generation Layers
 
 The `FastNoiseLite` instances (Godot 4.x API), all using
@@ -208,6 +265,12 @@ a chunk data dictionary:
     "moisture":    PackedFloat32Array,  # 256 values
     "temperature": PackedFloat32Array,  # 256 values
     "water_mask": PackedByteArray,      # 256 physical water flags
+    "water_class": PackedStringArray,   # WG-05: land/shore/coast/deep_water
+    "water_origin": PackedStringArray,  # WG-05: "" on land, ocean/lake on
+                                         # water tiles
+    "distance_to_water": PackedInt32Array,  # WG-05: 0 on water, 1..cap-1
+                                         # exact, cap = no water within
+                                         # cap - 1 tiles
     "biomes": PackedStringArray,        # per-tile biome ids (post-stage)
     "region_cells": Array,              # coherent-region stage: one entry per
                                          # world-aligned cell of this chunk —

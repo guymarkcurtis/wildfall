@@ -158,6 +158,8 @@ func _validate_biome(biome: BiomeDefinition, path: String) -> Array[String]:
 	if biome.cave_entrance_suitability < 0.0 or biome.cave_entrance_suitability > 1.0:
 		errors.append("%s: cave_entrance_suitability %.2f is outside the 0..1 range" % \
 				[path, biome.cave_entrance_suitability])
+	errors.append_array(_check_distance_to_water(path, biome.min_distance_to_water,
+			biome.max_distance_to_water, false))
 	return errors
 
 
@@ -170,6 +172,8 @@ func _validate_resource(definition: ResourceDefinition, path: String) -> Array[S
 				[path, definition.distribution_mode, ", ".join(ResourceSpawner.DISTRIBUTION_MODES)])
 	if not definition.surface_spawnable and not definition.underground_spawnable:
 		errors.append("%s: neither surface_spawnable nor underground_spawnable is set; this resource can never spawn anywhere" % path)
+	errors.append_array(_check_distance_to_water(path, definition.min_distance_to_water,
+			definition.max_distance_to_water, definition.surface_spawnable))
 	for index in range(definition.yields.size()):
 		if str(definition.yields[index].get("item_id", "")).is_empty():
 			errors.append("%s: yields[%d] has no item_id; harvesting it would drop nothing" % [path, index])
@@ -196,6 +200,8 @@ func _validate_poi(poi: POIDefinition, path: String) -> Array[String]:
 		return errors
 	if poi.min_spacing_tiles < 0:
 		errors.append("%s: min_spacing_tiles (%d) is negative" % [path, poi.min_spacing_tiles])
+	errors.append_array(_check_distance_to_water(path, poi.min_distance_to_water,
+			poi.max_distance_to_water, false))
 	return errors
 
 
@@ -209,6 +215,8 @@ func _validate_terrain_feature(feature: TerrainFeatureDefinition, path: String) 
 		errors.append("%s: footprint_radius_tiles (%d) is negative" % [path, feature.footprint_radius_tiles])
 	if feature.spawn_weight < 0.0 or feature.spawn_weight > 1.0:
 		errors.append("%s: spawn_weight %.2f is outside the 0..1 range" % [path, feature.spawn_weight])
+	errors.append_array(_check_distance_to_water(path, feature.min_distance_to_water,
+			feature.max_distance_to_water, false))
 	return errors
 
 
@@ -273,6 +281,30 @@ func _validate_cross_references() -> Array[String]:
 		for biome_id in feature.allowed_biomes:
 			if not biomes.has(biome_id):
 				errors.append("%s: allowed_biomes references unknown biome '%s'" % [path, biome_id])
+	return errors
+
+
+## WG-05: distance-to-water constraint checks shared by every content kind
+## (biomes, POIs, terrain features, resources). -1 means "no constraint on
+## that side" (the default for every shipped asset, which keeps existing
+## worlds byte-identical); any other value must be a whole number of tiles
+## >= 0. A min above the max can never be satisfied, and a surface resource
+## with max 0 can never spawn because the only distance-0 tiles are water
+## tiles and surface resources require land.
+func _check_distance_to_water(path: String, min_distance: int, max_distance: int,
+		surface_resource: bool) -> Array[String]:
+	var errors: Array[String] = []
+	if min_distance < -1:
+		errors.append("%s: min_distance_to_water (%d) is below -1; the distance to water field uses -1 as the unconstrained sentinel" % \
+				[path, min_distance])
+	if max_distance < -1:
+		errors.append("%s: max_distance_to_water (%d) is below -1; the distance to water field uses -1 as the unconstrained sentinel" % \
+				[path, max_distance])
+	if min_distance >= 0 and max_distance >= 0 and min_distance > max_distance:
+		errors.append("%s: min_distance_to_water (%d) exceeds max_distance_to_water (%d); no tile's distance to water satisfies both" % \
+				[path, min_distance, max_distance])
+	if surface_resource and max_distance == 0:
+		errors.append("%s: max_distance_to_water = 0 on a surface_spawnable resource can never spawn, because the only tiles with a distance to water of 0 are water tiles" % path)
 	return errors
 
 

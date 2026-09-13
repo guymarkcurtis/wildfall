@@ -18,6 +18,15 @@ extends Resource
 @export var lake_moisture_threshold: float = 0.72
 @export var lake_noise_threshold: float = 0.56
 
+## Cap of the shore distance field, measured in Chebyshev (8-neighbor) tiles.
+## 0 disables the field: chunk payloads carry empty distance arrays and
+## distance-constrained content cannot be satisfied. For 1..cap - 1 a value
+## is the exact tile distance to the nearest water tile (0 = the water tile
+## itself); the cap value means "no water within cap - 1 tiles". Content
+## rules consume the precomputed per-chunk array, so no rule ever branches
+## on a water body name.
+@export_range(0, 64) var distance_to_water_cap_tiles: int = 16
+
 ## Low-frequency regional sampling keeps biome regions broad while preserving
 ## local environmental variation at their boundaries.
 @export_range(0.01, 1.0) var regional_field_coordinate_scale: float = 0.18

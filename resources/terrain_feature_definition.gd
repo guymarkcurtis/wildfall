@@ -27,6 +27,13 @@ extends Resource
 ## resource spawner's spawn-block tag). The vocabulary belongs to the
 ## consumers; this list is pure data.
 @export var influence_tags: PackedStringArray = []
+## WG-05: minimum Chebyshev (8-neighbour) tile distance from the nearest
+## water tile at which this feature may place. -1 = unconstrained.
+@export var min_distance_to_water: int = -1
+## WG-05: maximum Chebyshev (8-neighbour) tile distance from the nearest
+## water tile at which this feature may place. -1 = unconstrained; tiles
+## with no water within cap - 1 read the cap value.
+@export var max_distance_to_water: int = -1
 @export var custom_data: Dictionary = {}
 
 func is_valid() -> bool:

@@ -29,6 +29,19 @@ extends Resource
 ## biome out of the stage — its fragments are never merged.
 @export var minimum_region_size: int = 0
 
+## WG-05: minimum Chebyshev (8-neighbour) tile distance from the nearest
+## water tile at which this biome may appear on land. -1 = unconstrained.
+## Values are read from the world's water/shore distance field (see the
+## world config's distance_to_water_cap_tiles); no water body name is ever
+## referenced by this rule.
+@export var min_distance_to_water: int = -1
+
+## WG-05: maximum Chebyshev (8-neighbour) tile distance from the nearest
+## water tile at which this biome may appear on land. -1 = unconstrained;
+## tiles with no water within cap - 1 read the cap value, so max = cap
+## means "anywhere without nearby water".
+@export var max_distance_to_water: int = -1
+
 ## Generic environment labels used by resources, POIs, and cave entrances.
 @export var environment_tags: PackedStringArray = []
 

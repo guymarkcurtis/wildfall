@@ -1,22 +1,22 @@
 [gd_resource type="Resource" script_class="WorldGenerationConfig" load_steps=2 format=3]
 
-[ext_resource type="Script" path="res://resources/world_generation_config.gd" id="1_config"]
+[ext_resource type="Script" path="res://resources/world_generation_config.gd" id="1_wg05"]
 
 [resource]
-script = ExtResource("1_config")
-config_id = "riftwake_default"
+script = ExtResource("1_wg05")
+config_id = "wg05_water_classification"
 generation_version = 2
 tile_size_pixels = 32
 chunk_size_tiles = 16
-world_dimensions_chunks = Vector2i(128, 128)
-world_origin_chunk = Vector2i(-64, -64)
+world_dimensions_chunks = Vector2i(6, 6)
+world_origin_chunk = Vector2i(-3, -3)
 streaming_radius = 3
 water_level = 0.3
 shoreline_level = 0.35
-lake_level = 0.24
-lake_moisture_threshold = 0.72
-lake_noise_threshold = 0.56
-distance_to_water_cap_tiles = 16
+lake_level = 0.4
+lake_moisture_threshold = 0.4
+lake_noise_threshold = 0.4
+distance_to_water_cap_tiles = 8
 regional_field_coordinate_scale = 0.18
 regional_biome_weight = 2.0
 transition_biome_weight = 0.85

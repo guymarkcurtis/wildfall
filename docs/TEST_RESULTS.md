@@ -1,7 +1,17 @@
 # Wildfall Test Results
 
 ## Test Run Summary
-- **Current verification**: 327 checks passed, 0 failures, 0 script errors (Godot 4.7.2 headless run after the data-driven world-generation, regional-biome, POI-spacing, cave-runtime, directional-animation, fixed-world-direction control, startup content-validation (WG-01), the generic POI layer (WG-02), the coherent-region stage (WG-03), and the terrain-feature candidate layer (WG-04) work; includes registry, large-world configuration, underground-mineral filtering, deterministic regional/POI/cave identity, underground cave deposits, cave entry/exit, discovery-ledger checks, authored player-direction/action frames, jumping, all four fixed WASD axes, the 20-check invalid-content validation suite, the 11-check coherent-region suite (fixture data-driven region floors, world-aligned cell grid, no sub-floor fragments, metadata-respecting merges, tile-for-tile payload/query agreement, seam-chunk and reversed-order stability, and a live-seed dormant no-op), and the 15-check terrain-feature suite (asset discovery/validation, dormant live world, regeneration + seam + reversed-order stability, halo/owner invariants, min-spacing, and the spawner's no_spawn veto end-to-end))
+- **Current verification**: 355 checks passed, 0 failures, 0 script errors (Godot 4.7.2 headless run after the data-driven world-generation, regional-biome, POI-spacing, cave-runtime, directional-animation, fixed-world-direction control, startup content-validation (WG-01), the generic POI layer (WG-02), the coherent-region stage (WG-03), and the terrain-feature candidate layer (WG-04), and the water classification +
+  shore distance field (WG-05) work; includes registry, large-world configuration, underground-mineral filtering, deterministic regional/POI/cave identity, underground cave deposits, cave entry/exit, discovery-ledger checks, authored player-direction/action frames, jumping, all four fixed WASD axes, the 20-check invalid-content validation suite, the 11-check coherent-region suite (fixture data-driven region floors, world-aligned cell grid, no sub-floor fragments, metadata-respecting merges, tile-for-tile payload/query agreement, seam-chunk and reversed-order stability, and a live-seed dormant no-op), and the 15-check terrain-feature suite (asset discovery/validation, dormant live world, regeneration + seam + reversed-order stability, halo/owner invariants, min-spacing, and the spawner's no_spawn veto end-to-end), and
+  the 28-check water-classification suite (fixture classes/origins over all
+  9,216 tiles against the halo-expanded 12,544-tile reference, the
+  Chebyshev shore
+  distance field with cap saturation, chunk-alone / reversed-order /
+  lone-corner-chunk determinism, POI + feature + spawner consumption of the
+  new min/max distance constraints without any water-name special case,
+  on-demand query agreement behind the open gate, the invalid-fixture
+  distance validation, and a live audit proving biomes stay byte-identical
+  while the three new payload keys ride along))
 - **Godot Version**: 4.7.2.stable (linux.x86_64, official) — the project was upgraded to Godot 4.7 on 2026-09-11 (editor config sync from the Mac) and the Linux verification binary was upgraded to match
 - **Test Script**: `tests/test_game.gd` (SceneTree harness that boots the real `main.tscn`, validates world, UI, inventory, building, technology progression, texture-pack export/live switching, save persistence of player-caused world mutations, and resource accessibility, then exits with the failure count as its exit code)
 
@@ -207,6 +217,77 @@ Design note: influence-tag vocabularies are owned by the consumers —
 `no_spawn` belongs to the spawner. The renderer's presentation-consumption
 of feature masks is a documented seam, not yet wired this card; the live
 world is byte-identical apart from the new (empty) payload key.
+
+## Water classes + shore distance — WG-05 (2026-09-12)
+
+`WorldGenerator` now classifies every tile of every chunk: a water tile is
+`coast` when any of its 8 neighbours is land, else `deep_water`; a land tile
+is `shore` when any of its 8 neighbours is water, else `land`. Water tiles
+additionally carry an origin — `ocean` when their elevation is strictly
+below `water_level`, `lake` when it is at or above it (lake water is
+elevation water, i.e. water above the sea level). Every chunk also carries a
+Chebyshev `distance_to_water` field: 0 on water tiles, 1..cap-1 exact, and
+the cap value (`distance_to_water_cap_tiles`: live 16, fixture 8; 0
+disables the field) meaning "no water within cap - 1 tiles". The field is
+computed in the same per-chunk rect pass that samples the noise (the rect
+extends cap tiles past the chunk, so every core tile's distance is exact
+with no second pass). The three values ride the chunk payload as new keys
+(`water_class`, `water_origin`, `distance_to_water`) and are mirrored by
+the public on-demand queries `get_water_class_at_world`,
+`get_water_origin_at_world`, and `get_distance_to_water_at_world`; the
+on-demand BFS runs only behind a registry-instance gate when at least one
+content definition actually constrains its distance to water.
+
+- 28 checks in harness section 2e, over a new 6x6-chunk
+  `water_classification` fixture world (96x96 tiles, seed 42, cap 8, lake
+  level 0.40 above the 0.30 water level so both origins occur):
+- Every one of the 9,216 payload tiles: its class equals the class
+  recomputed from the tile's own mask plus its 8-neighbour water bits from
+  an independent world-wide BFS reference (computed on the whole world
+  extended by the cap halo — 112x112 = 12,544 tiles), and its origin equals
+  the elevation-vs-water-level rule (both `ocean` and `lake` occur).
+- The payload's distance field equals the cap-saturated distance from the
+  same independent reference for every tile (the reference box extends the
+  whole world plus the cap halo, so saturation semantics are checked at the
+  world edges).
+- Determinism: chunk-alone == in-box, reversed-order generation, and a
+  lone-corner-chunk regeneration all reproduce the three fields
+  byte-for-byte.
+- Content consumption with no water-name special case: the fixture biome's
+  min/max distance veto changes selection deterministically; the
+  `min_distance_to_water` POI places exactly 23 candidates (including the
+  4 probe-verified anchor positions; the 13 of its 36 spacing-grid anchors
+  within distance < 3 are excluded), each inside its own chunk at distance
+  >= 3; the `max_distance_to_water` feature yields exactly the 4
+  probe-verified anchors at distance 1 (plus their halo copies in the
+  neighbouring chunks); the resource spawner's vetoes consume the same
+  field.
+- On-demand: with the gate open, `get_distance_to_water_at_world` /
+  class / origin agree with the payload at 12 scattered sample tiles in
+  both fixture and live worlds.
+- Invalid fixture: a `surface_spawnable` resource pinned to
+  `max_distance_to_water = 0`, a `min < -1` POI, and a `min > max` biome
+  are each rejected by `WorldContentRegistry` with the matching error
+  message (the fixture intentionally ships the invalid .tres without a
+  full config, so only the registry errors are asserted).
+- Live audit: the live payloads gain the three keys, biomes remain
+  byte-identical to the pre-WG-05 selector (no live content constrains its
+  distance, so every live selection input stays -1), and the live
+  class/origin/distance fields agree with an independent 48x48 reference
+  around the streamed centre chunk (live cap 16). With live lake level
+  0.24 below the 0.30 water level, every live water tile is structurally
+  `ocean`-origin — documented, not a bug.
+
+Design notes: water stays a physical system, not a biome — the classes and
+origins are payload data, and no generation branch mentions a water name.
+Out-of-world halo tiles are sampled from the same unclamped noise fields,
+so the distance field stays consistent right up to the finite world's
+boundary. The one non-obvious implementation bug found while wiring this up:
+the shared BFS helper resized its distance buffer (zero-filled by Godot)
+without filling it with the -1 unvisited sentinel, which silently produced
+an all-zero field — the world-wide reference check above is what catches
+exactly that class of error. The renderer's presentation of the new classes
+is a documented seam, not wired this card.
 
 ## Player directional animation (2026-09-12)
 

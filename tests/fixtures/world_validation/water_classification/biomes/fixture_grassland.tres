@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="BiomeDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/biome_definition.gd" id="1_grassland"]
+
+[resource]
+script = ExtResource("1_grassland")
+id = "fixture_grassland"
+display_name = "Fixture Grassland"
+min_distance_to_water = 2
+terrain_tile_id = "grass"
+ground_color = Color(0.3, 0.65, 0.3, 1)

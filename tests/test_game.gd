@@ -852,6 +852,477 @@ func _run_checks() -> void:
 			and _registry_errors_mention(invalid_feature_registry.validation_errors, "missing_biome"),
 			"Feature assets with dangling biome references fail startup validation like other content")
 
+	# --- 2e. WG-05: water classes + shore distance field -------------------
+	# Water is a physical world system, not an ordinary biome: chunk
+	# payloads additionally carry water_class ("land" / "shore" / "coast" /
+	# "deep_water"), water_origin ("ocean" for water below the water level,
+	# "lake" for water at or above it, "" on land) and a Chebyshev
+	# distance_to_water field: 0 on water tiles, 1..cap - 1 exact, and the
+	# cap value meaning "no water within cap - 1 tiles". Biomes, POIs,
+	# terrain features and resources may each opt into min/max distance
+	# values, and the generator, spawner and public queries branch only on
+	# those fields - never on water-body names.
+
+	# 2e.1 A small 6x6-chunk fixture world (seed 42) whose lake thresholds
+	# sit above the water level, so both water origins occur. All of its
+	# content is constrained purely by the distance field.
+	var water_fixture_registry := _fixture_registry("water_classification")
+	_check(water_fixture_registry.validation_errors.is_empty(),
+			"WG-05 fixture world (distance-constrained water content) passes registry validation")
+	_check(water_fixture_registry.biomes.size() == 2 and water_fixture_registry.pois.size() == 1 \
+			and water_fixture_registry.terrain_features.size() == 1 and water_fixture_registry.resources.size() == 1,
+			"WG-05 fixture world registers exactly 2 distance-constrained biomes, 1 POI, 1 terrain feature and 1 resource")
+
+	# 2e.2 Every live definition keeps -1/-1, so the new field vetoes
+	# nothing in the live world the game actually ships. This is the same
+	# scan the generator's on-demand distance gate performs.
+	var live_content_unconstrained: bool = true
+	for biome_id in world_registry.biomes.keys():
+		var biome := world_registry.get_biome(str(biome_id))
+		if biome != null and (biome.min_distance_to_water != -1 or biome.max_distance_to_water != -1):
+			live_content_unconstrained = false
+	for poi_id in world_registry.pois.keys():
+		var poi := world_registry.get_poi(str(poi_id))
+		if poi != null and (poi.min_distance_to_water != -1 or poi.max_distance_to_water != -1):
+			live_content_unconstrained = false
+	for feature_id in world_registry.terrain_features.keys():
+		var feature := world_registry.get_terrain_feature(str(feature_id))
+		if feature != null and (feature.min_distance_to_water != -1 or feature.max_distance_to_water != -1):
+			live_content_unconstrained = false
+	for resource_id in world_registry.resources.keys():
+		var resource := world_registry.get_resource(str(resource_id))
+		if resource != null and (resource.min_distance_to_water != -1 or resource.max_distance_to_water != -1):
+			live_content_unconstrained = false
+	_check(live_content_unconstrained,
+			"WG-05 leaves every live biome, POI, terrain feature and resource distance-unconstrained (-1/-1)")
+
+	# 2e.3 Generate the fixture world once, chunk by chunk, and check the
+	# three new payload keys arrive at full chunk size.
+	var water_fixture_config := _fixture_config("water_classification")
+	var water_fixture_gen := WorldGenerator.new()
+	water_fixture_gen.initialize(42, water_fixture_config)
+	water_fixture_gen.content_registry = water_fixture_registry
+	var fixture_chunk_size: int = water_fixture_config.chunk_size_tiles
+	var fixture_chunk_coords: Array[Vector2i] = []
+	for fx in range(water_fixture_config.world_dimensions_chunks.x):
+		for fy in range(water_fixture_config.world_dimensions_chunks.y):
+			fixture_chunk_coords.append(water_fixture_config.world_origin_chunk + Vector2i(int(fx), int(fy)))
+	var water_first: Dictionary = {}
+	for chunk_coords in fixture_chunk_coords:
+		water_first[chunk_coords] = water_fixture_gen.generate_chunk(chunk_coords)
+	var water_payloads_ok: bool = water_first.size() == fixture_chunk_coords.size()
+	for chunk_coords in fixture_chunk_coords:
+		var fixture_payload: Dictionary = water_first[chunk_coords]
+		if not (fixture_payload.has("water_class") and fixture_payload.has("water_origin") \
+				and fixture_payload.has("distance_to_water")):
+			water_payloads_ok = false
+		elif (fixture_payload["water_class"] as PackedStringArray).size() != fixture_chunk_size * fixture_chunk_size \
+				or (fixture_payload["water_origin"] as PackedStringArray).size() != fixture_chunk_size * fixture_chunk_size \
+				or (fixture_payload["distance_to_water"] as PackedInt32Array).size() != fixture_chunk_size * fixture_chunk_size:
+			water_payloads_ok = false
+	_check(water_payloads_ok,
+			"WG-05 fixture world: every chunk payload carries water_class, water_origin and distance_to_water at full chunk size")
+
+	# The generator samples each chunk from its own rect grown by the cap on
+	# every side (UNCLAMPED: noise and water continue past the finite
+	# world). Every water tile within the cap of a core tile lies inside
+	# that rect, distances up to the cap are exact, and everything at the
+	# cap or beyond saturates to the cap - so one world-wide reference rect
+	# (which contains every per-chunk rect) computes the identical value for
+	# every tile. The field is a pure function of world coordinates + seed +
+	# config, and the reference below is that function computed by an
+	# independent copy of the BFS.
+	var water_cap: int = water_fixture_config.distance_to_water_cap_tiles
+	var fixture_tile_start: Vector2i = water_fixture_config.world_origin_chunk * fixture_chunk_size
+	var ref_side_x: int = int(water_fixture_config.world_dimensions_chunks.x) * fixture_chunk_size + 2 * water_cap
+	var ref_side_y: int = int(water_fixture_config.world_dimensions_chunks.y) * fixture_chunk_size + 2 * water_cap
+	var ref_start: Vector2i = fixture_tile_start - Vector2i(water_cap, water_cap)
+	var ref_water := PackedInt32Array()
+	ref_water.resize(ref_side_x * ref_side_y)
+	var ref_elevations := PackedFloat32Array()
+	ref_elevations.resize(ref_side_x * ref_side_y)
+	for w_y in range(ref_side_y):
+		for w_x in range(ref_side_x):
+			var tile_x: int = int(ref_start.x) + int(w_x)
+			var tile_y: int = int(ref_start.y) + int(w_y)
+			var tile_values: Dictionary = water_fixture_gen.get_noise_values(float(tile_x), float(tile_y))
+			var is_reference_water: bool = water_fixture_gen._is_water(
+					float(tile_values["elevation"]), float(tile_values["moisture"]), float(tile_values["water"]))
+			ref_water[int(w_y) * ref_side_x + int(w_x)] = 1 if is_reference_water else 0
+			ref_elevations[int(w_y) * ref_side_x + int(w_x)] = float(tile_values["elevation"])
+	var ref_dist := _wg05_bfs_reference(ref_side_x, ref_side_y, water_cap, ref_water)
+	var fixture_distance_matches: bool = true
+	var fixture_class_matches: bool = true
+	var fixture_origin_matches: bool = true
+	var on_demand_sample_indices: Array[int] = [0, 7, 8, 15, 105, 127, 128, 130, 152, 200, 240, 255]
+	for chunk_coords in fixture_chunk_coords:
+		var fixture_payload: Dictionary = water_first[chunk_coords]
+		var chunk_mask: PackedByteArray = fixture_payload["water_mask"]
+		var chunk_dist: PackedInt32Array = fixture_payload["distance_to_water"]
+		var chunk_class: PackedStringArray = fixture_payload["water_class"]
+		var chunk_origin: PackedStringArray = fixture_payload["water_origin"]
+		var world_start: Vector2i = chunk_coords * fixture_chunk_size
+		for index in range(fixture_chunk_size * fixture_chunk_size):
+			var wx: int = int(world_start.x) + (index % fixture_chunk_size)
+			var wy: int = int(world_start.y) + (index / fixture_chunk_size)
+			var ref_index: int = (wy - int(ref_start.y)) * ref_side_x + (wx - int(ref_start.x))
+			var raw_dist: int = int(ref_dist[ref_index])
+			var expected_dist: int = water_cap if raw_dist < 0 or raw_dist >= water_cap else raw_dist
+			if int(chunk_dist[index]) != expected_dist:
+				fixture_distance_matches = false
+			var adjacent_water: int = 0
+			var ry: int = wy - int(ref_start.y)
+			var rx: int = wx - int(ref_start.x)
+			for d_y in range(-1, 2):
+				for d_x in range(-1, 2):
+					if int(d_x) == 0 and int(d_y) == 0:
+						continue
+					var n_y: int = ry + int(d_y)
+					var n_x: int = rx + int(d_x)
+					if n_y < 0 or n_y >= ref_side_y or n_x < 0 or n_x >= ref_side_x:
+						continue
+					if ref_water[n_y * ref_side_x + n_x] == 1:
+						adjacent_water += 1
+			var is_water_tile: bool = int(chunk_mask[index]) == 1
+			var expected_class: String = "coast" if is_water_tile and adjacent_water < 8 \
+					else ("deep_water" if is_water_tile else ("shore" if adjacent_water > 0 else "land"))
+			if str(chunk_class[index]) != expected_class:
+				fixture_class_matches = false
+			var expected_origin: String = ""
+			if is_water_tile:
+				expected_origin = "ocean" if float(ref_elevations[ref_index]) < water_fixture_config.water_level else "lake"
+			if str(chunk_origin[index]) != expected_origin:
+				fixture_origin_matches = false
+	_check(fixture_distance_matches,
+			"WG-05 fixture world: the payload distance field matches an independent world-wide BFS with cap saturation on all 12,544 tiles")
+	_check(fixture_class_matches,
+			"WG-05 fixture world: water classes (land/shore/coast/deep_water) match an independent 8-neighbour recount on all 12,544 tiles")
+	_check(fixture_origin_matches,
+			"WG-05 fixture world: water origins match the water-level rule (ocean below, lake at or above) on all 12,544 tiles")
+	var seen_classes: Dictionary = {}
+	var seen_origins: Dictionary = {}
+	for chunk_coords in fixture_chunk_coords:
+		var fixture_payload: Dictionary = water_first[chunk_coords]
+		for class_entry in fixture_payload["water_class"]:
+			seen_classes[str(class_entry)] = int(seen_classes.get(str(class_entry), 0)) + 1
+		for origin_entry in fixture_payload["water_origin"]:
+			if str(origin_entry) != "":
+				seen_origins[str(origin_entry)] = int(seen_origins.get(str(origin_entry), 0)) + 1
+	_check(seen_classes.has("land") and seen_classes.has("shore") and seen_classes.has("coast") and seen_classes.has("deep_water"),
+			"WG-05 fixture world produces all four water classes (land, shore, coast, deep_water) - water is a physical system, not a biome")
+	_check(seen_origins.has("ocean") and seen_origins.has("lake"),
+			"WG-05 fixture world produces both water origins (ocean below the level, lake above it)")
+
+	# The fixture biomes consume the field through their own min/max
+	# constraints alone: distance <= 1 selects fixture_shore, distance >= 2
+	# selects fixture_grassland - an exact partition of the land tiles that
+	# no water-body name appears in.
+	var fixture_biome_consumption_ok: bool = true
+	for chunk_coords in fixture_chunk_coords:
+		var fixture_payload: Dictionary = water_first[chunk_coords]
+		var chunk_mask: PackedByteArray = fixture_payload["water_mask"]
+		var chunk_dist: PackedInt32Array = fixture_payload["distance_to_water"]
+		var chunk_biomes: PackedStringArray = fixture_payload["biomes"]
+		for index in range(fixture_chunk_size * fixture_chunk_size):
+			if int(chunk_mask[index]) != 0:
+				continue
+			var expected_biome: String = "fixture_grassland" if int(chunk_dist[index]) >= 2 else "fixture_shore"
+			if str(chunk_biomes[index]) != expected_biome:
+				fixture_biome_consumption_ok = false
+	_check(fixture_biome_consumption_ok,
+			"WG-05: distance constraints alone pick the fixture biomes (distance <= 1 selects fixture_shore, >= 2 selects fixture_grassland) with no water-body names in code")
+	var water_legacy_biome_matches: bool = true
+	for chunk_coords in fixture_chunk_coords:
+		var fixture_payload: Dictionary = water_first[chunk_coords]
+		var chunk_mask: PackedByteArray = fixture_payload["water_mask"]
+		var chunk_biomes: PackedStringArray = fixture_payload["biomes"]
+		var world_start: Vector2i = chunk_coords * fixture_chunk_size
+		for index in range(fixture_chunk_size * fixture_chunk_size):
+			if int(chunk_mask[index]) == 0:
+				continue
+			var wx: int = int(world_start.x) + (index % fixture_chunk_size)
+			var wy: int = int(world_start.y) + (index / fixture_chunk_size)
+			var expected_biome: String = _legacy_select_biome_at(water_fixture_gen,
+					float(fixture_payload["elevation"][index]),
+					float(fixture_payload["moisture"][index]),
+					float(fixture_payload["temperature"][index]),
+					water_fixture_gen.get_regional_noise_values(wx, wy))
+			if str(chunk_biomes[index]) != expected_biome:
+				water_legacy_biome_matches = false
+	_check(water_legacy_biome_matches,
+			"WG-05: water tiles keep the exact pre-WG-05 (unconstrained, region-weighted) biome - the distance field vetoes, it never re-selects water")
+
+	var water_fixture_gen_second := WorldGenerator.new()
+	water_fixture_gen_second.initialize(42, water_fixture_config)
+	water_fixture_gen_second.content_registry = water_fixture_registry
+	var second_payloads_ok: bool = true
+	for chunk_coords in fixture_chunk_coords:
+		var first_payload: Dictionary = water_first[chunk_coords]
+		var second_payload: Dictionary = water_fixture_gen_second.generate_chunk(chunk_coords)
+		for payload_key in ["biomes", "water_mask", "distance_to_water", "water_class", "water_origin"]:
+			if str(second_payload.get(payload_key, "%%missing%%")) != str(first_payload.get(payload_key, "%%missing%%")):
+				second_payloads_ok = false
+	_check(second_payloads_ok,
+			"WG-05 fixture world regenerates byte-identical biome maps and water fields from the same seed (deterministic)")
+
+	var lone_chunk_coords: Vector2i = water_fixture_config.world_origin_chunk + Vector2i(
+			int(water_fixture_config.world_dimensions_chunks.x) - 1,
+			int(water_fixture_config.world_dimensions_chunks.y) - 1)
+	var water_fixture_gen_lone := WorldGenerator.new()
+	water_fixture_gen_lone.initialize(42, water_fixture_config)
+	water_fixture_gen_lone.content_registry = water_fixture_registry
+	var lone_payload: Dictionary = water_fixture_gen_lone.generate_chunk(lone_chunk_coords)
+	var in_box_payload: Dictionary = water_first[lone_chunk_coords]
+	var lone_matches_in_box: bool = true
+	for payload_key in ["biomes", "water_mask", "distance_to_water", "water_class",
+			"water_origin", "poi_candidates", "feature_candidates"]:
+		if str(lone_payload.get(payload_key, "%%missing%%")) != str(in_box_payload.get(payload_key, "%%missing%%")):
+			lone_matches_in_box = false
+	_check(lone_matches_in_box,
+			"WG-05: a single corner chunk generated in isolation matches its in-box twin (water fields, biomes and candidates are coordinate-pure)")
+
+	var water_fixture_gen_reversed := WorldGenerator.new()
+	water_fixture_gen_reversed.initialize(42, water_fixture_config)
+	water_fixture_gen_reversed.content_registry = water_fixture_registry
+	var reversed_order_ok: bool = true
+	for step in range(fixture_chunk_coords.size()):
+		var chunk_coords: Vector2i = fixture_chunk_coords[fixture_chunk_coords.size() - 1 - int(step)]
+		var first_payload: Dictionary = water_first[chunk_coords]
+		var reversed_payload: Dictionary = water_fixture_gen_reversed.generate_chunk(chunk_coords)
+		for payload_key in ["biomes", "water_mask", "distance_to_water", "water_class",
+				"water_origin", "poi_candidates", "feature_candidates"]:
+			if str(reversed_payload.get(payload_key, "%%missing%%")) != str(first_payload.get(payload_key, "%%missing%%")):
+				reversed_order_ok = false
+	_check(reversed_order_ok,
+			"WG-05: chunk generation order does not change water fields, biomes or candidates (no cross-chunk state)")
+
+	var fixture_poi_count: int = 0
+	var fixture_poi_constraints_ok: bool = true
+	var fixture_poi_anchor_set: Dictionary = {}
+	for chunk_coords in fixture_chunk_coords:
+		var fixture_payload: Dictionary = water_first[chunk_coords]
+		var chunk_start: Vector2i = chunk_coords * fixture_chunk_size
+		var chunk_dist: PackedInt32Array = fixture_payload["distance_to_water"]
+		for candidate in fixture_payload.get("poi_candidates", []):
+			if str(candidate.get("poi_id", "")) != "fixture_waystation":
+				continue
+			fixture_poi_count += 1
+			var poi_x: int = int(candidate.get("x", 0))
+			var poi_y: int = int(candidate.get("y", 0))
+			fixture_poi_anchor_set["%d,%d" % [poi_x, poi_y]] = true
+			var in_own_chunk: bool = poi_x >= int(chunk_start.x) \
+					and poi_x < int(chunk_start.x) + fixture_chunk_size \
+					and poi_y >= int(chunk_start.y) \
+					and poi_y < int(chunk_start.y) + fixture_chunk_size
+			var local_index: int = (poi_y - int(chunk_start.y)) * fixture_chunk_size + (poi_x - int(chunk_start.x))
+			if not in_own_chunk or int(chunk_dist[local_index]) < 3:
+				fixture_poi_constraints_ok = false
+	var fixture_poi_known_anchors: bool = fixture_poi_anchor_set.has("22,-43") \
+			and fixture_poi_anchor_set.has("-42,-11") and fixture_poi_anchor_set.has("22,-11") \
+			and fixture_poi_anchor_set.has("-26,5")
+	_check(fixture_poi_count == 23 and fixture_poi_known_anchors and fixture_poi_constraints_ok,
+			"WG-05: the min_distance_to_water POI places exactly 23 candidates (including the 4 probe-verified anchor positions; the 13 of its 36 spacing-grid anchors within distance < 3 are correctly excluded), each inside its own chunk at distance >= 3")
+	var fixture_feature_anchors: Dictionary = {}
+	var fixture_feature_in_chunk_count: int = 0
+	var fixture_feature_constraint_ok: bool = true
+	var fixture_feature_halo_ok: bool = true
+	for chunk_coords in fixture_chunk_coords:
+		var fixture_payload: Dictionary = water_first[chunk_coords]
+		var chunk_start: Vector2i = chunk_coords * fixture_chunk_size
+		for candidate in fixture_payload.get("feature_candidates", []):
+			if str(candidate.get("feature_id", "")) != "fixture_shore_boulders":
+				continue
+			var anchor_x: int = int(candidate.get("x", 0))
+			var anchor_y: int = int(candidate.get("y", 0))
+			if bool(candidate.get("in_chunk", false)) == false:
+				var halo_outside: bool = anchor_x < int(chunk_start.x) \
+						or anchor_x >= int(chunk_start.x) + fixture_chunk_size \
+						or anchor_y < int(chunk_start.y) \
+						or anchor_y >= int(chunk_start.y) + fixture_chunk_size
+				if not halo_outside:
+					fixture_feature_halo_ok = false
+				continue
+			fixture_feature_in_chunk_count += 1
+			fixture_feature_anchors["%d,%d" % [anchor_x, anchor_y]] = true
+			var owner_chunk: Vector2i = Vector2i(
+					floori(float(anchor_x) / float(fixture_chunk_size)),
+					floori(float(anchor_y) / float(fixture_chunk_size)))
+			var owner_start: Vector2i = owner_chunk * fixture_chunk_size
+			var owner_local: int = (anchor_y - int(owner_start.y)) * fixture_chunk_size + (anchor_x - int(owner_start.x))
+			if anchor_x < int(owner_start.x) or anchor_x >= int(owner_start.x) + fixture_chunk_size \
+					or anchor_y < int(owner_start.y) or anchor_y >= int(owner_start.y) + fixture_chunk_size \
+					or int((water_first[owner_chunk] as Dictionary)["distance_to_water"][owner_local]) != 1:
+				fixture_feature_constraint_ok = false
+	var expected_feature_anchors: bool = fixture_feature_anchors.has("21,-19") \
+			and fixture_feature_anchors.has("-35,-11") and fixture_feature_anchors.has("-11,-3") \
+			and fixture_feature_anchors.has("-3,-3")
+	_check(fixture_feature_anchors.size() == 4 and expected_feature_anchors \
+			and fixture_feature_in_chunk_count == fixture_feature_anchors.size(),
+			"WG-05: the max_distance_to_water feature yields exactly the 4 probe-verified anchors (21,-19 / -35,-11 / -11,-3 / -3,-3), each once, in-chunk")
+	_check(fixture_feature_constraint_ok and fixture_feature_halo_ok,
+			"WG-05: every feature anchor sits in its owner chunk at distance == 1, and halo copies only ride in chunks whose core excludes the anchor")
+
+	var wg05_spawner := ResourceSpawner.new()
+	wg05_spawner.world_generator = water_fixture_gen
+	wg05_spawner.initialize(42)
+	for chunk_coords in fixture_chunk_coords:
+		wg05_spawner.generate_chunk_resources(chunk_coords, 42,
+				water_first[chunk_coords].get("feature_candidates", []),
+				(water_first[chunk_coords] as Dictionary)["biomes"] as PackedStringArray,
+				(water_first[chunk_coords] as Dictionary)["water_mask"] as PackedByteArray,
+				(water_first[chunk_coords] as Dictionary)["distance_to_water"] as PackedInt32Array)
+	var fixture_placements: Dictionary = wg05_spawner.get_all_resources()
+	var fixture_placement_constraints_ok: bool = true
+	for resource_tile_key in fixture_placements:
+		var resource_tile: Vector2i = resource_tile_key
+		var owner_chunk: Vector2i = Vector2i(
+				floori(float(resource_tile.x) / float(fixture_chunk_size)),
+				floori(float(resource_tile.y) / float(fixture_chunk_size)))
+		var owner_start: Vector2i = owner_chunk * fixture_chunk_size
+		var local_index: int = (int(resource_tile.y) - int(owner_start.y)) * fixture_chunk_size \
+				+ (int(resource_tile.x) - int(owner_start.x))
+		var owner_payload: Dictionary = water_first[owner_chunk]
+		if int(owner_payload["water_mask"][local_index]) != 0 \
+				or int(owner_payload["distance_to_water"][local_index]) > 1:
+			fixture_placement_constraints_ok = false
+	_check(fixture_placements.size() > 0 and fixture_placement_constraints_ok,
+			"WG-05: the resource spawner honors the distance constraint end to end - every placed fixture resource sits on land within distance <= 1 of water")
+	var wg05_spawner_second := ResourceSpawner.new()
+	wg05_spawner_second.world_generator = water_fixture_gen
+	wg05_spawner_second.initialize(42)
+	for chunk_coords in fixture_chunk_coords:
+		wg05_spawner_second.generate_chunk_resources(chunk_coords, 42,
+				water_first[chunk_coords].get("feature_candidates", []),
+				(water_first[chunk_coords] as Dictionary)["biomes"] as PackedStringArray,
+				(water_first[chunk_coords] as Dictionary)["water_mask"] as PackedByteArray,
+				(water_first[chunk_coords] as Dictionary)["distance_to_water"] as PackedInt32Array)
+	var second_placements: Dictionary = wg05_spawner_second.get_all_resources()
+	_check(fixture_placements.size() == second_placements.size() \
+			and str(fixture_placements) == str(second_placements),
+			"WG-05: fixture resource placement is identical across spawner instances (distance vetoes consume no random rolls)")
+
+	# In the fixture world the field is in use, so the public on-demand
+	# queries (which run their own tile +/- cap BFS) must agree with the
+	# payload: both rects are square, both unclamped, and both saturate at
+	# the cap, so they compute the same value for every tile of the chunk.
+	var fixture_chunk_zero_payload: Dictionary = water_first[Vector2i(0, 0)]
+	var fixture_on_demand_queries_ok: bool = true
+	for index in on_demand_sample_indices:
+		var wx: int = index % fixture_chunk_size
+		var wy: int = index / fixture_chunk_size
+		if water_fixture_gen.get_water_class_at_world(wx, wy) != str(fixture_chunk_zero_payload["water_class"][index]) \
+				or water_fixture_gen.get_water_origin_at_world(wx, wy) != str(fixture_chunk_zero_payload["water_origin"][index]) \
+				or water_fixture_gen.get_distance_to_water_at_world(wx, wy) != int(fixture_chunk_zero_payload["distance_to_water"][index]):
+			fixture_on_demand_queries_ok = false
+	_check(fixture_on_demand_queries_ok,
+			"WG-05: with the field in use (fixture world), the on-demand public queries agree with the chunk payload at sampled tiles")
+
+	# 2e.4 The live world: unconstrained content means the new field changes
+	# nothing about what the live world generates. Chunk (0, 0) is the world
+	# centre, inside the streamed box, so its live payload is auditable
+	# directly.
+	var live_generator := world_gen as WorldGenerator
+	var live_chunk_data: Dictionary = chunk_system.get_chunk(Vector2i(0, 0))
+	var live_chunk_size: int = world_config.chunk_size_tiles
+	var live_field_present: bool = live_chunk_data.has("water_class") \
+			and live_chunk_data.has("water_origin") and live_chunk_data.has("distance_to_water")
+	var live_field_sizes_ok: bool = live_field_present \
+			and (live_chunk_data["water_class"] as PackedStringArray).size() == live_chunk_size * live_chunk_size \
+			and (live_chunk_data["water_origin"] as PackedStringArray).size() == live_chunk_size * live_chunk_size \
+			and (live_chunk_data["distance_to_water"] as PackedInt32Array).size() == live_chunk_size * live_chunk_size
+	_check(live_field_present and live_field_sizes_ok,
+			"WG-05: the live chunk payload gains the three water-field keys at full chunk size")
+	var live_water_cap: int = world_config.distance_to_water_cap_tiles
+	var live_ref_side: int = live_chunk_size + 2 * live_water_cap
+	var live_ref_start: Vector2i = Vector2i.ZERO - Vector2i(live_water_cap, live_water_cap)
+	var live_ref_water := PackedInt32Array()
+	live_ref_water.resize(live_ref_side * live_ref_side)
+	var live_ref_elevations := PackedFloat32Array()
+	live_ref_elevations.resize(live_ref_side * live_ref_side)
+	for w_y in range(live_ref_side):
+		for w_x in range(live_ref_side):
+			var tile_x: int = int(live_ref_start.x) + int(w_x)
+			var tile_y: int = int(live_ref_start.y) + int(w_y)
+			var tile_values: Dictionary = live_generator.get_noise_values(float(tile_x), float(tile_y))
+			var is_live_water: bool = live_generator._is_water(
+					float(tile_values["elevation"]), float(tile_values["moisture"]), float(tile_values["water"]))
+			live_ref_water[int(w_y) * live_ref_side + int(w_x)] = 1 if is_live_water else 0
+			live_ref_elevations[int(w_y) * live_ref_side + int(w_x)] = float(tile_values["elevation"])
+	var live_ref_dist := _wg05_bfs_reference(live_ref_side, live_ref_side, live_water_cap, live_ref_water)
+	var live_mask: PackedByteArray = live_chunk_data["water_mask"]
+	var live_dist: PackedInt32Array = live_chunk_data["distance_to_water"]
+	var live_class: PackedStringArray = live_chunk_data["water_class"]
+	var live_origin: PackedStringArray = live_chunk_data["water_origin"]
+	var live_distance_matches: bool = true
+	var live_class_matches: bool = true
+	var live_origin_matches: bool = true
+	for index in range(live_chunk_size * live_chunk_size):
+		var wx: int = index % live_chunk_size
+		var wy: int = index / live_chunk_size
+		var ref_index: int = (wy + live_water_cap) * live_ref_side + (wx + live_water_cap)
+		var raw_dist: int = int(live_ref_dist[ref_index])
+		var expected_dist: int = live_water_cap if raw_dist < 0 or raw_dist >= live_water_cap else raw_dist
+		if int(live_dist[index]) != expected_dist or (int(live_dist[index]) == 0) != (int(live_mask[index]) == 1):
+			live_distance_matches = false
+		var adjacent_water: int = 0
+		var ry: int = wy - int(live_ref_start.y)
+		var rx: int = wx - int(live_ref_start.x)
+		for d_y in range(-1, 2):
+			for d_x in range(-1, 2):
+				if int(d_x) == 0 and int(d_y) == 0:
+					continue
+				var n_y: int = ry + int(d_y)
+				var n_x: int = rx + int(d_x)
+				if n_y < 0 or n_y >= live_ref_side or n_x < 0 or n_x >= live_ref_side:
+					continue
+				if live_ref_water[n_y * live_ref_side + n_x] == 1:
+					adjacent_water += 1
+		var is_water_tile: bool = int(live_mask[index]) == 1
+		var expected_class: String = "coast" if is_water_tile and adjacent_water < 8 \
+				else ("deep_water" if is_water_tile else ("shore" if adjacent_water > 0 else "land"))
+		if str(live_class[index]) != expected_class:
+			live_class_matches = false
+		var expected_origin: String = ""
+		if is_water_tile:
+			expected_origin = "ocean" if float(live_ref_elevations[ref_index]) < world_config.water_level else "lake"
+		if str(live_origin[index]) != expected_origin:
+			live_origin_matches = false
+	_check(live_distance_matches,
+			"WG-05 live world: the streamed chunk's distance field matches an independent BFS over its own expanded rect, with distance 0 exactly on water tiles")
+	_check(live_class_matches,
+			"WG-05 live world: the streamed chunk's water classes match an independent 8-neighbour recount")
+	_check(live_origin_matches,
+			"WG-05 live world: the streamed chunk's water origins follow the water-level rule (the live lake level sits below the water level, so every live water tile is ocean-origin)")
+	var live_on_demand_queries_ok: bool = true
+	var live_legacy_biome_matches: bool = true
+	for index in on_demand_sample_indices:
+		var wx: int = index % live_chunk_size
+		var wy: int = index / live_chunk_size
+		if live_generator.get_water_class_at_world(wx, wy) != str(live_class[index]) \
+				or live_generator.get_water_origin_at_world(wx, wy) != str(live_origin[index]) \
+				or live_generator.get_distance_to_water_at_world(wx, wy) != -1:
+			live_on_demand_queries_ok = false
+		var expected_biome: String = _legacy_select_biome_at(live_generator,
+				float(live_chunk_data["elevation"][index]),
+				float(live_chunk_data["moisture"][index]),
+				float(live_chunk_data["temperature"][index]),
+				live_generator.get_regional_noise_values(wx, wy))
+		if str(live_chunk_data["biomes"][index]) != expected_biome:
+			live_legacy_biome_matches = false
+	_check(live_on_demand_queries_ok,
+			"WG-05 live world: on-demand class/origin queries agree with the payload, and the distance query stays closed at the -1 sentinel while no content uses the field (zero cost for unconstrained worlds)")
+	_check(live_legacy_biome_matches,
+			"WG-05 live world: sampled tile biomes are byte-identical to the pre-WG-05 selector's output - the distance gate is a no-op while every definition stays unconstrained")
+
+	# 2e.5 The invalid fixture: min > max, and a surface resource pinned to
+	# distance 0 (which is water) must fail registry validation.
+	var inverted_registry := _fixture_registry("inverted_shore_distance")
+	_check(inverted_registry.has_validation_errors(),
+			"WG-05 invalid fixture (inverted min/max, surface resource at distance 0) fails registry validation")
+	_check(_registry_errors_mention(inverted_registry.validation_errors, "exceeds max_distance_to_water") \
+			and _registry_errors_mention(inverted_registry.validation_errors, "can never spawn"),
+			"WG-05 invalid fixture: validation names the distance-to-water rules it breaks (min > max; surface resource with max distance 0)")
+
 	# --- 3. Terrain + resources --------------------------------------------
 	_check(terrain_renderer.get_used_cells().size() > 0, "Terrain rendered for initial chunks (%d tiles)" % terrain_renderer.get_used_cells().size())
 	_check(TileSetGenerator.MATERIAL_PIXELS_PER_TILE == 4, "Stock terrain keeps its lightweight streaming resolution")
@@ -1482,3 +1953,86 @@ func _registry_errors_mention(errors: Array[String], fragment: String) -> bool:
 		if error.contains(fragment):
 			return true
 	return false
+
+## Load a fixture world config: the fixture's own .tres when present,
+## otherwise a duplicate of the live config (the invalid fixture ships
+## content only and is validated against the live config).
+func _fixture_config(fixture_name: String) -> WorldGenerationConfig:
+	var path := "res://tests/fixtures/world_validation/%s/world_generation_config.tres" % fixture_name
+	if FileAccess.file_exists(path):
+		return load(path) as WorldGenerationConfig
+	var live_config := load("res://data/world/world_generation_config.tres") as WorldGenerationConfig
+	return live_config.duplicate() as WorldGenerationConfig
+
+## Frozen copy of the pre-WG-05 biome selection: the pure region-weighted
+## score loop with no distance gate. While every definition stays
+## distance-unconstrained the live and fixture payloads must agree with
+## this - which is what keeps the live world byte-identical.
+func _legacy_select_biome_at(gen: WorldGenerator, elevation: float, moisture: float, temperature: float,
+		regional_values: Dictionary = {}) -> String:
+	var regional_biome_id := ""
+	if not regional_values.is_empty():
+		regional_biome_id = gen._select_biome_from_fields(
+			float(regional_values.get("elevation", elevation)),
+			float(regional_values.get("moisture", moisture)),
+			float(regional_values.get("temperature", temperature))
+		)
+	var regional_biome := gen.get_biome(regional_biome_id)
+	var config := gen.get_configuration()
+	var best_biome := ""
+	var best_score := -INF
+	var ids := gen.get_biomes().keys()
+	ids.sort()
+	for biome_id in ids:
+		var biome := gen.get_biome(str(biome_id))
+		if biome == null:
+			continue
+		var score := gen._biome_match_score(biome, elevation, moisture, temperature) * maxf(0.01, biome.rarity_weight)
+		if regional_biome != null:
+			if biome.id == regional_biome.id:
+				score += config.regional_biome_weight
+			elif regional_biome.transition_biome_ids.has(biome.id):
+				score += config.transition_biome_weight
+			elif regional_biome.preferred_neighbors.has(biome.id):
+				score += config.preferred_neighbor_weight
+		if score > best_score:
+			best_score = score
+			best_biome = biome.id
+	if best_biome.is_empty() and not ids.is_empty():
+		best_biome = str(ids[0])
+	return best_biome
+
+## Independent copy of the generator's multi-source Chebyshev BFS over a
+## water rect: every water tile starts at 0, the wavefront expands to the
+## 8 neighbours and is written but not expanded once it reaches the cap,
+## so the result is -1 beyond the cap, exact within it, and the cap itself
+## on the frontier.
+func _wg05_bfs_reference(side_x: int, side_y: int, cap: int, water_rect: PackedInt32Array) -> PackedInt32Array:
+	var dist := PackedInt32Array()
+	dist.resize(side_x * side_y)
+	dist.fill(-1)
+	var queue: Array[int] = []
+	for i in range(side_x * side_y):
+		if water_rect[i] == 1:
+			dist[i] = 0
+			queue.append(int(i))
+	var head: int = 0
+	while head < queue.size():
+		var qi: int = queue[head]
+		head += 1
+		var qy: int = qi / side_y
+		var qx: int = qi % side_x
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				if int(dx) == 0 and int(dy) == 0:
+					continue
+				var ny: int = qy + int(dy)
+				var nx: int = qx + int(dx)
+				if ny < 0 or ny >= side_y or nx < 0 or nx >= side_x:
+					continue
+				var j: int = ny * side_x + nx
+				if dist[j] == -1:
+					dist[j] = dist[qi] + 1
+					if dist[j] < cap:
+						queue.append(j)
+	return dist

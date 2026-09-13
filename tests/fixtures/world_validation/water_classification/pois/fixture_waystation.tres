@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="POIDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/poi_definition.gd" id="1_waystation"]
+
+[resource]
+script = ExtResource("1_waystation")
+id = "fixture_waystation"
+display_name = "Fixture Waystation"
+category = "landmark"
+spawn_weight = 1.0
+min_spacing_tiles = 16
+allowed_biomes = PackedStringArray("fixture_grassland")
+min_distance_to_water = 3

@@ -345,9 +345,18 @@ func _on_chunk_unloaded(chunk_coords: Vector2i) -> void:
 ## Spawn harvestable resources in a chunk (as siblings of the player).
 ## The chunk payload's terrain-feature mask (WG-04) is handed to the spawner:
 ## features whose influence tags include its spawn-block tag veto tiles.
+## The payload's biome map, water mask, and shore distance arrays (WG-05)
+## are handed along too, so per-tile facts are read from the payload instead
+## of re-sampling the field and distance-constrained resources are vetoed
+## before any random roll. Old payloads without these keys hand over empty
+## arrays and the spawner falls back to on-demand queries.
 func _spawn_resources_for_chunk(chunk_coords: Vector2i, chunk_data: Dictionary) -> void:
 	var feature_candidates: Array = chunk_data.get("feature_candidates", [])
-	var resources: Array = resource_spawner.generate_chunk_resources(chunk_coords, _world_seed, feature_candidates)
+	var biome_map: PackedStringArray = chunk_data.get("biomes", PackedStringArray())
+	var water_mask: PackedByteArray = chunk_data.get("water_mask", PackedByteArray())
+	var distance_to_water: PackedInt32Array = chunk_data.get("distance_to_water", PackedInt32Array())
+	var resources: Array = resource_spawner.generate_chunk_resources(chunk_coords, _world_seed, feature_candidates,
+			biome_map, water_mask, distance_to_water)
 	var spawn_count: int = 0
 	for res_data in resources:
 		var x_val: int = int(res_data.get("x", 0))

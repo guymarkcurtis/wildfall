@@ -96,7 +96,18 @@ func deserialize(data: Dictionary) -> void:
 
 ## Generate surface resources for one chunk. The record shape remains
 ## compatible with HarvestableResource/Main.
-func generate_chunk_resources(chunk_coords: Vector2i, seed: int = 0, feature_candidates: Array = []) -> Array[Dictionary]:
+##
+## WG-05: when the caller (Main, from the chunk payload) hands over the
+## chunk's biome map, water mask, and shore distance arrays, the per-tile
+## facts are read from them instead of re-querying the generator's on-demand
+## APIs. The values are identical (the payload is the same pure function of
+## world coordinates), so passing the arrays only saves noise sampling and
+## never changes placement. Empty arrays (e.g. from old save payloads) fall
+## back to per-tile on-demand queries.
+func generate_chunk_resources(chunk_coords: Vector2i, seed: int = 0, feature_candidates: Array = [],
+		biome_map: PackedStringArray = PackedStringArray(),
+		water_mask: PackedByteArray = PackedByteArray(),
+		distance_to_water: PackedInt32Array = PackedInt32Array()) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	if _generated_chunks.has(chunk_coords):
 		return results
@@ -118,7 +129,20 @@ func generate_chunk_resources(chunk_coords: Vector2i, seed: int = 0, feature_can
 		var tile := chunk_coords * _chunk_size() + Vector2i(
 			random.randi_range(0, _chunk_size() - 1), random.randi_range(0, _chunk_size() - 1)
 		)
-		if _resources.has(tile) or not is_walkable_spawn_tile(tile):
+		if _resources.has(tile):
+			continue
+		# WG-05: per-tile facts come from the chunk payload's arrays when
+		# the caller handed them over (identical values, no re-sampling);
+		# otherwise the on-demand generator queries are used. None of this
+		# consumes random rolls, so placement is unaffected either way.
+		var chunk_origin := chunk_coords * _chunk_size()
+		var local_index: int = (tile.y - chunk_origin.y) * _chunk_size() + (tile.x - chunk_origin.x)
+		var spawnable: bool
+		if water_mask.size() == _chunk_size() * _chunk_size():
+			spawnable = water_mask[local_index] == 0
+		else:
+			spawnable = is_walkable_spawn_tile(tile)
+		if not spawnable:
 			continue
 		# WG-04: the terrain-feature mask carried by the chunk payload can
 		# veto a tile (a feature whose influence tags include this spawner's
@@ -127,12 +151,33 @@ func generate_chunk_resources(chunk_coords: Vector2i, seed: int = 0, feature_can
 		# rolls, so allowed tiles roll exactly as before.
 		if is_feature_blocked_tile(tile, feature_candidates):
 			continue
-		var biome_id := world_generator.get_biome_at_world(tile.x, tile.y)
+		var biome_id := ""
+		if biome_map.size() == _chunk_size() * _chunk_size():
+			biome_id = str(biome_map[local_index])
+		else:
+			biome_id = world_generator.get_biome_at_world(tile.x, tile.y)
 		var biome := world_generator.get_biome(biome_id)
 		if biome == null:
 			continue
+		# WG-05: a resource with a distance-to-water constraint is vetoed
+		# BEFORE the abundance roll, so the veto consumes no random rolls
+		# and allowed tiles roll exactly as before. Tiles the payload field
+		# does not cover (or none handed over) fall back to the on-demand
+		# query; in a world with no distance-constrained content that query
+		# returns the -1 sentinel without running a BFS, so the gate vetoes
+		# nothing and live placement is byte-identical.
+		var anchor_distance: int = -1
+		if distance_to_water.size() == _chunk_size() * _chunk_size():
+			anchor_distance = distance_to_water[local_index]
+		else:
+			anchor_distance = world_generator.get_distance_to_water_at_world(tile.x, tile.y)
 		var definition := _pick_resource_definition(biome, random)
-		if definition == null or random.randf() > clampf(definition.abundance, 0.0, 1.0):
+		if definition == null:
+			continue
+		if not world_generator.definition_within_distance(definition.min_distance_to_water,
+				definition.max_distance_to_water, anchor_distance):
+			continue
+		if random.randf() > clampf(definition.abundance, 0.0, 1.0):
 			continue
 		if not _passes_distribution(tile, definition, random):
 			continue

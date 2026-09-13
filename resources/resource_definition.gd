@@ -14,6 +14,14 @@ extends Resource
 @export var underground_spawnable: bool = false
 @export var allowed_biomes: PackedStringArray = []
 @export var required_environment_tags: PackedStringArray = []
+## WG-05: minimum Chebyshev (8-neighbour) tile distance from the nearest
+## water tile at which this resource may spawn. -1 = unconstrained.
+@export var min_distance_to_water: int = -1
+## WG-05: maximum Chebyshev (8-neighbour) tile distance from the nearest
+## water tile at which this resource may spawn. -1 = unconstrained; tiles
+## with no water within cap - 1 read the cap value. A surface resource with
+## max 0 can never spawn (distance 0 is water).
+@export var max_distance_to_water: int = -1
 @export var progression_tier: int = 0
 @export var base_health: float = 5.0
 @export var yields: Array[Dictionary] = []

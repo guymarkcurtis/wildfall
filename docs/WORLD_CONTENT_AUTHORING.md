@@ -22,7 +22,13 @@ The registry automatically discovers `.tres` assets below `data/world/`.
    this biome's adjacency metadata (preferred receivers always beat
    transition, which beat plain adjacency); a value of 0 opts the biome out
    of the stage. See `WORLD_GENERATION.md`, "Coherent-region stage".
-7. Launch or run the harness. No procedural-generation source registration is
+7. Optionally constrain the biome's distance to water with
+   `min_distance_to_water` / `max_distance_to_water` (Chebyshev tiles;
+   per-side -1 = unconstrained, and `min <= max`). Selection vetoes
+   candidates whose tile falls outside the range before any RNG roll; a -1
+   side never vetoes. The registry rejects `min < -1`, `max < -1`, and
+   `min > max` (see Validation at startup below).
+8. Launch or run the harness. No procedural-generation source registration is
    required.
 
 Biome adjacency is data the generator interprets two ways: low-frequency
@@ -38,8 +44,12 @@ name-specific generator branches.
 1. Create a `ResourceDefinition` asset in `data/world/resources/` with a unique
    `id`.
 2. Configure `surface_spawnable`, `underground_spawnable`, allowed biomes or
-   environment tags, abundance, spawn weight, distribution mode, spacing, and
-   cluster radius.
+   environment tags, abundance, spawn weight, distribution mode, spacing,
+   cluster radius, and — optionally — `min_distance_to_water` /
+   `max_distance_to_water` (per-side -1 = unconstrained; the spawner vetoes
+   distance-failing definitions before any RNG roll). A `surface_spawnable`
+   resource pinned to `max_distance_to_water = 0` is rejected at startup —
+   every distance-0 tile is water, so it could never spawn on the surface.
 3. Put normal yields in `yields`; put environment-specific additions in
    `biome_yields` rather than adding biome checks to code.
 4. Add the resource ID to the relevant biome asset, or to a future cave asset
@@ -63,6 +73,10 @@ The asset drives:
 - `allowed_biomes` (empty = all biomes) and `required_environment_tags`
   (every listed tag must be present on the host biome); candidates are
   never placed on physical water tiles.
+- `min_distance_to_water` / `max_distance_to_water` (per-side -1 =
+  unconstrained) — anchors whose tile falls outside the range are simply not
+  candidates; the check consumes the chunk's Chebyshev shore-distance field,
+  with no water-name branching (see Validation at startup below).
 
 If no cave definition references the POI id, its candidates load as plain
 `PoiMarker` runtime nodes (a generic surface marker carrying the POI's
@@ -86,6 +100,10 @@ feature candidates from it — no source change required. The asset drives:
 - `allowed_biomes` (empty = all biomes) and `required_environment_tags`
   (every listed tag must be present on the anchor biome); candidates are
   never placed on physical water tiles.
+- `min_distance_to_water` / `max_distance_to_water` (per-side -1 =
+  unconstrained) — anchors whose tile falls outside the range are not
+  candidates, so e.g. a shore-hugging feature pins to the coastline while
+  placement stays fully data-driven.
 - `influence_tags` — the seam into consumer systems. Tag **vocabularies are
   owned by the consumers**: the `ResourceSpawner` understands `no_spawn`
   (its footprint is not a valid surface-resource spawn site); any other tag
@@ -151,6 +169,11 @@ Rules checked (all generic; no content names appear in the checks):
 - Caves must have `min_rooms <= max_rooms`, a positive `room_size`, and
   `resource_min_deposits <= resource_max_deposits`.
 - POI `min_spacing_tiles` must be non-negative.
+- Distance-to-water constraints on biomes, POIs, terrain features, and
+  resources: each side must be -1 or >= 0 (`min < -1` or `max < -1` is
+  rejected), and `min <= max`; a `surface_spawnable` resource pinned to
+  `max_distance_to_water = 0` is rejected as an impossible combination
+  (every distance-0 tile is water).
 - Biome `minimum_region_size` is not yet machine-validated (the planned
   validation card will add that); the coherent-region stage interprets 0 as
   "out of stage" and any positive value as a tile floor for the biome's
@@ -167,7 +190,10 @@ Rules checked (all generic; no content names appear in the checks):
 
 The fixture scenarios under `tests/fixtures/world_validation/` cover each rule
 family and are run by the headless harness; add a fixture there when you add a
-new validation rule.
+new validation rule. WG-05 added the distance-constraint rejections there (the
+`inverted_shore_distance` scenario exercises each of the four) and a
+`water_classification` fixture world (6x6 chunks, both water origins, cap 8)
+that exercises the fields end-to-end.
 
 ## Reproducibility
 

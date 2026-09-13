@@ -271,7 +271,42 @@ through generic tags/modifiers.
 **Done when:** a content asset can add a deterministic feature mask without
 modifying `WorldGenerator`.
 
-### WG-05 — Complete water classification and shore influences
+### WG-05 — Complete water classification and shore influences — COMPLETE (2026-09-12)
+
+Delivered: `WorldGenerator` now classifies every tile into a `water_class`
+(land / shore / coast / deep_water by 8-neighbour recount) and a
+`water_origin` (ocean when elevation is below the water level, lake above
+it, water tiles only) inside the existing per-chunk rect pass, and adds a
+Chebyshev `distance_to_water` field (0 on water, 1..cap - 1 exact, the cap
+value when no water lies within cap - 1 tiles, driven by the new
+`distance_to_water_cap_tiles` config, live 16 / fixture 8). Biome, POI,
+terrain-feature and resource definitions each gained optional
+`min_distance_to_water` / `max_distance_to_water` (per-side -1 =
+unconstrained); `WorldContentRegistry` now rejects min < -1, max < -1,
+min > max, and a surface_spawnable resource pinned to max distance 0.
+Biome selection vetoes distance-failing candidates before the score loop —
+water tiles keep their raw region-weighted biome, because a -1 input never
+vetoes unconstrained content — the resource spawner vetoes
+distance-failing definitions before any RNG roll, and the public on-demand
+queries (`get_water_class_at_world`, `get_water_origin_at_world`,
+`get_distance_to_water_at_world`) mirror the payload exactly; the on-demand
+distance BFS only runs once at least one content definition uses the field
+(live world: it stays closed and reads -1). Harness section 2e (28 checks)
+covers a 6x6-chunk `water_classification` fixture world (independent
+world-wide BFS + 8-neighbour recount over all 9,216 fixture tiles against
+the halo-expanded 112x112 (12,544-tile) reference, all four
+classes, both origins, deterministic / order-independent / lone-corner-chunk
+regeneration, POI + feature + spawner consumption at probe-verified anchor
+positions, open-gate on-demand agreement) and a live audit (payload keys,
+biomes byte-identical to the pre-WG-05 selector, class/origin agreement,
+on-demand class/origin agreement with distance dormant at -1) plus the
+`inverted_shore_distance` invalid fixture. Limitations: cap-saturated tiles
+read the cap rather than an exact distance; class recounts skip
+out-of-bounds neighbours; water outside the finite world is still sampled
+(unscaled rects); the live lake origin is structurally unreachable (lake
+level 0.24 < water level 0.30); the renderer still presents water by mask
+only; and no live content constrains the field (live payloads change only
+by the three new keys).
 
 **Goal:** improve physical water without treating it as a biome.
 

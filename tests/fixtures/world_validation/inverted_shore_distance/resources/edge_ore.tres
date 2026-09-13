@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ResourceDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/resource_definition.gd" id="1_edge"]
+
+[resource]
+script = ExtResource("1_edge")
+id = "edge_ore"
+display_name = "Edge Ore"
+spawn_weight = 1.0
+surface_spawnable = true
+underground_spawnable = false
+max_distance_to_water = 0
+base_health = 5.0
+yields = [{"item_id":"stone","min_qty":1,"max_qty":2,"chance":1.0}]
