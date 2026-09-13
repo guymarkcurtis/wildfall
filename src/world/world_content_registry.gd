@@ -188,6 +188,20 @@ func _validate_cave(cave: CaveDefinition, path: String) -> Array[String]:
 		errors.append("%s: min_rooms (%d) is greater than max_rooms (%d)" % [path, cave.min_rooms, cave.max_rooms])
 	if cave.room_size.x <= 0 or cave.room_size.y <= 0:
 		errors.append("%s: room_size %s must be positive" % [path, str(cave.room_size)])
+	if cave.room_size_min != Vector2i.ZERO and (cave.room_size_min.x <= 0 or cave.room_size_min.y <= 0):
+		errors.append("%s: room_size_min %s must be positive or Vector2i.ZERO (legacy fixed size)" % [path, str(cave.room_size_min)])
+	if cave.room_size_max != Vector2i.ZERO and (cave.room_size_max.x <= 0 or cave.room_size_max.y <= 0):
+		errors.append("%s: room_size_max %s must be positive or Vector2i.ZERO (legacy fixed size)" % [path, str(cave.room_size_max)])
+	if cave.room_size_min != Vector2i.ZERO and cave.room_size_max != Vector2i.ZERO \
+			and (cave.room_size_min.x > cave.room_size_max.x or cave.room_size_min.y > cave.room_size_max.y):
+		errors.append("%s: room_size_min %s exceeds room_size_max %s" % [path, str(cave.room_size_min), str(cave.room_size_max)])
+	if cave.tunnel_length_range != Vector2i.ZERO \
+			and (cave.tunnel_length_range.x <= 0 or cave.tunnel_length_range.y < cave.tunnel_length_range.x):
+		errors.append("%s: tunnel_length_range %s must be an inclusive positive [min, max] pair or Vector2i.ZERO" % [path, str(cave.tunnel_length_range)])
+	if cave.branching_chance < 0.0 or cave.branching_chance > 1.0:
+		errors.append("%s: branching_chance %.2f is outside the 0..1 range" % [path, cave.branching_chance])
+	if cave.underground_water_chance < 0.0 or cave.underground_water_chance > 1.0:
+		errors.append("%s: underground_water_chance %.2f is outside the 0..1 range" % [path, cave.underground_water_chance])
 	if cave.resource_min_deposits > cave.resource_max_deposits:
 		errors.append("%s: resource_min_deposits (%d) is greater than resource_max_deposits (%d)" % \
 				[path, cave.resource_min_deposits, cave.resource_max_deposits])

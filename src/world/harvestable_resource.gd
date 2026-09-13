@@ -4,6 +4,14 @@ extends Area2D
 
 const DEFAULT_HITBOX_RADIUS: float = 16.0
 const FORAGE_PLANT_SHEET_PATH := "res://assets/resources/wildfall-forage-plants.png"
+const TREE_TEXTURE_PATH := "res://assets/resources/tree-large.png"
+const TREE_SHAKE_FRAME_PATHS: PackedStringArray = [
+	"res://assets/resources/tree-shake/frame_01.png",
+	"res://assets/resources/tree-shake/frame_02.png",
+	"res://assets/resources/tree-shake/frame_03.png",
+	"res://assets/resources/tree-shake/frame_04.png"
+]
+const TREE_SHAKE_FRAME_TIME := 0.055
 
 # Resource data
 var resource_type: String = ""
@@ -11,6 +19,13 @@ var display_name: String = ""
 var max_health: float = 10.0
 var current_health: float = 10.0
 var yield_items: Array[Dictionary] = []
+## Content-defined interaction/presentation metadata. New resource species
+## carry these values from ResourceDefinition via ResourceSpawner rather than
+## relying on their ID in this runtime node.
+var harvest_group: String = ""
+var visual_texture_path: String = ""
+var visual_ground_anchor: bool = false
+var visual_hit_animation_paths: PackedStringArray = []
 
 # State
 var is_destroyed: bool = false
@@ -18,8 +33,11 @@ var is_highlighted: bool = false
 
 # Visual
 var _sprite: Sprite2D = null
+var _visual_pivot: Node2D = null
 var _health_display: ProgressBar = null
 static var _texture_cache: Dictionary = {}
+static var _hit_frame_cache: Dictionary = {}
+var _tree_shake_elapsed := -1.0
 
 # Signals
 signal health_changed(current: float, max: float)
@@ -30,32 +48,46 @@ signal resource_depleted
 signal resource_hurt(amount: float)
 
 ## Initialize the resource.
-func setup(resource_type: String, health: float, yields: Array[Dictionary]) -> void:
+func setup(resource_type: String, health: float, yields: Array[Dictionary], resource_display_name: String = "",
+		harvest_group_value: String = "", texture_path: String = "", ground_anchor: bool = false,
+		hit_animation_paths: PackedStringArray = PackedStringArray()) -> void:
 	self.resource_type = resource_type
 	self.max_health = health
 	self.current_health = health
 	self.yield_items = yields.duplicate()
-	display_name = _get_display_name(resource_type)
+	display_name = resource_display_name if not resource_display_name.is_empty() else _get_display_name(resource_type)
+	harvest_group = harvest_group_value if not harvest_group_value.is_empty() else _get_legacy_harvest_group(resource_type)
+	visual_texture_path = texture_path if not texture_path.is_empty() else _get_legacy_texture_path(resource_type)
+	visual_ground_anchor = ground_anchor or _uses_legacy_ground_anchor(resource_type)
+	visual_hit_animation_paths = hit_animation_paths if not hit_animation_paths.is_empty() else _get_legacy_hit_animation_paths(resource_type)
 	_setup_visuals()
 	_setup_collision()
+	# Hundreds of streamed resources can be alive at once. Only a tree that is
+	# actively shaking needs a per-frame callback.
+	set_process(false)
 
 ## Set up visual representation.
 func _setup_visuals() -> void:
-	# Create sprite based on resource type
+	# A shared pivot keeps every resource anchored to the ground and lets the
+	# large tree recoil without sliding its roots across the tile.
+	_visual_pivot = Node2D.new()
+	_visual_pivot.position = Vector2(16, 16)
+	add_child(_visual_pivot)
 	_sprite = Sprite2D.new()
 	
-	var texture: ImageTexture = _get_resource_texture()
+	var texture: Texture2D = _get_resource_texture()
 	if texture:
 		_sprite.texture = texture
-		_sprite.position = Vector2(16, 16)
+		_sprite.position = Vector2(0, -float(texture.get_height()) * 0.5) if visual_ground_anchor else Vector2.ZERO
 	else:
 		# Fallback: create a simple colored circle texture
 		_sprite = _create_fallback_sprite()
-	
-	add_child(_sprite)
+		_sprite.position = Vector2.ZERO
+	_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_visual_pivot.add_child(_sprite)
 	_health_display = ProgressBar.new()
-	_health_display.position = Vector2(0, -8)
-	_health_display.size = Vector2(32, 5)
+	_health_display.position = Vector2(-24, -18) if visual_ground_anchor else Vector2(0, -8)
+	_health_display.size = Vector2(80, 5) if visual_ground_anchor else Vector2(32, 5)
 	_health_display.show_percentage = false
 	_health_display.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_health_display.visible = false
@@ -66,13 +98,21 @@ func _setup_visuals() -> void:
 	var shape := CircleShape2D.new()
 	shape.radius = DEFAULT_HITBOX_RADIUS
 	collision.shape = shape
+	collision.position = Vector2(16, 16)
 	add_child(collision)
 	
 	collision_layer = 1
 	collision_mask = 0
 
 ## Get texture for resource type.
-func _get_resource_texture() -> ImageTexture:
+func _get_resource_texture() -> Texture2D:
+	if not visual_texture_path.is_empty():
+		if _texture_cache.has(visual_texture_path):
+			return _texture_cache[visual_texture_path]
+		var bespoke_texture := TexturePackManager.get_texture(visual_texture_path)
+		if bespoke_texture != null:
+			_texture_cache[visual_texture_path] = bespoke_texture
+		return bespoke_texture
 	if _texture_cache.has(resource_type):
 		if resource_type != "plant":
 			return _texture_cache[resource_type]
@@ -82,8 +122,6 @@ func _get_resource_texture() -> ImageTexture:
 	var texture: ImageTexture = null
 	
 	match resource_type:
-		"tree":
-			texture = generator.call("_create_tree_texture")
 		"rock":
 			texture = generator.call("_create_rock_texture")
 		"fibre":
@@ -103,8 +141,11 @@ func _get_resource_texture() -> ImageTexture:
 
 func reload_visual_texture() -> void:
 	_texture_cache.clear()
+	_hit_frame_cache.clear()
 	if _sprite != null:
 		_sprite.texture = _get_resource_texture()
+		if visual_ground_anchor and _sprite.texture != null:
+			_sprite.position = Vector2(0, -float(_sprite.texture.get_height()) * 0.5)
 
 ## Plant is the one spawned resource that did not belong to the original
 ## eight-cell resource atlas. Use the new 2x2 forage sheet and pick a stable
@@ -202,6 +243,8 @@ func damage(amount: float, tool: String = "") -> bool:
 	if _sprite != null and is_inside_tree():
 		_sprite.modulate = Color(1.8, 1.5, 1.0)
 		create_tween().tween_property(_sprite, "modulate", Color.WHITE, 0.18)
+	if visual_ground_anchor:
+		_start_tree_shake()
 	resource_hurt.emit(amount)
 	health_changed.emit(current_health, max_health)
 
@@ -229,8 +272,52 @@ func destroy() -> bool:
 			var qty: int = randi() % (max_qty - min_qty + 1) + min_qty
 			resource_destroyed.emit(item_id, qty)
 
-	queue_free()
+	# Keep the final tree impact visible for the short shake before removing it.
+	if visual_ground_anchor and is_inside_tree():
+		get_tree().create_timer(TREE_SHAKE_FRAME_TIME * 6.0).timeout.connect(queue_free)
+	else:
+		queue_free()
 	return true
+
+func _process(delta: float) -> void:
+	if _tree_shake_elapsed < 0.0 or _sprite == null:
+		return
+	_tree_shake_elapsed += delta
+	var frame_index := int(_tree_shake_elapsed / TREE_SHAKE_FRAME_TIME)
+	var frames := _get_hit_frames()
+	if not frames.is_empty() and frame_index < frames.size():
+		_sprite.texture = frames[frame_index]
+		_sprite.position = Vector2(0, -float(_sprite.texture.get_height()) * 0.5) if visual_ground_anchor else Vector2.ZERO
+		_visual_pivot.rotation = sin(_tree_shake_elapsed * 55.0) * 0.018
+	elif frames.is_empty() and _tree_shake_elapsed < TREE_SHAKE_FRAME_TIME * 4.0:
+		_visual_pivot.rotation = sin(_tree_shake_elapsed * 55.0) * 0.018
+	else:
+		_sprite.texture = _get_resource_texture()
+		_sprite.position = Vector2(0, -float(_sprite.texture.get_height()) * 0.5) if visual_ground_anchor else Vector2.ZERO
+		_visual_pivot.rotation = 0.0
+		_tree_shake_elapsed = -1.0
+		set_process(false)
+
+func _start_tree_shake() -> void:
+	_tree_shake_elapsed = 0.0
+	set_process(true)
+	if _visual_pivot != null:
+		_visual_pivot.rotation = -0.025
+
+func _get_hit_frames() -> Array[Texture2D]:
+	var cache_key := "|".join(visual_hit_animation_paths)
+	if _hit_frame_cache.has(cache_key):
+		return _hit_frame_cache[cache_key]
+	var frames: Array[Texture2D] = []
+	for path in visual_hit_animation_paths:
+		var frame := TexturePackManager.get_texture(path)
+		if frame != null:
+			frames.append(frame)
+	_hit_frame_cache[cache_key] = frames
+	return frames
+
+func is_tree_shaking() -> bool:
+	return _tree_shake_elapsed >= 0.0
 
 ## Get remaining health ratio.
 func get_health_ratio() -> float:
@@ -260,3 +347,22 @@ func _get_display_name(resource_type: String) -> String:
 		"gold_ore": return "Gold Ore Deposit"
 		"plant": return "Plant"
 		_: return resource_type.capitalize()
+
+## Compatibility defaults retain the presentation and tool behaviour of
+## manually-created legacy resource nodes. Data-discovered resources should
+## provide these values from ResourceDefinition instead.
+func _get_legacy_harvest_group(type: String) -> String:
+	match type:
+		"tree": return "tree"
+		"rock", "iron_ore", "coal", "gold_ore": return "mineral"
+		"plant", "fibre", "berry_bush": return "forage"
+		_: return ""
+
+func _get_legacy_texture_path(type: String) -> String:
+	return TREE_TEXTURE_PATH if type == "tree" else ""
+
+func _uses_legacy_ground_anchor(type: String) -> bool:
+	return type == "tree"
+
+func _get_legacy_hit_animation_paths(type: String) -> PackedStringArray:
+	return TREE_SHAKE_FRAME_PATHS if type == "tree" else PackedStringArray()

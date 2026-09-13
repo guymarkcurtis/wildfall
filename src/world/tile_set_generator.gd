@@ -159,7 +159,7 @@ func get_ground_detail_texture(index: int) -> ImageTexture:
 ## space so the faint painted texture crosses chunk and tile borders without
 ## repeating. Props, plants and rocks are rendered later as independent nodes.
 func create_contiguous_chunk_image(world_start: Vector2i, tile_ids: PackedInt32Array,
-		chunk_size: int, water_frame: int) -> Image:
+		chunk_size: int, water_frame: int, border_tile_ids: Dictionary = {}) -> Image:
 	if TexturePackManager.get_active_pack_id() != "stock":
 		return _create_full_resolution_pack_chunk(world_start, tile_ids, chunk_size)
 	var image := Image.create_empty(chunk_size * MATERIAL_PIXELS_PER_TILE,
@@ -180,7 +180,7 @@ func create_contiguous_chunk_image(world_start: Vector2i, tile_ids: PackedInt32A
 			var edge_distance: int = min(min(x % MATERIAL_PIXELS_PER_TILE, MATERIAL_PIXELS_PER_TILE - 1 - (x % MATERIAL_PIXELS_PER_TILE)),
 					min(y % MATERIAL_PIXELS_PER_TILE, MATERIAL_PIXELS_PER_TILE - 1 - (y % MATERIAL_PIXELS_PER_TILE)))
 			if edge_distance < 1:
-				var neighbour_id := _nearest_different_neighbour(tile_ids, chunk_size, tile_x, tile_y, x, y, tile_id)
+				var neighbour_id := _nearest_different_neighbour(tile_ids, chunk_size, border_tile_ids, tile_x, tile_y, x, y, tile_id)
 				if neighbour_id >= 0:
 					var neighbour_colour := _material_colour(neighbour_id, world_x, world_y, water_frame)
 					colour = neighbour_colour.lerp(colour, float(edge_distance + 1) / 2.0)
@@ -327,7 +327,7 @@ func _blend_pack_edge(image: Image, edge: Vector2i, lower_direction: Vector2i, u
 		image.set_pixelv(lower, lower_colour.lerp(upper_colour, strength * 0.5))
 		image.set_pixelv(upper, upper_colour.lerp(lower_colour, strength * 0.5))
 
-func _nearest_different_neighbour(tile_ids: PackedInt32Array, chunk_size: int,
+func _nearest_different_neighbour(tile_ids: PackedInt32Array, chunk_size: int, border_tile_ids: Dictionary,
 		tile_x: int, tile_y: int, pixel_x: int, pixel_y: int, tile_id: int) -> int:
 	var candidates: Array[Vector2i] = []
 	if pixel_x % MATERIAL_PIXELS_PER_TILE < 1: candidates.append(Vector2i(-1, 0))
@@ -337,11 +337,13 @@ func _nearest_different_neighbour(tile_ids: PackedInt32Array, chunk_size: int,
 	for direction in candidates:
 		var nx := tile_x + direction.x
 		var ny := tile_y + direction.y
+		var neighbour := -1
 		if nx < 0 or nx >= chunk_size or ny < 0 or ny >= chunk_size:
-			continue
-		var neighbour: int = tile_ids[ny * chunk_size + nx]
+			neighbour = int(border_tile_ids.get(Vector2i(nx, ny), -1))
+		else:
+			neighbour = tile_ids[ny * chunk_size + nx]
 		if neighbour != tile_id:
-			return neighbour
+			return neighbour if neighbour >= 0 else -1
 	return -1
 
 func _material_colour(tile_id: int, world_x: int, world_y: int, water_frame: int) -> Color:

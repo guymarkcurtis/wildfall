@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ResourceDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/resource_definition.gd" id="1_resource"]
+
+[resource]
+script = ExtResource("1_resource")
+id = "meadow_tree"
+display_name = "Meadow Tree"
+spawn_weight = 0.55
+abundance = 0.4
+distribution_mode = "sparse"
+min_spacing_tiles = 3
+cluster_radius = 3
+allowed_biomes = PackedStringArray("grassland")
+base_health = 5.0
+yields = [{"item_id":"wood","min_qty":1,"max_qty":4,"chance":1.0},{"item_id":"fibre","min_qty":1,"max_qty":2,"chance":0.25}]
+harvest_group = "tree"
+visual_texture_path = "res://assets/resources/trees/meadow-tree.png"
+visual_ground_anchor = true

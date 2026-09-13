@@ -11,6 +11,10 @@ extends Resource
 @export var world_dimensions_chunks: Vector2i = Vector2i(128, 128)
 @export var world_origin_chunk: Vector2i = Vector2i(-64, -64)
 @export var streaming_radius: int = 3
+## Upper bound for synchronous world-data generation performed in one frame.
+## Chunk generation is queued by distance from the player, so crossing a
+## streaming boundary never has to build the entire incoming strip at once.
+@export_range(0.5, 16.0, 0.5) var chunk_generation_frame_budget_msec: float = 4.0
 
 @export var water_level: float = 0.30
 @export var shoreline_level: float = 0.35
@@ -61,6 +65,12 @@ extends Resource
 @export var resource_min_per_chunk: int = 5
 @export var resource_max_per_chunk: int = 15
 @export var resource_attempt_multiplier: int = 8
+## WG-07: baseline probability that a land tile accepted by its data-defined
+## resource choice becomes a surface candidate. Individual definitions scale
+## this with their density_multiplier and abundance. The old min/max/attempt
+## fields remain readable for save/config compatibility but are no longer a
+## runtime placement loop.
+@export_range(0.0, 1.0, 0.001) var surface_resource_density: float = 0.12
 
 ## Noise settings are dictionaries so designers can tune fields without
 ## editing procedural-generation code. Missing keys use NoiseLayers defaults.

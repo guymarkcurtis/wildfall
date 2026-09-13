@@ -59,13 +59,13 @@ CharacterBody2D with:
 - Inventory management (9-slot quick bar; durability lives in the
   inventory component — see docs/TOOL_SYSTEM.md)
 - Position tracking
-- E interacts (creatures take harvest priority), C / U / B / M toggle
-  the inventory / research / build palette / mission journal, which the
-  player relays on the bus
+- E interacts (creatures take harvest priority), C / U / B / J toggle
+  the inventory / research / build palette / mission journal; M opens the
+  world map and minimap waypoint view
 
 ### WorldGenerator
 Handles procedural generation:
-- Three FastNoiseLite layers (elevation, moisture, temperature),
+- Four FastNoiseLite layers (elevation, moisture, temperature, water),
   configured with `fractal_gain` (the Godot 4.x name)
 - NoiseLayers is a **child node** of WorldGenerator (added in
   initialize; freed together with it — a bare `.new()` would leak)
@@ -92,7 +92,7 @@ Orthogonal top-down `Camera2D` (not isometric, not 3D):
 
 ### Presentation / camera
 
-The world is a **2D cartesian grid**: 16×16 square-tile chunks, 32px cells, axis-aligned collision. Graphics are top-down placeholders today.
+The world is a **2D cartesian grid**: 16×16 square-tile chunks, 32px cells, axis-aligned collision. Graphics are top-down pixel art; world objects may extend well above a cell while retaining a compact ground footprint.
 
 **Extending into 2.5D later** is cheap if “2.5D” means visual depth on this grid (Y-sort, sprite height, drop shadows, wall occlusion). That does not change world gen, chunk coords, physics, WASD, mouse aim, or view rotation.
 
@@ -101,6 +101,12 @@ These would be large rewrites and are **out of scope**:
 - 3D world (`CharacterBody3D` / `Camera3D`) with billboard sprites
 
 Keep the orthogonal 2D simulation. Add art and sort order for a 2.5D look.
+
+Harvestables emit lightweight `WorldPickup` nodes rather than transferring
+loot immediately. Each pickup owns only presentation and attraction; `Main`
+remains the authority that applies inventory capacity and emits the accepted
+`item_added` quantity. Drop art resolves generically from the item ID at
+`assets/items/pickups/<item_id>.png`, keeping content out of pickup logic.
 
 ### TerrainRenderer
 TileMapLayer-based rendering:
@@ -112,15 +118,24 @@ TileMapLayer-based rendering:
 ### DebugOverlay
 Shows development information:
 - FPS counter
-- World/tile/chunk coordinates
-- World seed
-- Current biome
-- Noise values (elevation, moisture, temperature)
+- World/tile/chunk coordinates and exact chunk bounds
+- World seed plus configuration/version
+- Current biome and region cell
+- Environmental fields plus physical-water and river classification
+
+### WorldMap
+- Always-visible minimap with the player and selected waypoint
+- M opens the full finite-world map; J opens the mission journal
+- Deterministic POI/cave candidates are shown even before their chunks stream
+- The first finite-world marker scan is evaluated in 2 ms frame slices; the
+  minimap redraws only when its tile-level state changes
+- A legend filters POI categories; clicking a marker sets the minimap waypoint
 
 ### ResourceSpawner
 Deterministic resource placement:
 - Trees, rocks, fibre, berries, ores
 - Placed per chunk based on seed
+- Coordinate-candidate results are memoized across overlapping spacing windows
 - Persistent world modifications
 
 ### CreatureSpawner (Phase 3 — wired)
@@ -165,7 +180,7 @@ poison/heal/slow on the player.
 - Progress counts only while a mission is IN_PROGRESS (accepting arms
   it); completion grants item rewards + free tech unlocks, then emits
   `mission_completed` + `missions_changed`.
-- MissionPanel (under HUD): M-key journal (active / completed /
+- MissionPanel (under HUD): J-key journal (active / completed /
   available sections, progress bars, accept buttons), toggled via
   `toggle_missions_ui`, refreshed on every state change.
 - Mission (src/world/mission.gd): plain RefCounted data object — no
@@ -299,7 +314,9 @@ Flows:
   Main._on_craft_requested (validates tech unlock + station, swaps
   ingredients for the result) → recipe_crafted / recipe_failed →
   inventory + panel refresh
-- Missions: M → toggle_missions_ui → MissionPanel toggle; accept →
+- Map: M → WorldMap full-screen map; its legend filters deterministic POI
+  categories and marker selection sets the minimap waypoint
+- Missions: J → toggle_missions_ui → MissionPanel toggle; accept →
   mission_accepted → live pickups/kills/builds advance IN_PROGRESS
   missions → missions_changed → panel refresh; completion →
   mission_completed → reward items + free tech unlock
@@ -314,11 +331,17 @@ Flows:
    (noise + biomes), ResourceSpawner.initialize, ChunkSystem.initialize
    (radius-3 box, 49 chunks)
 3. Per chunk: chunk seed = world_seed*73856093 + x*19349663 +
-   y*83492791 → 256×3 noise values → chunk biome from averages
+   y*83492791 → 256 environmental field samples → water/biome/feature/POI
+   candidate data
 4. Player moved to world origin
 5. Main._ready: spawns the player, renders all visible chunks
    (TerrainRenderer + ResourceSpawner nodes), sets the camera
 6. Movement drives viewport streaming; DebugOverlay shows live state
+
+World-generation systems are generic; content is discovered from
+`data/world/` Resources. The asset-only workflow, validation rules, and
+fixed-seed verification procedure live in
+[World Content Authoring](WORLD_CONTENT_AUTHORING.md).
 
 ## Performance Considerations
 

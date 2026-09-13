@@ -13,3 +13,4 @@ cluster_radius = 2
 base_health = 2.0
 yields = [{"item_id":"herb","min_qty":1,"max_qty":2,"chance":0.8},{"item_id":"mushroom","min_qty":1,"max_qty":2,"chance":0.4}]
 biome_yields = {"grassland":[{"item_id":"wheat","min_qty":2,"max_qty":4,"chance":1.0}],"swamp":[{"item_id":"mushroom","min_qty":1,"max_qty":2,"chance":1.0}]}
+harvest_group = "forage"

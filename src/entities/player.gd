@@ -100,12 +100,15 @@ func _physics_process(delta: float) -> void:
 	_fire_cooldown = maxf(0.0, _fire_cooldown - delta)
 	_jump_cooldown = maxf(0.0, _jump_cooldown - delta)
 	_update_aim()
-	if Input.is_action_just_pressed("jump") and not _ui_blocks_world_input():
+	var ui_blocks_world := _ui_blocks_world_input()
+	if Input.is_action_just_pressed("jump") and not ui_blocks_world:
 		try_jump()
 
 	if _jump_remaining > 0.0:
 		_jump_remaining = maxf(0.0, _jump_remaining - delta)
 		velocity = _jump_direction * JUMP_SPEED
+	elif ui_blocks_world:
+		velocity = Vector2.ZERO
 	else:
 		var direction: Vector2 = get_move_vector()
 		var speed: float = MOVE_SPEED
@@ -114,13 +117,17 @@ func _physics_process(delta: float) -> void:
 		speed *= _speed_multiplier()
 		if direction != Vector2.ZERO:
 			direction = direction.normalized()
-		velocity = direction * speed
+			velocity = direction * speed
+		else:
+			# CharacterBody2D retains velocity until it is changed. Explicitly
+			# stop on key release so movement never coasts on stale input.
+			velocity = Vector2.ZERO
 	move_and_slide()
 	if character_visual != null:
 		character_visual.update_animation(velocity, delta, _aim_dir)
 	position_changed.emit(global_position)
 
-	if not _ui_blocks_world_input():
+	if not ui_blocks_world:
 		if Input.is_action_pressed("fire") and _fire_cooldown <= 0.0:
 			if _is_holding_bow():
 				_fire_ranged()
@@ -221,15 +228,19 @@ func _handle_interaction() -> void:
 	if closest.is_destroyed:
 		return
 
-	# Tools grant a bonus against the matching resource type.
+	# Tools grant a bonus against the content-defined harvest group. Resource IDs
+	# stay free for species/content naming: pine, willow, and future timber
+	# trees can all ask for an axe without adding player-side ID branches.
 	var damage_amount: float = 5.0
 	var resource_type: String = closest.resource_type
+	var harvest_group: String = closest.harvest_group
 	var tool: ItemDefinition = item_database.get_item(equipped_tool) if item_database != null else null
 	if tool != null and inventory.has_item(equipped_tool):
-		var matches: bool = (tool.tool_type == "axe" and resource_type == "tree") or (tool.tool_type == "pickaxe" and resource_type in ["rock", "iron_ore", "coal", "gold_ore"])
+		var matches: bool = (tool.tool_type == "axe" and harvest_group == "tree") \
+				or (tool.tool_type == "pickaxe" and harvest_group == "mineral")
 		if matches:
 			damage_amount = maxf(10.0, float(tool.damage_bonus) * 5.0)
-	if resource_type in ["plant", "fibre", "berry_bush"]:
+	if harvest_group == "forage":
 		damage_amount = maxf(damage_amount, 25.0)
 
 	# Yields are granted by Main through the resource's resource_destroyed
@@ -538,6 +549,9 @@ func _ui_blocks_world_input() -> bool:
 		return true
 	var mission_panel: Node = parent.get_node_or_null("HUD/MissionPanel")
 	if mission_panel != null and mission_panel.visible:
+		return true
+	var world_map: Node = parent.get_node_or_null("HUD/WorldMap")
+	if world_map != null and world_map.has_method("is_open") and world_map.is_open():
 		return true
 	var hovered := get_viewport().gui_get_hovered_control()
 	if hovered != null and hovered.mouse_filter != Control.MOUSE_FILTER_IGNORE:

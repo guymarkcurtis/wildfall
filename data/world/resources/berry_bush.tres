@@ -12,3 +12,4 @@ distribution_mode = "clustered"
 cluster_radius = 2
 base_health = 2.0
 yields = [{"item_id":"berry","min_qty":2,"max_qty":5,"chance":1.0}]
+harvest_group = "forage"

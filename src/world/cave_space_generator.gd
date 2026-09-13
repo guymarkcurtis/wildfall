@@ -21,13 +21,19 @@ func generate_cave(world_seed: int, cave_id: String, entrance_tile: Vector2i,
 	for index in range(room_count):
 		# The first room is the entrance chamber, anchored at the cave-space
 		# origin where the runtime places the player. Later rooms branch from it.
+		var tunnel_length := _tunnel_length_for(random, definition)
 		var center := Vector2i.ZERO if index == 0 else Vector2i(
-			random.randi_range(-definition.tunnel_length * 2, definition.tunnel_length * 2),
-			random.randi_range(-definition.tunnel_length * 2, definition.tunnel_length * 2)
+			random.randi_range(-tunnel_length * 2, tunnel_length * 2),
+			random.randi_range(-tunnel_length * 2, tunnel_length * 2)
 		)
-		rooms.append({"index": index, "center": center, "size": definition.room_size})
+		rooms.append({"index": index, "center": center, "size": _room_size_for(random, definition)})
 		if index > 0:
-			tunnels.append({"from": rooms[index - 1]["center"], "to": center, "width": 2})
+			var parent_index := index - 1
+			# The default zero chance deliberately consumes no extra random
+			# values, preserving the legacy layout of existing cave assets.
+			if definition.branching_chance > 0.0 and random.randf() < definition.branching_chance:
+				parent_index = random.randi_range(0, index - 1)
+			tunnels.append({"from": rooms[parent_index]["center"], "to": center, "width": 2})
 	var resource_candidates := _generate_resource_candidates(seed, rooms, definition, resource_definitions)
 	return {
 		"cave_id": cave_id,
@@ -39,8 +45,28 @@ func generate_cave(world_seed: int, cave_id: String, entrance_tile: Vector2i,
 		"tunnels": tunnels,
 		"resource_ids": definition.resource_ids,
 		"resource_candidates": resource_candidates,
+		"poi_ids": definition.poi_ids,
+		"hazard_ids": definition.hazard_ids,
+		"enemy_ids": definition.enemy_ids,
+		"underground_water_chance": definition.underground_water_chance,
+		"underground_water_tags": definition.underground_water_tags,
+		"feature_tags": definition.feature_tags,
+		"deposit_tables": definition.deposit_tables,
+		"loot_tables": definition.loot_tables,
 		"reset_policy": definition.reset_policy
 	}
+
+func _room_size_for(random: RandomNumberGenerator, definition: CaveDefinition) -> Vector2i:
+	if definition.room_size_min == Vector2i.ZERO and definition.room_size_max == Vector2i.ZERO:
+		return definition.room_size
+	var minimum := definition.room_size_min if definition.room_size_min != Vector2i.ZERO else definition.room_size
+	var maximum := definition.room_size_max if definition.room_size_max != Vector2i.ZERO else minimum
+	return Vector2i(random.randi_range(minimum.x, maximum.x), random.randi_range(minimum.y, maximum.y))
+
+func _tunnel_length_for(random: RandomNumberGenerator, definition: CaveDefinition) -> int:
+	if definition.tunnel_length_range == Vector2i.ZERO:
+		return definition.tunnel_length
+	return random.randi_range(definition.tunnel_length_range.x, definition.tunnel_length_range.y)
 
 ## Create deterministic base deposits only. This is deliberately separate from
 ## runtime instantiation, depletion, and reset policy.
@@ -79,7 +105,11 @@ func _generate_resource_candidates(seed: int, rooms: Array[Dictionary], definiti
 		if not _respects_spacing(position, resource_definition.min_spacing_tiles, candidates):
 			continue
 		candidates.append({
-			"candidate_id": "%s@%d,%d" % [resource_definition.id, position.x, position.y],
+			# Position alone is not an identity: definitions with zero spacing
+			# may legitimately choose the same tile more than once. The stable
+			# generation-order suffix makes every mutation-ledger key unique
+			# while retaining deterministic regeneration.
+			"candidate_id": "%s@%d,%d#%d" % [resource_definition.id, position.x, position.y, candidates.size()],
 			"resource_id": resource_definition.id,
 			"position": position,
 			"health": resource_definition.base_health,

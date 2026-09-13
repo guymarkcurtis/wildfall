@@ -4,32 +4,59 @@ World generation follows **code defines systems, data defines content**.
 Normal content additions should not require editing the generator or spawner.
 The registry automatically discovers `.tres` assets below `data/world/`.
 
-## Add a biome
+## Before you start
 
-1. Duplicate a biome asset in `data/world/biomes/` and give it a unique `id`.
-2. Set its elevation, moisture, and temperature ranges, rarity, environment
-   tags, and `preferred_neighbors`/`transition_biome_ids` adjacency metadata.
-3. Choose a renderer terrain ID (`grass`, `forest`, `sand`, `stone`, `snow`,
-   `mud`, or another ID supported by `TerrainRenderer`). Use the optional high
-   elevation terrain ID for cliffs/rocky uplands.
-4. List vegetation/resource IDs in `resource_types`. These are looked up in the
-   resource registry; duplicate IDs may be used as authoring weight hints.
-5. Set `cave_entrance_suitability` and environment tags when the biome should
-   host eligible cave entrances.
-6. Optionally set `minimum_region_size` (tiles, default 0). A positive value
-   enforces the biome's region scale in the coherent-region stage: raw
-   fragments smaller than the value are merged into neighbouring cells using
-   this biome's adjacency metadata (preferred receivers always beat
-   transition, which beat plain adjacency); a value of 0 opts the biome out
-   of the stage. See `WORLD_GENERATION.md`, "Coherent-region stage".
-7. Optionally constrain the biome's distance to water with
-   `min_distance_to_water` / `max_distance_to_water` (Chebyshev tiles;
-   per-side -1 = unconstrained, and `min <= max`). Selection vetoes
-   candidates whose tile falls outside the range before any RNG roll; a -1
-   side never vetoes. The registry rejects `min < -1`, `max < -1`, and
-   `min > max` (see Validation at startup below).
-8. Launch or run the harness. No procedural-generation source registration is
-   required.
+Make normal content changes by duplicating a nearby `.tres` asset in the
+matching `data/world/` subdirectory, then editing it in Godot's Inspector. Do
+not add the asset to a source registry or write an `if id == ...` branch. IDs
+are stable, lowercase identifiers: changing one after players have saved a
+world is a content migration, not a cosmetic rename.
+
+Use the nearest shipped asset as a working example:
+
+| You are adding | Start from | Put the new asset in |
+|---|---|---|
+| Biome | `grassland.tres` or `mountain.tres` | `data/world/biomes/` |
+| Surface resource | `berry_bush.tres`, `tree.tres`, or `rock.tres` | `data/world/resources/` |
+| Underground resource | `iron_ore.tres` | `data/world/resources/` |
+| POI | `survey_marker.tres` | `data/world/pois/` |
+| Cave type | `mountain_cave.tres` | `data/world/caves/` |
+
+## Add a biome, start to finish
+
+1. Duplicate a biome `.tres` into `data/world/biomes/`. Set a unique `id` and
+   player-facing `display_name` first. The registry discovers the file on the
+   next seed change or launch.
+2. Set `elevation_range`, `moisture_range`, and `temperature_range` to a
+   realistic normalized range (0.0–1.0). Start with a deliberately broad
+   range, then narrow it after checking a seed. `rarity_weight` breaks ties
+   when several biomes match; it does not create a biome outside its ranges.
+3. Give the biome reusable `environment_tags`, for example `rocky`, `open`,
+   or `humid`. Resources, POIs, and caves consume these generic tags. Do not
+   invent a code path for the biome name.
+4. Set adjacency by ID: `preferred_neighbors` are the most natural border
+   partners; `transition_biome_ids` are acceptable softer transitions. Every
+   referenced biome must already exist. These fields shape both regional
+   selection and coherent-region merges.
+5. Assign terrain presentation with `terrain_tile_id`, `ground_color`, and,
+   where useful, `high_elevation_terrain_tile_id` plus its threshold. Use one
+   of the renderer's current terrain vocabulary: `grass`, `forest`, `sand`,
+   `stone`, `snow`, or `mud`. A normal biome may choose any of those without a
+   generator change; adding an entirely new terrain *art type* is separate
+   renderer/presentation work.
+6. List eligible **surface** resource IDs in `resource_types`; list creature
+   and vegetation IDs only when their respective systems have definitions for
+   them. Resource selection uses each resource's `spawn_weight`; duplicate an
+   ID in this list does not add extra weight.
+7. Set `cave_entrance_suitability` only if cave-entrance POIs should be more
+   or less likely here. Set `minimum_region_size` only if small raw fragments
+   should merge into neighbours (0 keeps the biome out of that stage).
+8. Optionally set `min_distance_to_water` / `max_distance_to_water` in
+   Chebyshev tiles (`-1` means unconstrained). The values must be -1 or
+   non-negative and `min <= max`.
+
+At this point the biome is complete data content: no generator, spawner, or
+central source registry edit is needed.
 
 Biome adjacency is data the generator interprets two ways: low-frequency
 regional selection biases a tile toward its regional context and the
@@ -39,32 +66,77 @@ biome asset IDs; tune the shared regional scale and biases (and
 `region_cell_size_tiles`) in `world_generation_config.tres`, never with
 name-specific generator branches.
 
-## Add a resource
+## Add a resource, start to finish
 
-1. Create a `ResourceDefinition` asset in `data/world/resources/` with a unique
-   `id`.
-2. Configure `surface_spawnable`, `underground_spawnable`, allowed biomes or
-   environment tags, abundance, spawn weight, distribution mode, spacing,
-   cluster radius, and — optionally — `min_distance_to_water` /
-   `max_distance_to_water` (per-side -1 = unconstrained; the spawner vetoes
-   distance-failing definitions before any RNG roll). A `surface_spawnable`
-   resource pinned to `max_distance_to_water = 0` is rejected at startup —
-   every distance-0 tile is water, so it could never spawn on the surface.
-3. Put normal yields in `yields`; put environment-specific additions in
-   `biome_yields` rather than adding biome checks to code.
-4. Add the resource ID to the relevant biome asset, or to a future cave asset
-   for underground content.
+1. Duplicate a `ResourceDefinition` asset into `data/world/resources/`; give
+   it a unique stable `id` and `display_name`.
+2. Choose where it can exist. Set `surface_spawnable` for normal terrain
+   nodes, `underground_spawnable` for cave deposits, or both only when that is
+   intentional. Restrict it with `allowed_biomes` and/or
+   `required_environment_tags`; empty lists mean no restriction. A mineral is
+   normally surface-disabled and underground-enabled.
+3. Set the occurrence controls. `spawn_weight` decides its relative choice
+   when a biome lists several eligible resources. `surface_resource_density`
+   in the world config is the global baseline; this asset's `abundance` and
+   `density_multiplier` scale it. `min_spacing_tiles` is honoured across
+   chunk borders, not merely inside a visible chunk.
+4. Choose `distribution_mode`: `uniform` is even; `sparse` leaves more gaps;
+   `clustered` and `patch` make local groups; `vein` forms elongated groups;
+   `edge-biased` favours distribution-field edges; and `elevation-biased`
+   favours suitable height. `cluster_radius` controls the relevant grouped
+   modes. The registry rejects an unknown mode, so a typo never silently
+   changes the distribution.
+5. Apply optional water-distance constraints. Use -1 for an open side; a
+   surface resource with `max_distance_to_water = 0` is impossible because
+   distance zero is physical water and is rejected at validation.
+6. Set `base_health` and `yields`, for example
+   `[{"item_id":"my_item", "min_qty":1, "max_qty":3, "chance":1.0}]`.
+   Add environment-specific drops under `biome_yields`, keyed by biome ID,
+   instead of teaching harvesting about a biome name. Set `harvest_group` when
+   a tool should recognise a content family (for example `tree`, `mineral`, or
+   `forage`) instead of requiring an ID-specific tool rule.
+   `visual_texture_path` and `visual_ground_anchor` are optional data-authored
+   presentation fields for bespoke sprites; leave them empty/false to use the
+   normal atlas or fallback presentation.
+7. Add the resource ID to each biome's `resource_types` for surface use, or
+   to a cave's `resource_ids` for underground use. The referenced resource
+   must have the matching spawn flag enabled.
+8. Check presentation. Biome ground visuals are fully data-authored in the
+   biome asset. Existing resource IDs use the shipped resource artwork; an
+   otherwise valid new ID receives the generic fallback visual. New raster
+   game art must be generated through the PixelLab.ai MCP, using a related
+   shipped PixelLab asset as a style reference where possible. Supplying a new
+   bespoke resource sprite is presentation work, not a world-generation
+   registration step—do not solve it with a resource-name branch in generation
+   code.
 
-Metallic/mineral resources should be marked `surface_spawnable = false` and
-`underground_spawnable = true`. The current surface spawner filters them by
-the definition, so their future cave distribution can be added independently.
+The density field samples coordinates directly, so changing a resource field
+changes future deterministic placement for that seed. Existing saves retain
+only harvested/depleted locations, not a snapshot of untouched resource nodes.
+
+## Validate and verify a seed
+
+1. Start the project or run the headless harness. Startup validation names the
+   exact asset path and invalid field; generation intentionally refuses to
+   produce chunks until every content error is fixed.
+2. Enter a known seed with **T**, then use **F3** while standing in the target
+   region. Record the seed, tile, biome, field values, and water readout. This
+   is enough for another developer to reproduce the location exactly.
+3. Walk across at least one chunk boundary and confirm the biome/resource
+   transition has no seam or duplicate nodes. For density/spacing work, check
+   both sides of the boundary rather than only the initial chunk.
+4. Run the harness before handing off. Its fixed-seed checks catch accidental
+   changes to environment, water, biome, and candidate layers independently.
 
 ## Add a POI
 
 POI placement is generic: drop a `POIDefinition` asset into
 `data/world/pois/` and the generator discovers it, emits deterministic
 candidates from it, and loads them at runtime — no source change required.
-The asset drives:
+For a normal landmark, set `id`, `display_name`, `category`, `spawn_weight`,
+and a spacing that makes sense at world scale, then optionally limit it by
+biome, environment tag, or water distance. Validate and inspect the chosen
+seed with F3 as described above. The asset drives:
 
 - `min_spacing_tiles` — a stable world-space anchor grid; this is what
   guarantees spacing across chunk boundaries.
@@ -150,8 +222,38 @@ reset/depletion policy in cave-generation logic: that remains a save/runtime
 policy decision. Configure `environment_tags`, resource IDs, deposit counts,
 and attempt multiplier on the cave asset. The generator only accepts linked
 resources with `underground_spawnable = true` whose required tags match, then
-produces deterministic base deposit candidates. Runtime harvesting and whether
-those candidates later persist, reset, or evolve are deliberately separate.
+produces deterministic base deposit candidates. Runtime harvesting uses the
+same harvestable nodes as the surface. When a deposit is depleted, only its
+stable cave candidate ID is stored under `cave_changes`; re-entering rebuilds
+the base cave with that candidate absent. Reset policy remains separate.
+
+For geometry, `room_size` and `tunnel_length` are the legacy fixed values.
+Set `room_size_min` / `room_size_max`, `tunnel_length_range` and
+`branching_chance` to author a varied layout; zero vectors preserve fixed
+geometry. `hazard_ids`, `enemy_ids`, `poi_ids`, `underground_water_chance`,
+`underground_water_tags`, `feature_tags`, `deposit_tables`, and `loot_tables`
+are generic, validated authoring seams. Only geometry and underground resource
+deposits have runtime consumers today; the remaining fields travel with the
+generated cave snapshot for future systems rather than triggering named cave
+behaviour.
+
+To add a cave type: first add or choose its entrance POI, then duplicate a
+cave asset and set a unique `id`, `entrance_poi_id`, eligible biome/tag rules,
+room/deposit ranges, and only `underground_spawnable` resource IDs. Verify its
+entrance on a fixed seed, enter it twice, harvest one deposit, and confirm the
+same deposit remains absent after re-entry. Do not select a cave reset policy
+in the generator: depletion is a runtime/save concern.
+
+## Surface resource density (WG-07)
+
+Surface resources no longer use repeated random attempts. Each land tile has a
+stable coordinate candidate, selected from the biome's `resource_types` and
+then accepted by the world config's `surface_resource_density`, the resource's
+`density_multiplier`, `abundance`, distribution mode, environment/water rules,
+and terrain-feature masks. `min_spacing_tiles` is resolved against a bounded
+neighbourhood using stable priority, so it holds across chunk borders regardless
+of which chunk loads first. Use `density_multiplier` to make a normal resource
+more or less common without changing the global baseline.
 
 ## Validation at startup
 
@@ -211,6 +313,8 @@ that exercises the fields end-to-end.
 
 ## Reproducibility
 
-Use the displayed world seed and chunk coordinates when reporting a generation
-bug. The same seed, configuration, content assets, and chunk coordinate must
+Use the debug overlay (F3) to record the displayed world seed, config/version,
+tile and chunk coordinates when reporting a generation bug. Include its biome,
+field and water readout when relevant; the panel gives the exact chunk bounds
+too. The same seed, configuration, content assets, and chunk coordinate must
 produce the same base data regardless of load order.

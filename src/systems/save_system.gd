@@ -174,6 +174,11 @@ func has_any_save() -> bool:
 	return not list_saves().is_empty()
 
 func most_recent_save_path() -> String:
+	# Within a running session we know exactly which successful write happened
+	# last. Prefer that direct fact over same-second filename/timestamp sorting,
+	# where manual and autosave prefixes have independent suffix sequences.
+	if not last_save_path.is_empty() and FileAccess.file_exists(last_save_path):
+		return last_save_path
 	var entries: Array[Dictionary] = list_save_entries()
 	if entries.is_empty():
 		return ""

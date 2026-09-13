@@ -15,3 +15,4 @@ underground_spawnable = true
 required_environment_tags = PackedStringArray("rocky")
 base_health = 6.0
 yields = [{"item_id":"coal","min_qty":1,"max_qty":3,"chance":1.0}]
+harvest_group = "mineral"

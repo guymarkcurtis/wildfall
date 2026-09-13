@@ -171,6 +171,8 @@ func _run_checks() -> void:
 	_check(technology_panel != null, "Technology panel node present")
 	_check(technology_system != null, "TechnologySystem node present")
 	_check(texture_pack_manager != null, "TexturePackManager node present")
+	var world_map: WorldMap = main.get_node_or_null("HUD/WorldMap") as WorldMap
+	_check(world_map != null, "WorldMap node present")
 	if _failed > 0:
 		return
 
@@ -183,6 +185,19 @@ func _run_checks() -> void:
 	player.inventory.add_item("wood", 3)
 	inventory_panel.open()
 	_check(inventory_panel.is_open(), "Inventory expands above the quick bar")
+	var hotbar_icon: TextureRect = inventory_panel._hotbar_slot_nodes[0]["icon"] as TextureRect
+	_check(hotbar_icon != null and hotbar_icon.texture != null,
+		"Quick-bar slots render their item pickup sprite instead of an item name")
+	var all_item_icons_present := true
+	for item_id in item_database.items:
+		var item: ItemDefinition = item_database.get_item(str(item_id))
+		if item == null or item.texture_path.is_empty() or TexturePackManager.get_texture(item.texture_path) == null:
+			all_item_icons_present = false
+			break
+	_check(all_item_icons_present, "Every inventory item has a canonical pickup/UI icon")
+	var recipe_card: RecipeItemUI = crafting_panel.recipe_list.get_node_or_null("Recipe0") as RecipeItemUI
+	_check(recipe_card != null and recipe_card.result_icon.texture != null,
+		"Crafting cards render the icon of the item they produce")
 	var backpack_bottom := inventory_panel._backpack_grid.position.y + InventoryPanel.SLOT_SIZE * 3.0 + InventoryPanel.GRID_GAP * 2.0
 	_check(is_equal_approx(inventory_panel._hotbar_grid.position.y - backpack_bottom, InventoryPanel.GRID_GAP),
 		"Expanded quick bar uses the same gap as backpack rows")
@@ -228,6 +243,54 @@ func _run_checks() -> void:
 		"Biome and resource content is discovered from data assets")
 	_check(world_registry.validation_errors.is_empty(),
 		"Shipped world content passes startup validation with no errors")
+	_check(InputMap.has_action("toggle_map") and InputMap.has_action("toggle_missions"),
+		"Map and mission-journal input actions are registered separately (M / J)")
+	if world_map != null:
+		world_map.toggle()
+		_check(world_map.is_open() and world_map.get_node_or_null("Minimap") != null
+				and world_map.get_node_or_null("MapWindow/Column") != null
+				and bool(world_map.get("_marker_scan_active")),
+			"Mappable full-screen view opens alongside the always-present minimap")
+		_check(player.call("_ui_blocks_world_input"), "Open world map blocks player movement and world actions")
+		# The real M-key path evaluates sparse anchors under a per-frame budget.
+		# Drain those slices explicitly in the headless harness before inspecting
+		# the complete result; querying the synchronous tool API would otherwise
+		# bypass the performance behavior this regression is meant to cover.
+		while bool(world_map.get("_marker_scan_active")):
+			world_map.call("_process_marker_scan")
+		var cave_marker_count := world_map.get_cave_marker_count()
+		_check(cave_marker_count > 0,
+			"World map exposes deterministic cave markers across the finite world (%d caves)" % cave_marker_count)
+		var map_markers: Array = world_map.get("_markers") as Array
+		var first_cave: Dictionary = {}
+		for marker_variant in map_markers:
+			var marker: Dictionary = marker_variant
+			if not str(marker.get("cave_id", "")).is_empty():
+				first_cave = marker
+				break
+		var cave_tile := Vector2i(int(first_cave.get("x", 0)), int(first_cave.get("y", 0)))
+		var cave_chunk := Vector2i(floori(float(cave_tile.x) / float(world_config.chunk_size_tiles)),
+				floori(float(cave_tile.y) / float(world_config.chunk_size_tiles)))
+		var cave_payload: Dictionary = world_gen.generate_chunk(cave_chunk)
+		var map_candidate_matches_chunk := false
+		for candidate in cave_payload.get("poi_candidates", []):
+			if str(candidate.get("cave_id", "")) == str(first_cave.get("cave_id", "")):
+				map_candidate_matches_chunk = true
+				break
+		_check(not first_cave.is_empty() and map_candidate_matches_chunk,
+			"Map cave marker matches the POI candidate emitted when its chunk streams in")
+		world_map.set_waypoint(cave_tile, "Cave")
+		_check(not first_cave.is_empty() and world_map.has_waypoint() and world_map.get_waypoint() == cave_tile,
+			"Selecting a cave map marker sets a waypoint rendered on the minimap")
+		var visible_before_filter := world_map.get_visible_marker_count()
+		world_map.set_marker_filter("caves", false)
+		_check(not world_map.is_marker_filter_enabled("caves")
+				and world_map.get_visible_marker_count() < visible_before_filter,
+			"Map legend can hide cave markers without clearing the selected waypoint")
+		world_map.set_marker_filter("caves", true)
+		world_map.clear_waypoint()
+		_check(not world_map.has_waypoint(), "Map can clear a selected waypoint")
+		world_map.toggle()
 	# Invalid-fixture suites: each points a fresh registry at a fixture dir
 	# and checks that the collected errors name the offending asset and the
 	# specific problem, so content authors get actionable failure messages.
@@ -411,7 +474,15 @@ func _run_checks() -> void:
 				marker_spacing_ok = false
 	_check(marker_spacing_ok, "Non-cave POI candidates respect the asset's min_spacing_tiles across chunk boundaries")
 	# Live scene: deliberately drain the pending chunk visuals, then verify
-	# the generic POI consumer loaded the deterministic payload as nodes.
+	# the generic POI consumer loaded the deterministic payload as nodes. The
+	# exact live seed may put the marker just outside the current streamed ring,
+	# so explicitly stream one proven candidate-owning chunk rather than making
+	# this runtime-consumer assertion probabilistic.
+	if not marker_candidates.is_empty():
+		var marker_tile := Vector2i(int(marker_candidates[0].get("x", 0)), int(marker_candidates[0].get("y", 0)))
+		var marker_chunk := Vector2i(floori(float(marker_tile.x) / float(world_config.chunk_size_tiles)),
+				floori(float(marker_tile.y) / float(world_config.chunk_size_tiles)))
+		chunk_system.generate_chunk(marker_chunk)
 	main.call("flush_pending_chunk_visuals")
 	var loaded_marker_nodes: Array = []
 	for child in main.get_children():
@@ -455,7 +526,33 @@ func _run_checks() -> void:
 	_check(cave_deposits_are_underground, "Cave deposits are deterministic and use only underground resource data")
 	var cave_rooms: Array = cave_a.get("rooms", [])
 	_check(not cave_rooms.is_empty() and cave_rooms[0].get("center", Vector2i.ONE) == Vector2i.ZERO,
-		"Cave entrance chamber is anchored at the runtime exit")
+			"Cave entrance chamber is anchored at the runtime exit")
+	# WG-09: optional cave-definition fields produce a deterministic alternative
+	# layout without any cave-type branch in the generator. Metadata-only fields
+	# survive into the generated snapshot for future generic consumers.
+	var varied_cave: CaveDefinition = cave_definition.duplicate() as CaveDefinition
+	varied_cave.room_size_min = Vector2i(5, 6)
+	varied_cave.room_size_max = Vector2i(7, 9)
+	varied_cave.tunnel_length_range = Vector2i(4, 6)
+	varied_cave.branching_chance = 0.65
+	varied_cave.hazard_ids = PackedStringArray(["fixture_hazard"])
+	varied_cave.enemy_ids = PackedStringArray(["fixture_enemy"])
+	varied_cave.underground_water_chance = 0.25
+	varied_cave.underground_water_tags = PackedStringArray(["subterranean_water"])
+	varied_cave.feature_tags = PackedStringArray(["crystal"])
+	varied_cave.deposit_tables = [{"id": "fixture_deposits", "weight": 1.0}]
+	varied_cave.loot_tables = [{"id": "fixture_loot", "weight": 1.0}]
+	var varied_cave_a := cave_generator.generate_cave(world_gen.get_seed(), "varied@4,4", Vector2i(4, 4), varied_cave, world_registry.resources)
+	var varied_cave_b := cave_generator.generate_cave(world_gen.get_seed(), "varied@4,4", Vector2i(4, 4), varied_cave, world_registry.resources)
+	var varied_geometry_ok := str(varied_cave_a) == str(varied_cave_b)
+	for room in varied_cave_a.get("rooms", []):
+		var room_size: Vector2i = room.get("size", Vector2i.ZERO)
+		if room_size.x < varied_cave.room_size_min.x or room_size.x > varied_cave.room_size_max.x \
+				or room_size.y < varied_cave.room_size_min.y or room_size.y > varied_cave.room_size_max.y:
+			varied_geometry_ok = false
+	_check(varied_geometry_ok and str(varied_cave_a.get("hazard_ids", [])) == str(varied_cave.hazard_ids) \
+			and str(varied_cave_a.get("deposit_tables", [])) == str(varied_cave.deposit_tables),
+			"WG-09: optional cave geometry and reserved content tables are data-driven and deterministic")
 	var runtime_entrance := CaveEntrance.new()
 	runtime_entrance.setup({
 		"cave_id": "mountain_cave@4,4",
@@ -471,13 +568,40 @@ func _run_checks() -> void:
 		"Surface cave entrance opens a separate generated cave space")
 	var active_cave: CaveSpace = main.get_node_or_null("ActiveCaveSpace") as CaveSpace
 	_check(active_cave != null and not (active_cave.cave_data.get("resource_candidates", []) as Array).is_empty(),
-		"Entering a cave carries its deterministic underground deposit candidates")
+			"Entering a cave carries its deterministic underground deposit candidates")
+	# WG-08: cave deposits are live HarvestableResource nodes, not merely
+	# rendered dots. Depleting one records its stable candidate id in the cave
+	# mutation ledger; re-entering reconstructs the base cave minus that one
+	# change without serialising untouched deposits.
+	var cave_deposit_node: HarvestableResource = null
+	for child in main.get_children():
+		if child is HarvestableResource and str(child.get_meta("cave_id", "")) == "mountain_cave@4,4":
+			cave_deposit_node = child as HarvestableResource
+			break
+	var depleted_cave_candidate_id := str(cave_deposit_node.get_meta("cave_candidate_id", "")) if cave_deposit_node != null else ""
+	if cave_deposit_node != null:
+		cave_deposit_node.destroy()
+	var cave_deposit_ledger: Dictionary = main.call("_collect_world_state") as Dictionary
+	var cave_changes: Dictionary = cave_deposit_ledger.get("cave_changes", {})
+	var cave_change: Dictionary = cave_changes.get("mountain_cave@4,4", {})
+	_check(not depleted_cave_candidate_id.is_empty() \
+			and (cave_change.get("depleted_deposits", {}) as Dictionary).has(depleted_cave_candidate_id),
+			"WG-08: harvesting a cave deposit records only its stable candidate id in cave_changes")
 	var cave_state: Dictionary = main.call("_collect_world_state") as Dictionary
 	_check((cave_state.get("discovered_caves", []) as Array).has("mountain_cave@4,4"),
 		"Entering a cave records only its stable discovery identity")
 	main.call("interact_with_active_cave")
 	_check(not bool(main.call("is_in_cave")) and terrain_renderer.collision_enabled,
-		"Cave exit restores the surface space and terrain collision")
+			"Cave exit restores the surface space and terrain collision")
+	var cave_reentered := bool(main.call("enter_cave_from_entrance", runtime_entrance))
+	_check(cave_reentered, "WG-08: a cave can be re-entered immediately after returning to the surface")
+	var cave_deposit_persisted := cave_reentered
+	for node in main.get("_cave_resource_nodes"):
+		if is_instance_valid(node) and str(node.get_meta("cave_candidate_id", "")) == depleted_cave_candidate_id:
+				cave_deposit_persisted = false
+	_check(cave_deposit_persisted,
+			"WG-08: re-entering reconstructs the same cave while keeping a depleted deposit absent")
+	main.call("interact_with_active_cave")
 	runtime_entrance.queue_free()
 
 	# --- 2c. Coherent regions: minimum_region_size becomes geography (WG-03) --
@@ -1200,6 +1324,44 @@ func _run_checks() -> void:
 	_check(fixture_placements.size() == second_placements.size() \
 			and str(fixture_placements) == str(second_placements),
 			"WG-05: fixture resource placement is identical across spawner instances (distance vetoes consume no random rolls)")
+	# WG-07: density candidates and their bounded neighbour priority must not
+	# depend on which chunk streamed first. Check both reversed generation order
+	# and every data-provided spacing rule across the entire fixture box.
+	var density_spawner_reversed := ResourceSpawner.new()
+	density_spawner_reversed.world_generator = water_fixture_gen
+	density_spawner_reversed.initialize(42)
+	for reverse_index in range(fixture_chunk_coords.size() - 1, -1, -1):
+		var reverse_coords: Vector2i = fixture_chunk_coords[reverse_index]
+		density_spawner_reversed.generate_chunk_resources(reverse_coords, 42,
+				water_first[reverse_coords].get("feature_candidates", []),
+				(water_first[reverse_coords] as Dictionary)["biomes"] as PackedStringArray,
+				(water_first[reverse_coords] as Dictionary)["water_mask"] as PackedByteArray,
+				(water_first[reverse_coords] as Dictionary)["distance_to_water"] as PackedInt32Array)
+	var reversed_density_placements: Dictionary = density_spawner_reversed.get_all_resources()
+	var density_order_ok := fixture_placements.size() == reversed_density_placements.size()
+	for placement_tile in fixture_placements:
+		if not reversed_density_placements.has(placement_tile) \
+				or str(fixture_placements[placement_tile]) != str(reversed_density_placements[placement_tile]):
+			density_order_ok = false
+			break
+	var density_spacing_ok := true
+	var density_tiles: Array = fixture_placements.keys()
+	for first_index in range(density_tiles.size()):
+		if not density_spacing_ok:
+			break
+		var first_tile: Vector2i = density_tiles[first_index]
+		var first_definition: ResourceDefinition = water_fixture_gen.get_resource_definition(
+				str((fixture_placements[first_tile] as Dictionary).get("type", "")))
+		for second_index in range(first_index):
+			var second_tile: Vector2i = density_tiles[second_index]
+			var second_definition: ResourceDefinition = water_fixture_gen.get_resource_definition(
+					str((fixture_placements[second_tile] as Dictionary).get("type", "")))
+			var required_spacing := maxi(first_definition.min_spacing_tiles, second_definition.min_spacing_tiles)
+			if required_spacing > 0 and maxi(absi(first_tile.x - second_tile.x), absi(first_tile.y - second_tile.y)) <= required_spacing:
+				density_spacing_ok = false
+				break
+	_check(density_order_ok and density_spacing_ok,
+			"WG-07: density-field resources are chunk-order independent and obey bounded cross-border spacing")
 
 	# In the fixture world the field is in use, so the public on-demand
 	# queries (which run their own tile +/- cap BFS) must agree with the
@@ -1337,9 +1499,9 @@ func _run_checks() -> void:
 	_check(int(water_fixture_config.river_halo_tiles) == 16 \
 			and int(water_fixture_config.river_accumulation_threshold) == 32,
 			"WG-06: the fixture world commits river_halo_tiles=16 / river_accumulation_threshold=32")
-	_check(int(world_config.river_halo_tiles) == 24 \
-			and int(world_config.river_accumulation_threshold) == 32,
-			"WG-06: the live world commits river_halo_tiles=24 / river_accumulation_threshold=32")
+	_check(int(world_config.river_halo_tiles) == 8 \
+			and int(world_config.river_accumulation_threshold) == 10,
+			"WG-06: the live world commits river_halo_tiles=8 / river_accumulation_threshold=10 for responsive streaming")
 
 	# 2f.2 Independent whole-world reference: re-sample the 96x96 fixture
 	# world with the river stage's (2*16+1)-tile margin (a 162x162 rect)
@@ -1492,9 +1654,103 @@ func _run_checks() -> void:
 	_check(live_river_on_demand_ok,
 			"WG-06 live world: the on-demand is_river_at_world query agrees with the streamed chunk payload at all 12 sampled tiles")
 
+	# --- 2g. WG-10: compact coordinate diagnostics --------------------------
+	# The report is deliberately world-pure: a developer can copy its seed and
+	# tile coordinate from an unloaded location and regenerate the same fields,
+	# classification and chunk bounds without enabling extra instrumentation.
+	var diagnostic_probe := WorldGenerator.new()
+	diagnostic_probe.initialize(9173, world_config)
+	var location_report: Dictionary = diagnostic_probe.get_tile_diagnostics(-117, 53)
+	var diagnostic_fields: Dictionary = location_report.get("fields", {})
+	var diagnostic_water: Dictionary = location_report.get("water", {})
+	_check(int(location_report.get("seed", -1)) == 9173 \
+			and location_report.get("tile", Vector2i.ZERO) == Vector2i(-117, 53) \
+			and location_report.get("chunk", Vector2i.ZERO) == Vector2i(-8, 3) \
+			and location_report.get("chunk_tile_bounds", Rect2i()) == Rect2i(Vector2i(-128, 48), Vector2i(16, 16)) \
+			and location_report.get("chunk_pixel_bounds", Rect2i()) == Rect2i(Vector2i(-4096, 1536), Vector2i(512, 512)),
+			"WG-10: a bad-world report carries seed, tile, chunk and exact chunk boundaries")
+	_check(location_report.has("biome") and diagnostic_fields.has("elevation") \
+			and diagnostic_fields.has("moisture") and diagnostic_fields.has("water") \
+			and diagnostic_water.has("class") and diagnostic_water.has("origin") \
+			and diagnostic_water.has("river") and location_report.has("region_cell"),
+			"WG-10: the report includes biome, fields, physical-water classification and region context")
+
+	# --- 2h. WG-11: fixed-seed regression + streaming stress ----------------
+	# Pin a few field values and independent output-layer fingerprints. The
+	# individual value labels name the changed field/tile; fingerprints narrow a
+	# wider payload change to environment, hydrology, biome, or candidates.
+	var regression_samples: Array[Dictionary] = [
+		{"tile": Vector2i(0, 0), "elevation": 0.5, "moisture": 0.5, "temperature": 0.5,
+			"water": 0.5, "biome": "grassland", "water_class": "land", "river": 0},
+		{"tile": Vector2i(-117, 53), "elevation": 0.59310922026634, "moisture": 0.47160084359348,
+			"temperature": 0.33959725499153, "water": 0.73922003805637,
+			"biome": "temperate_forest", "water_class": "land", "river": 0},
+		{"tile": Vector2i(319, -201), "elevation": 0.46031599119306, "moisture": 0.36249102652073,
+			"temperature": 0.3593547642231, "water": 0.78542256355286,
+			"biome": "grassland", "water_class": "land", "river": 0}
+	]
+	for expected_sample in regression_samples:
+		var expected_tile: Vector2i = expected_sample["tile"]
+		var actual_sample: Dictionary = diagnostic_probe.get_tile_diagnostics(expected_tile.x, expected_tile.y)
+		var actual_fields: Dictionary = actual_sample["fields"]
+		for field_name in ["elevation", "moisture", "temperature", "water"]:
+			_check(absf(float(actual_fields[field_name]) - float(expected_sample[field_name])) < 0.000001,
+					"WG-11 golden %s at seed 9173 tile %s" % [field_name, str(expected_tile)])
+		var actual_water: Dictionary = actual_sample["water"]
+		_check(str(actual_sample["biome"]) == str(expected_sample["biome"])
+				and str(actual_water["class"]) == str(expected_sample["water_class"])
+				and int(actual_water["river"]) == int(expected_sample["river"]),
+				"WG-11 golden classification at seed 9173 tile %s (biome/water/river)" % str(expected_tile))
+	var golden_fingerprints: Dictionary = {
+		Vector2i(0, 0): {"environment": "1c702a1f", "hydrology": "3ca7db5a", "biomes": "416bf14f", "candidates": "707c4bfb"},
+		Vector2i(-2, 3): {"environment": "6639373a", "hydrology": "46afc9aa", "biomes": "734a1ada", "candidates": "707c4bfb"},
+		Vector2i(7, -5): {"environment": "58024b91", "hydrology": "4e5a9fad", "biomes": "22eba974", "candidates": "707c4bfb"}
+	}
+	for fingerprint_chunk in golden_fingerprints:
+		var expected_fingerprints: Dictionary = golden_fingerprints[fingerprint_chunk]
+		var actual_fingerprints: Dictionary = diagnostic_probe.get_chunk_fingerprints(fingerprint_chunk)
+		for layer_name in ["environment", "hydrology", "biomes", "candidates"]:
+			_check(str(actual_fingerprints.get(layer_name, "missing")) == str(expected_fingerprints[layer_name]),
+					"WG-11 golden %s fingerprint at seed 9173 chunk %s" % [layer_name, str(fingerprint_chunk)])
+	# A fresh, bounded ChunkSystem uses the same queue as play. This intentionally
+	# records timing for trend visibility but has no machine-specific time limit.
+	var stream_root := Node.new()
+	var stream_generator := WorldGenerator.new()
+	var stream_chunks := ChunkSystem.new()
+	stream_generator.name = "WorldGenerator"
+	stream_chunks.name = "ChunkSystem"
+	stream_root.add_child(stream_generator)
+	stream_root.add_child(stream_chunks)
+	root.add_child(stream_root)
+	stream_generator.initialize(9173, world_config.duplicate() as WorldGenerationConfig)
+	stream_chunks.initialize(9173, stream_generator.get_configuration())
+	stream_chunks.set_viewport_radius(3)
+	stream_chunks.update_player_position(Vector2(27 * ChunkSystem.PIXELS_PER_CHUNK, -19 * ChunkSystem.PIXELS_PER_CHUNK))
+	var stream_scheduled: int = stream_chunks.get_pending_generation_count()
+	var stream_started_usec: int = Time.get_ticks_usec()
+	stream_chunks.flush_pending_generation()
+	var stream_elapsed_ms: float = float(Time.get_ticks_usec() - stream_started_usec) / 1000.0
+	print("[PERF] WG-11 streaming generation seed=9173 radius=3 chunks=%d elapsed=%.1f ms" % [stream_chunks.get_loaded_chunk_count(), stream_elapsed_ms])
+	_check(stream_scheduled == 49 and stream_chunks.get_loaded_chunk_count() == 49 \
+			and stream_chunks.get_pending_generation_count() == 0,
+			"WG-11: configured-radius streaming generation queues and completes 49 deterministic chunks (timing recorded above, no fragile limit)")
+	stream_root.queue_free()
+
 	# --- 3. Terrain + resources --------------------------------------------
 	_check(terrain_renderer.get_used_cells().size() > 0, "Terrain rendered for initial chunks (%d tiles)" % terrain_renderer.get_used_cells().size())
 	_check(TileSetGenerator.MATERIAL_PIXELS_PER_TILE == 4, "Stock terrain keeps its lightweight streaming resolution")
+	var seam_generator := TileSetGenerator.new()
+	var seam_tiles := PackedInt32Array()
+	seam_tiles.resize(16 * 16)
+	seam_tiles.fill(TileSetGenerator.TILE_GRASS)
+	var seam_border: Dictionary = {}
+	for seam_y in range(16):
+		seam_border[Vector2i(-1, seam_y)] = TileSetGenerator.TILE_SAND
+	var seam_image := seam_generator.create_contiguous_chunk_image(Vector2i.ZERO, seam_tiles, 16, 0, seam_border)
+	var blended_edge := seam_image.get_pixel(0, 8)
+	var pure_grass := seam_generator.stock_material_colour(TileSetGenerator.TILE_GRASS, 4, 68, 0)
+	_check(not blended_edge.is_equal_approx(pure_grass), "Stock biome blending continues across loaded chunk boundaries")
+	seam_generator.free()
 	_check(resource_spawner.get_all_resources().size() > 0, "Resources spawned in initial chunks")
 	var reachable_resources := true
 	for resource_tile in resource_spawner.get_all_resources().keys():
@@ -1553,6 +1809,70 @@ func _run_checks() -> void:
 			if not _atlas_cell_has_art(station_texture.get_image(), artreq_station_col * 32, 0):
 				artreq_stations_full = false
 	_check(artreq_stations_full, "Every crafting-station atlas cell contains artwork")
+	var large_tree_image := TexturePackManager.get_stock_image("res://assets/resources/tree-large.png")
+	_check(large_tree_image != null and large_tree_image.get_width() >= 128 and large_tree_image.get_height() >= 160,
+		"PixelLab tree is substantially larger than one terrain tile")
+	var tree_animation_complete := true
+	for tree_frame_index in range(1, 5):
+		var tree_frame := TexturePackManager.get_stock_image(
+				"res://assets/resources/tree-shake/frame_0%d.png" % tree_frame_index)
+		if tree_frame == null or tree_frame.get_size() != large_tree_image.get_size():
+			tree_animation_complete = false
+	_check(tree_animation_complete, "Tree hit animation has four size-matched PixelLab frames")
+	var new_tree_species := {
+		"pine_tree": {"path": "res://assets/resources/trees/pine-tree.png", "biome": "arctic"},
+		"willow_tree": {"path": "res://assets/resources/trees/willow-tree.png", "biome": "swamp"},
+		"meadow_tree": {"path": "res://assets/resources/trees/meadow-tree.png", "biome": "grassland"}
+	}
+	var tree_world_generator := world_gen as WorldGenerator
+	var tree_species_content_complete := true
+	for species_id in new_tree_species:
+		var species := new_tree_species[species_id] as Dictionary
+		var species_definition := tree_world_generator.get_resource_definition(str(species_id))
+		var species_image := TexturePackManager.get_stock_image(str(species["path"]))
+		if species_definition == null or species_definition.harvest_group != "tree" \
+				or not species_definition.allowed_biomes.has(str(species["biome"])) \
+				or species_image == null or species_image.get_size() != Vector2i(160, 192):
+			tree_species_content_complete = false
+	_check(tree_species_content_complete,
+		"Three data-defined PixelLab tree species have biome rules and 160x192 sprites")
+	var pine_definition := tree_world_generator.get_resource_definition("pine_tree")
+	var pine_probe := HarvestableResource.new()
+	pine_probe.setup(pine_definition.id, pine_definition.base_health, pine_definition.yields,
+			pine_definition.display_name, pine_definition.harvest_group, pine_definition.visual_texture_path,
+			pine_definition.visual_ground_anchor, pine_definition.visual_hit_animation_paths)
+	main.add_child(pine_probe)
+	_check(pine_probe.harvest_group == "tree" and pine_probe.visual_ground_anchor,
+		"Tree species presentation and axe category reach the generic harvestable runtime")
+	pine_probe.queue_free()
+	var pickup_art_complete := true
+	for drop_item_id in ["wood", "fibre", "berry", "stone", "clay", "sand", "copper_ore",
+			"tin_ore", "iron_ore", "coal", "gold_ore", "herb", "mushroom", "wheat",
+			"meat", "fish", "hide", "feather", "bone"]:
+		var pickup_image := TexturePackManager.get_stock_image(
+				"res://assets/items/pickups/%s.png" % drop_item_id)
+		if pickup_image == null or pickup_image.get_size() != Vector2i(32, 32):
+			pickup_art_complete = false
+	_check(pickup_art_complete, "Every currently droppable item has a native 32px PixelLab pickup sprite")
+	var tree_probe := HarvestableResource.new()
+	tree_probe.setup("tree", 10.0, [])
+	main.add_child(tree_probe)
+	tree_probe.damage(1.0)
+	_check(tree_probe.is_tree_shaking() and tree_probe.is_processing(),
+		"Each tree hit starts the tree shake response without idling every resource per frame")
+	tree_probe.queue_free()
+	var pickup_before: int = player.inventory.get_item_quantity("wood")
+	var pickup_probe: WorldPickup = main.call("_spawn_world_pickup",
+			player.global_position + Vector2(36, 0), "wood", 2)
+	_check(pickup_probe != null and player.inventory.get_item_quantity("wood") == pickup_before,
+		"Spawned loot remains in the world until it reaches the player")
+	pickup_probe._process(0.2)
+	_check(pickup_probe.get_bounce_height() > 0.0, "World loot rises through a visible bounce arc")
+	for pickup_step in range(12):
+		if is_instance_valid(pickup_probe):
+			pickup_probe._process(0.1)
+	_check(player.inventory.get_item_quantity("wood") == pickup_before + 2,
+		"Nearby world loot magnetizes to the player and is then collected")
 	var refinement_export := TexturePackManager.create_refinement_pack()
 	_check(FileAccess.file_exists("user://texture_packs/refinement/manifest.json"), "Editable refinement pack is created with its manifest")
 	_check(TexturePackManager.get_available_pack_ids().has(TexturePackManager.REFINEMENT_PACK), "Editable refinement pack appears in the selector")
@@ -1600,6 +1920,23 @@ func _run_checks() -> void:
 		recipe_ids.append(str(r.get("id", "")))
 	_check("plank" in recipe_ids, "Live recipe 'plank' visible in crafting panel")
 	_check("wooden_axe" in recipe_ids, "Live recipe 'wooden_axe' visible in crafting panel")
+	var category_bar: HBoxContainer = crafting_panel.get_node_or_null("MarginContainer/VBox/CategoryBar") as HBoxContainer
+	var recipe_search: LineEdit = crafting_panel.get_node_or_null("MarginContainer/VBox/RecipeSearch") as LineEdit
+	_check(category_bar != null and category_bar.get_child_count() == 5 and recipe_search != null,
+			"Crafting workbench exposes category filters and recipe search")
+	crafting_panel.call("_select_category", "Gear")
+	var filtered_cards := recipe_list.get_child_count() - 1
+	var stable_filter_indices := filtered_cards > 0 and filtered_cards < panel_recipes.size()
+	for card in recipe_list.get_children():
+		if card == crafting_panel.recipe_template:
+			continue
+		var original_index := int(card.index)
+		stable_filter_indices = stable_filter_indices and original_index >= 0 \
+				and original_index < panel_recipes.size() \
+				and crafting_panel.call("_category_for", panel_recipes[original_index]) == "Gear"
+	_check(stable_filter_indices, "Crafting filters keep stable recipe indices and show only the selected discipline")
+	crafting_panel.call("_select_category", "All")
+	_check(recipe_list.get_child_count() - 1 == panel_recipes.size(), "Clearing crafting filters restores every known recipe")
 	# --- 4b. Technology tree gates higher tiers, then unlocks them ---------
 	_check(InputMap.has_action("toggle_technology"), "toggle_technology input action exists (U key)")
 	_check(technology_system.is_unlocked("wood_building"), "Wood construction is available from the start")
@@ -1612,6 +1949,11 @@ func _run_checks() -> void:
 		"Owned stone parts cannot be placed before their technology is researched")
 	technology_panel.call("toggle")
 	_check(technology_panel.visible, "Technology panel opens")
+	var technology_canvas: Control = technology_panel.get("_canvas") as Control
+	var technology_links: Array = technology_canvas.get("links") if technology_canvas != null else []
+	_check(technology_canvas != null and technology_canvas.get_child_count() == technology_system.technology_order.size() \
+			and technology_links.size() >= 2,
+			"Technology panel renders research nodes with visible prerequisite connections")
 	technology_panel.call("toggle")
 	_check(not technology_panel.visible, "Technology panel closes")
 	var stone_cost: int = 30
@@ -1759,6 +2101,7 @@ func _run_checks() -> void:
 	# --- 9. Seed change regenerates the world (full loop) --------------------
 	seed_input.set_seed(42)
 	_check(int(main.get("_world_seed")) == 42, "set_seed(42) updates the world seed")
+	main.call("flush_pending_chunk_visuals")
 	_check(chunk_system.get_chunk(Vector2i(0, 0)).size() > 0, "World regenerated for new seed")
 	var seed_label: String = str(hud.get_node("Overlay/SeedLabel").text)
 	_check(seed_label.find("42") >= 0, "HUD seed label shows the new seed (%s)" % seed_label)
@@ -1770,6 +2113,8 @@ func _run_checks() -> void:
 	_check(InputMap.has_action("fire"), "fire input action exists")
 	_check(InputMap.has_action("jump"), "jump input action exists (Space)")
 	_check(InputMap.has_action("toggle_build"), "toggle_build input action exists")
+	_check(hud.get_node_or_null("Overlay/NavigationRibbon") != null,
+			"HUD exposes a consistent navigation ribbon for the main gameplay screens")
 	var camera: CameraController = camera_controller as CameraController
 	var player_ent: Player = player as Player
 	camera.rotate_view(PI * 0.5)
@@ -1796,6 +2141,8 @@ func _run_checks() -> void:
 	player_visual.set_appearance(player_ent.character_gender, player_ent.character_outfit)
 	player_ent.set_aim_locked(Vector2.RIGHT)
 	_check(player_ent.try_jump() and player_ent.is_jumping(), "Player can start an aimed jump")
+	player_visual.update_animation(Vector2.RIGHT, Player.JUMP_DURATION * 0.5, Vector2.RIGHT)
+	_check(player_visual._sprite.position.y < -25.0, "Jump presentation lifts the player above a shrinking contact shadow")
 	player_ent._physics_process(Player.JUMP_DURATION + 0.01)
 	_check(not player_ent.is_jumping(), "Player jump finishes after its configured duration")
 	player_ent.set_aim_locked(Vector2.RIGHT)
@@ -1815,6 +2162,9 @@ func _run_checks() -> void:
 	var east: Vector2 = player_ent.get_move_vector()
 	Input.action_release("move_right")
 	_check(east.x > 0.5, "D always moves east (%s)" % str(east))
+	player_ent.velocity = Vector2(100.0, 0.0)
+	player_ent._physics_process(0.0)
+	_check(player_ent.velocity == Vector2.ZERO, "Releasing movement input clears the previous velocity")
 	_check(_player_has_shape(player_ent), "Player has a collision shape for terrain")
 	var tileset: TileSet = (terrain_renderer as TerrainRenderer).tile_set
 	_check(tileset != null and tileset.get_physics_layers_count() > 0,
@@ -2023,7 +2373,7 @@ func _run_checks() -> void:
 	player.inventory.add_item("wood", 1)
 
 	# ------------------------------------------------- missions
-	_check(InputMap.has_action("toggle_missions"), "M is registered to toggle the mission journal")
+	_check(InputMap.has_action("toggle_missions"), "J is registered to toggle the mission journal")
 	_check(bus.has_signal("mission_accepted") and bus.has_signal("mission_completed") and bus.has_signal("missions_changed"), "Event bus relays mission lifecycle signals")
 	var mm = main.get_node_or_null("MissionManager")
 	_check(mm != null, "Main scene owns the mission manager")
@@ -2079,9 +2429,9 @@ func _run_checks() -> void:
 	_check((mm.get_completed_missions() as Array).size() == 7, "Completed missions persist across a save/load cycle")
 	_check(mission_panel.get_node_or_null("MissionWindow") != null, "Mission journal builds its window UI")
 	bus.toggle_missions_ui.emit()
-	_check(mission_panel.visible == true, "M (bus toggle) opens the mission journal")
+	_check(mission_panel.visible == true, "J (bus toggle) opens the mission journal")
 	bus.toggle_missions_ui.emit()
-	_check(mission_panel.visible == false, "M again closes the mission journal")
+	_check(mission_panel.visible == false, "J again closes the mission journal")
 	var v2_save: Dictionary = {"version": 2, "modules": {"world": {"seed": 77}, "player": {"position": {"x": 9.0, "y": 4.0}, "inventory": {"slots": {"wooden_axe": {"quantity": 1, "max_stack": 1}}}, "max_weight": 100.0, "max_slots": 50}}}
 	var v2_migrated: Dictionary = ss.migrate(v2_save)
 	_check(int(v2_migrated.get("version", 0)) == SaveSystem.SAVE_VERSION, "Legacy v2 save migrates to the current version")

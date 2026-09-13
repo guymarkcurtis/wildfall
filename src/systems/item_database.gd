@@ -359,6 +359,9 @@ func _create_item(item_id: String, display_name: String, category: String, stack
 	var item := ItemDefinition.new()
 	item.item_id = item_id
 	item.display_name = display_name
+	# Item presentation follows the same data contract as a world pickup. UI,
+	# loot, and texture packs therefore all resolve one item ID to one sprite.
+	item.texture_path = "res://assets/items/pickups/%s.png" % item_id
 	item.category = category
 	item.stack_size = stack_size
 	item.weight = weight

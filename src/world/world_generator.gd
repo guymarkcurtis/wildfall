@@ -113,6 +113,61 @@ func get_poi_definitions() -> Dictionary:
 func get_terrain_feature_definitions() -> Dictionary:
 	return get_content_registry().terrain_features
 
+## Map-facing POI snapshot over the configured finite world. This reuses the
+## same coordinate anchors, eligibility checks, seed stream, and cave routing
+## as chunk generation, but samples only POI anchor tiles instead of building
+## every chunk. The result is therefore suitable for a map legend without
+## forcing the whole terrain/resource pipeline to stream at once.
+func get_map_poi_candidates() -> Array[Dictionary]:
+	if generation_context == null:
+		initialize(current_seed)
+	var candidates: Array[Dictionary] = []
+	for request in get_map_poi_anchor_requests():
+		var candidate := get_map_poi_candidate(str(request["poi_id"]), request["tile"])
+		if not candidate.is_empty():
+			candidates.append(candidate)
+	return candidates
+
+## Cheap first half of the finite-map query. UI can evaluate these sparse
+## anchors over several frames, avoiding a one-frame hitch the first time the
+## player opens the map.
+func get_map_poi_anchor_requests() -> Array[Dictionary]:
+	if generation_context == null:
+		initialize(current_seed)
+	var requests: Array[Dictionary] = []
+	var config := get_configuration()
+	var world_start := config.world_origin_chunk * config.chunk_size_tiles
+	var world_end := world_start + config.world_dimensions_chunks * config.chunk_size_tiles - Vector2i.ONE
+	var poi_ids := get_poi_definitions().keys()
+	poi_ids.sort()
+	for poi_id_variant in poi_ids:
+		var poi := get_content_registry().get_poi(str(poi_id_variant))
+		if poi == null:
+			continue
+		for tile in _poi_anchor_tiles_in_rect(poi, world_start, world_end):
+			requests.append({"poi_id": poi.id, "tile": tile})
+	return requests
+
+## Evaluate one sparse map anchor through the exact same eligibility and roll
+## used by streamed chunk generation.
+func get_map_poi_candidate(poi_id: String, tile: Vector2i) -> Dictionary:
+	var poi := get_content_registry().get_poi(poi_id)
+	if poi == null:
+		return {}
+	var values := get_noise_values(float(tile.x), float(tile.y))
+	if _is_water(values["elevation"], values["moisture"], values["water"]):
+		return {}
+	var anchor_distance := -1
+	if poi.min_distance_to_water != -1 or poi.max_distance_to_water != -1:
+		anchor_distance = get_distance_to_water_at_world(tile.x, tile.y)
+	if not definition_within_distance(poi.min_distance_to_water, poi.max_distance_to_water, anchor_distance):
+		return {}
+	var biome_id := get_biome_at_world(tile.x, tile.y)
+	var biome := get_biome(biome_id)
+	if biome == null or not _poi_allows_biome(poi, biome):
+		return {}
+	return _poi_candidate_from_anchor(poi, tile, biome)
+
 ## Generate one chunk through environment, water, biome, coherent-region,
 ## terrain-feature, and POI stages.
 ## Runtime resource/creature nodes are populated by Main after this base data.
@@ -223,6 +278,80 @@ func get_seed() -> int:
 
 func is_chunk_in_bounds(coords: Vector2i) -> bool:
 	return get_configuration().is_chunk_in_bounds(coords)
+
+## Compact, coordinate-only report for reproducing a bad world location.
+## This deliberately queries the existing deterministic APIs instead of
+## retaining generation history. It is therefore safe to call for unloaded
+## chunks and produces the same report before or after a chunk streams in.
+## The river query is more expensive than ordinary field sampling, so UI
+## callers should refresh this report when the inspected tile changes rather
+## than once per frame.
+func get_tile_diagnostics(world_x: int, world_y: int) -> Dictionary:
+	if noise_layers == null or not is_instance_valid(noise_layers):
+		initialize(current_seed)
+	var config := get_configuration()
+	var tile := Vector2i(world_x, world_y)
+	var chunk_size: int = config.chunk_size_tiles
+	var chunk := Vector2i(floori(float(world_x) / float(chunk_size)),
+			floori(float(world_y) / float(chunk_size)))
+	var chunk_start := chunk * chunk_size
+	var values := get_noise_values(float(world_x), float(world_y))
+	var is_water_tile := _is_water(values["elevation"], values["moisture"], values["water"])
+	return {
+		"seed": current_seed,
+		"config_id": config.config_id,
+		"generation_version": config.generation_version,
+		"tile": tile,
+		"chunk": chunk,
+		"chunk_tile_bounds": Rect2i(chunk_start, Vector2i(chunk_size, chunk_size)),
+		"chunk_pixel_bounds": Rect2i(chunk_start * config.tile_size_pixels,
+				Vector2i(chunk_size * config.tile_size_pixels, chunk_size * config.tile_size_pixels)),
+		"region_cell": _cell_coords_for_tile(world_x, world_y)
+				if config.region_cell_size_tiles > 0 else Vector2i.ZERO,
+		"fields": values,
+		"biome": get_biome_at_world(world_x, world_y),
+		"water": {
+			"is_water": is_water_tile,
+			"class": get_water_class_at_world(world_x, world_y),
+			"origin": get_water_origin_at_world(world_x, world_y),
+			"distance": get_distance_to_water_at_world(world_x, world_y),
+			"river": is_river_at_world(world_x, world_y)
+		}
+	}
+
+## Stable, compact layer fingerprints for fixed-seed regression checks.
+## Fingerprints cover output layers separately, so a mismatch identifies the
+## affected stage and chunk instead of reducing a changed world to one opaque
+## checksum. They are diagnostic values, not save data or a network format.
+func get_chunk_fingerprints(chunk_coords: Vector2i) -> Dictionary:
+	var data := generate_chunk(chunk_coords)
+	if data.is_empty():
+		return {}
+	return {
+		"environment": _fingerprint_value({
+			"elevation": data["elevation"], "moisture": data["moisture"],
+			"temperature": data["temperature"], "water": data["water"]
+		}),
+		"hydrology": _fingerprint_value({
+			"water_mask": data["water_mask"], "water_class": data["water_class"],
+			"water_origin": data["water_origin"], "distance_to_water": data["distance_to_water"],
+			"river_mask": data["river_mask"]
+		}),
+		"biomes": _fingerprint_value({"biomes": data["biomes"], "region_cells": data["region_cells"]}),
+		"candidates": _fingerprint_value({
+			"feature_candidates": data["feature_candidates"], "poi_candidates": data["poi_candidates"]
+		})
+	}
+
+## A deliberately small deterministic text hash. String representations here
+## are made from ordered arrays and dictionaries whose keys are inserted in
+## source order above; avoiding an engine/platform hash makes golden results
+## straightforward to reproduce in the headless harness.
+func _fingerprint_value(value: Variant) -> String:
+	var hash: int = 216613626
+	for byte in str(value).to_utf8_buffer():
+		hash = posmod(hash * 16777619 + int(byte), 2147483647)
+	return "%08x" % hash
 
 func get_noise_values(x: float, y: float) -> Dictionary:
 	if noise_layers == null or not is_instance_valid(noise_layers):
@@ -506,29 +635,33 @@ func _generate_environmental_fields(chunk_coords: Vector2i) -> Dictionary:
 	var rect_side: int = size + 2 * halo
 	var rect_elevation := PackedFloat32Array()
 	var rect_moisture := PackedFloat32Array()
-	var rect_temperature := PackedFloat32Array()
 	var rect_water := PackedFloat32Array()
+	var temperature := PackedFloat32Array()
 	rect_elevation.resize(rect_side * rect_side)
 	rect_moisture.resize(rect_side * rect_side)
-	rect_temperature.resize(rect_side * rect_side)
 	rect_water.resize(rect_side * rect_side)
+	temperature.resize(size * size)
 	for y in range(rect_side):
 		for x in range(rect_side):
 			var world_x := float(rect_start.x + x)
 			var world_y := float(rect_start.y + y)
 			rect_elevation[y * rect_side + x] = _normalized(noise_layers.get_elevation(world_x, world_y))
 			rect_moisture[y * rect_side + x] = _normalized(noise_layers.get_moisture(world_x, world_y))
-			rect_temperature[y * rect_side + x] = _normalized(noise_layers.get_temperature(world_x, world_y))
 			rect_water[y * rect_side + x] = _normalized(noise_layers.get_water(world_x, world_y))
+			# Temperature only feeds the chunk's biome-selection core. Water,
+			# distance and river stages need the expanded elevation/moisture/water
+			# rect, but sampling temperature throughout that halo wasted thousands
+			# of noise calls per streamed chunk.
+			if x >= halo and x < halo + size and y >= halo and y < halo + size:
+				temperature[(y - halo) * size + (x - halo)] = _normalized(
+						noise_layers.get_temperature(world_x, world_y))
 	var elevation := PackedFloat32Array()
 	var moisture := PackedFloat32Array()
-	var temperature := PackedFloat32Array()
 	var water := PackedFloat32Array()
 	for y in range(size):
 		var row_base: int = (y + halo) * rect_side + halo
 		elevation.append_array(rect_elevation.slice(row_base, row_base + size))
 		moisture.append_array(rect_moisture.slice(row_base, row_base + size))
-		temperature.append_array(rect_temperature.slice(row_base, row_base + size))
 		water.append_array(rect_water.slice(row_base, row_base + size))
 	var water_dist := PackedInt32Array()
 	var water_dist_rect := PackedInt32Array()
@@ -683,8 +816,26 @@ func _build_river_mask(rect_start: Vector2i, rect_side: int, core_start: Vector2
 		core_side: int, river_halo: int, threshold: int,
 		rect_elevation: PackedFloat32Array, rect_moisture: PackedFloat32Array,
 		rect_water: PackedFloat32Array) -> PackedInt32Array:
+	var rect_area: int = rect_side * rect_side
 	var counts := PackedInt32Array()
-	counts.resize(rect_side * rect_side)
+	counts.resize(rect_area)
+	# The original bounded-flow implementation made a Dictionary for every
+	# source path and recalculated its 8-neighbour destination at every step.
+	# A single cached water mask, destination map and source-epoch array keep
+	# exactly the same coordinate-defined algorithm without transient container
+	# churn. This is important because the stage runs for every streamed chunk.
+	var water_flags := PackedByteArray()
+	water_flags.resize(rect_area)
+	for index in range(rect_area):
+		water_flags[index] = 1 if _is_water(rect_elevation[index], rect_moisture[index], rect_water[index]) else 0
+	var destinations := PackedInt32Array()
+	destinations.resize(rect_area)
+	for ry in range(rect_side):
+		for rx in range(rect_side):
+			destinations[ry * rect_side + rx] = _river_flow_destination(rx, ry, rect_side, rect_elevation)
+	var visited_epoch := PackedInt32Array()
+	visited_epoch.resize(rect_area)
+	var source_epoch: int = 0
 	var core_min_x: int = int(core_start.x) - river_halo
 	var core_max_x: int = int(core_start.x) + int(core_side) - 1 + river_halo
 	var core_min_y: int = int(core_start.y) - river_halo
@@ -698,23 +849,21 @@ func _build_river_mask(rect_start: Vector2i, rect_side: int, core_start: Vector2
 			if world_x < core_min_x or world_x > core_max_x:
 				continue
 			var i: int = ry * rect_side + rx
-			if _is_water(rect_elevation[i], rect_moisture[i], rect_water[i]):
+			if water_flags[i] != 0:
 				continue
-			# The per-source visited set is what keeps a source that
-			# recirculates (closed-basin meander) counting once per tile
-			# instead of once per lap.
-			var visited: Dictionary = {}
+			# An incrementing epoch is the per-source visited set. It keeps a
+			# source that recirculates counting once per tile instead of once
+			# per lap, without allocating a Dictionary for every source.
+			source_epoch += 1
 			var t: int = i
 			for step in range(river_halo):
-				if visited.has(t):
+				if visited_epoch[t] == source_epoch:
 					break
-				visited[t] = true
+				visited_epoch[t] = source_epoch
 				counts[t] += 1
-				if _is_water(rect_elevation[t], rect_moisture[t], rect_water[t]):
+				if water_flags[t] != 0:
 					break
-				var t_y: int = t / rect_side
-				var t_x: int = t % rect_side
-				t = _river_flow_destination(t_x, t_y, rect_side, rect_elevation)
+				t = destinations[t]
 				if t == -1:
 					break
 	var river_mask := PackedInt32Array()
@@ -724,7 +873,7 @@ func _build_river_mask(rect_start: Vector2i, rect_side: int, core_start: Vector2
 				+ (int(core_start.x) - int(rect_start.x))
 		for cx in range(core_side):
 			var i: int = row + int(cx)
-			if _is_water(rect_elevation[i], rect_moisture[i], rect_water[i]):
+			if water_flags[i] != 0:
 				river_mask[cy * core_side + cx] = 0
 			else:
 				river_mask[cy * core_side + cx] = 1 if counts[i] >= threshold else 0
@@ -792,7 +941,6 @@ func _generate_poi_candidates(chunk_coords: Vector2i, biome_map: PackedStringArr
 		var poi := get_content_registry().get_poi(str(poi_id_variant))
 		if poi == null:
 			continue
-		var cave_linked := _has_cave_for_poi(poi.id)
 		for tile in _poi_anchor_tiles_in_chunk(poi, world_start, size):
 			var local := tile - world_start
 			var index := local.y * size + local.x
@@ -813,66 +961,66 @@ func _generate_poi_candidates(chunk_coords: Vector2i, biome_map: PackedStringArr
 			var biome := get_biome(biome_id)
 			if biome == null or not _poi_allows_biome(poi, biome):
 				continue
-			var random := RandomNumberGenerator.new()
-			random.seed = generation_context.tile_seed(tile,
-					WorldGenerationContext.stable_string_seed(poi.id) ^ 0x45D9F3B)
-			if cave_linked:
-				var chance := clampf(biome.cave_entrance_suitability * maxf(0.0, poi.spawn_weight), 0.0, 1.0)
-				if random.randf() > chance:
-					continue
-				var cave := _choose_cave_for_biome(biome, random, poi.id)
-				if cave == null:
-					continue
-				candidates.append({
-					"poi_id": poi.id,
-					"poi_category": poi.category,
-					"poi_name": poi.display_name,
-					"cave_type_id": cave.id,
-					"cave_id": generation_context.cave_identity(tile, cave.id),
-					"x": tile.x,
-					"y": tile.y,
-					"biome": biome_id
-				})
-			else:
-				var chance := clampf(poi.spawn_weight, 0.0, 1.0)
-				if random.randf() > chance:
-					continue
-				candidates.append({
-					"poi_id": poi.id,
-					"poi_category": poi.category,
-					"poi_name": poi.display_name,
-					"cave_type_id": "",
-					"cave_id": "",
-					"x": tile.x,
-					"y": tile.y,
-					"biome": biome_id
-				})
+			var candidate := _poi_candidate_from_anchor(poi, tile, biome)
+			if not candidate.is_empty():
+				candidates.append(candidate)
 	return candidates
+
+## Shared POI roll and cave routing. Chunk generation and the map call this
+## with the same anchor tile and biome, so a map marker cannot disagree with
+## the deterministic candidate that will appear once its chunk streams in.
+func _poi_candidate_from_anchor(poi: POIDefinition, tile: Vector2i, biome: BiomeDefinition) -> Dictionary:
+	var random := RandomNumberGenerator.new()
+	random.seed = generation_context.tile_seed(tile,
+			WorldGenerationContext.stable_string_seed(poi.id) ^ 0x45D9F3B)
+	if _has_cave_for_poi(poi.id):
+		var chance := clampf(biome.cave_entrance_suitability * maxf(0.0, poi.spawn_weight), 0.0, 1.0)
+		if random.randf() > chance:
+			return {}
+		var cave := _choose_cave_for_biome(biome, random, poi.id)
+		if cave == null:
+			return {}
+		return {
+			"poi_id": poi.id, "poi_category": poi.category, "poi_name": poi.display_name,
+			"cave_type_id": cave.id, "cave_id": generation_context.cave_identity(tile, cave.id),
+			"x": tile.x, "y": tile.y, "biome": biome.id
+		}
+	if random.randf() > clampf(poi.spawn_weight, 0.0, 1.0):
+		return {}
+	return {
+		"poi_id": poi.id, "poi_category": poi.category, "poi_name": poi.display_name,
+		"cave_type_id": "", "cave_id": "", "x": tile.x, "y": tile.y, "biome": biome.id
+	}
 
 ## Each POI uses a deterministic grid offset derived from its data ID. Anchor
 ## cells give it a real cross-chunk spacing guarantee without retaining global
 ## generation state, so chunks remain safe to generate in any order.
 func _poi_anchor_tiles_in_chunk(poi: POIDefinition, world_start: Vector2i, size: int) -> Array[Vector2i]:
+	return _poi_anchor_tiles_in_rect(poi, world_start, world_start + Vector2i(size - 1, size - 1))
+
+## Anchor grid intersection over any inclusive world-tile rectangle. This is
+## the same math chunk generation uses, extracted so the map can inspect a
+## finite world's sparse POI anchors without generating every chunk.
+func _poi_anchor_tiles_in_rect(poi: POIDefinition, rect_start: Vector2i, rect_end: Vector2i) -> Array[Vector2i]:
 	var spacing := maxi(1, poi.min_spacing_tiles)
 	var offset_random := RandomNumberGenerator.new()
 	offset_random.seed = generation_context.tile_seed(Vector2i.ZERO,
 			WorldGenerationContext.stable_string_seed(poi.id) ^ 0x2C1B3C6D)
 	var offset := Vector2i(offset_random.randi_range(0, spacing - 1), offset_random.randi_range(0, spacing - 1))
-	var world_end := world_start + Vector2i(size - 1, size - 1)
 	var first_cell := Vector2i(
-		floori(float(world_start.x - offset.x) / float(spacing)),
-		floori(float(world_start.y - offset.y) / float(spacing))
+		floori(float(rect_start.x - offset.x) / float(spacing)),
+		floori(float(rect_start.y - offset.y) / float(spacing))
 	)
 	var last_cell := Vector2i(
-		floori(float(world_end.x - offset.x) / float(spacing)),
-		floori(float(world_end.y - offset.y) / float(spacing))
+		floori(float(rect_end.x - offset.x) / float(spacing)),
+		floori(float(rect_end.y - offset.y) / float(spacing))
 	)
 	var anchors: Array[Vector2i] = []
 	for cell_y in range(first_cell.y, last_cell.y + 1):
 		for cell_x in range(first_cell.x, last_cell.x + 1):
 			var anchor := Vector2i(cell_x * spacing, cell_y * spacing) + offset
-			if anchor.x >= world_start.x and anchor.x <= world_end.x \
-					and anchor.y >= world_start.y and anchor.y <= world_end.y:
+			if anchor.x >= rect_start.x and anchor.x <= rect_end.x \
+					and anchor.y >= rect_start.y and anchor.y <= rect_end.y:
 				anchors.append(anchor)
 	return anchors
 

@@ -1,7 +1,7 @@
 # Wildfall Test Results
 
 ## Test Run Summary
-- **Current verification**: 367 checks passed, 0 failures, 0 script errors (Godot 4.7.2 headless run after the data-driven world-generation, regional-biome, POI-spacing, cave-runtime, directional-animation, fixed-world-direction control, startup content-validation (WG-01), the generic POI layer (WG-02), the coherent-region stage (WG-03), and the terrain-feature candidate layer (WG-04), and the water classification +
+- **Current verification**: 428 checks passed, 0 failures, 0 script errors (Godot 4.7.2 headless run after the PixelLab harvesting presentation pass: four 160×192 biome tree species, a four-frame broadleaf hit shake, complete 19-item 32×32 pickup-art set, two-hop world drops, delayed inventory transfer, and proximity magnet collection; plus the UI and graphical refinement pass, the data-driven world-generation, regional-biome, POI-spacing, cave-runtime, directional-animation, fixed-world-direction control, startup content-validation (WG-01), the generic POI layer (WG-02), the coherent-region stage (WG-03), the terrain-feature candidate layer (WG-04), density-field surface resources (WG-07), playable persistent cave deposits (WG-08), expressive cave-definition data (WG-09), compact bad-seed diagnostics (WG-10), fixed-seed layer regression plus configured-radius streaming measurement (WG-11), and a filterable cave/POI world map with waypoint minimap, and the water classification +
   shore distance field (WG-05), and the connected-hydrology stage (WG-06) work; includes registry, large-world configuration, underground-mineral filtering, deterministic regional/POI/cave identity, underground cave deposits, cave entry/exit, discovery-ledger checks, authored player-direction/action frames, jumping, all four fixed WASD axes, the 20-check invalid-content validation suite, the 11-check coherent-region suite (fixture data-driven region floors, world-aligned cell grid, no sub-floor fragments, metadata-respecting merges, tile-for-tile payload/query agreement, seam-chunk and reversed-order stability, and a live-seed dormant no-op), and the 15-check terrain-feature suite (asset discovery/validation, dormant live world, regeneration + seam + reversed-order stability, halo/owner invariants, min-spacing, and the spawner's no_spawn veto end-to-end), and
   the 28-check water-classification suite (fixture classes/origins over all
   9,216 tiles against the halo-expanded 12,544-tile reference, the
@@ -23,6 +23,37 @@
   gains the key while content stays unperturbed))
 - **Godot Version**: 4.7.2.stable (linux.x86_64, official) — the project was upgraded to Godot 4.7 on 2026-09-11 (editor config sync from the Mac) and the Linux verification binary was upgraded to match
 - **Test Script**: `tests/test_game.gd` (SceneTree harness that boots the real `main.tscn`, validates world, UI, inventory, building, technology progression, texture-pack export/live switching, save persistence of player-caused world mutations, and resource accessibility, then exits with the failure count as its exit code)
+
+### PixelLab harvesting presentation (2026-09-14)
+
+- The stock tree is a native 160×192 transparent PixelLab sprite, anchored by
+  its roots to the original resource tile and retaining the compact collision
+  footprint used for harvesting.
+- Four PixelLab animation frames play on every successful tree hit and settle
+  back to the idle sprite. The final hit remains visible long enough to finish
+  the response before the depleted node is freed.
+- Every item currently emitted by resource and creature drop tables has a
+  dedicated 32×32 PixelLab world sprite. Drops make a two-hop arc with a
+  contact shadow, then magnetize within 112px.
+- Inventory and `item_added` mission progress occur on collection, not at
+  resource depletion or creature death. Inventory-full remainders stay on the
+  ground and retry later.
+- Added 7 regression checks covering tree scale, complete animation/art
+  contracts, hit response, delayed ownership, bounce height, and magnet pickup.
+  The focused harvesting/crafting check and texture-pack export check also
+  pass with the new lifecycle.
+
+### PixelLab biome tree species (2026-09-14)
+
+- Added three native 160×192 PixelLab sprites: pine for arctic/mountain,
+  willow for swamp, and meadow tree for grassland. The original broadleaf
+  tree remains the temperate-forest species.
+- Tree species are discoverable `ResourceDefinition` assets. Their biome
+  eligibility, density, yields, harvest category, and bespoke sprite path are
+  data; adding another species does not require a generator branch.
+- Added two regression checks for all three assets' art/biome contracts and
+  their generic harvestable runtime metadata. Full harness: **428 passed, 0
+  failed**.
 
 ### Test command
 ```bash
@@ -301,7 +332,7 @@ is a documented seam, not wired this card.
 ## Rivers and streams — WG-06 (2026-09-13)
 
 `WorldGenerator` now builds a connected-hydrology river mask per chunk.
-`R = river_halo_tiles` (fixture 16, live 24) is both the path-length cap
+`R = river_halo_tiles` (fixture 16, live 8) is both the path-length cap
 and the contribution radius (Chebyshev): the stage rect is the chunk core
 grown 2R+1 tiles per side (unclamped at the world edge), and every land
 tile within R tiles of the core is a unit source. Each source walks
@@ -413,7 +444,7 @@ below.
   bare-hand fallback); re-craft restores full durability;
   non-durable items untouched; worn durability survives a save/load
   round trip (save format v5).
-- **Missions (32 checks)** — 7-mission catalog; M-key journal
+- **Missions (32 checks)** — 7-mission catalog; J-key journal
   toggle; First Steps auto-accepts on a new world; prerequisite locks
   (accept rejected with the unmet-prerequisite titles reported);
   progress counts only while a mission is IN_PROGRESS and only from

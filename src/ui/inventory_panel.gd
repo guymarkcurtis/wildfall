@@ -172,13 +172,23 @@ func _create_slots(grid: GridContainer, count: int, is_hotbar: bool) -> Array[Di
 		number.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		slot.add_child(number)
 
+		# Names live in the hover tooltip; the slot itself stays a quick visual
+		# scan of the same sprite used by its world pickup.
+		var icon := TextureRect.new()
+		icon.position = Vector2(11.0, 10.0)
+		icon.size = Vector2(46.0, 42.0)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.add_child(icon)
+
 		var item_label := Label.new()
-		item_label.position = Vector2(5.0, 17.0)
-		item_label.size = Vector2(SLOT_SIZE - 10.0, 37.0)
+		item_label.position = Vector2(5.0, 48.0)
+		item_label.size = Vector2(35.0, 16.0)
 		item_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		item_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		item_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		item_label.add_theme_font_size_override("font_size", 11)
+		item_label.add_theme_font_size_override("font_size", 10)
 		item_label.add_theme_color_override("font_color", Color(0.91, 0.92, 0.84))
 		item_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		slot.add_child(item_label)
@@ -196,6 +206,7 @@ func _create_slots(grid: GridContainer, count: int, is_hotbar: bool) -> Array[Di
 			"slot": slot,
 			"background": background,
 			"selected": selected,
+			"icon": icon,
 			"item_label": item_label,
 			"quantity": quantity
 		})
@@ -297,6 +308,7 @@ func _set_slot(slot: Dictionary, item_id: String, quantity: int, is_hotbar: bool
 	(slot["background"] as ColorRect).color = Color(0.24, 0.31, 0.19, 0.98) if selected else Color(0.12, 0.16, 0.12, 0.96)
 	var item_label := slot["item_label"] as Label
 	item_label.text = _durability_label(item_id) if item_id != "" else ""
+	(slot["icon"] as TextureRect).texture = _item_icon(item_id)
 	item_label.remove_theme_color_override("font_color")
 	var max_durability := _max_duration(item_id)
 	if item_label != null and item_id != "" and max_durability > 0:
@@ -349,11 +361,21 @@ func _display_name(item_id: String) -> String:
 func _durability_label(item_id: String) -> String:
 	if item_id == "":
 		return ""
-	var name := _display_name(item_id)
 	var max_dur := _max_duration(item_id)
 	if max_dur <= 0:
-		return name
-	return "%s\n%d/%d" % [name, int(_durations.get(item_id, 0)), max_dur]
+		return ""
+	return "%d/%d" % [int(_durations.get(item_id, 0)), max_dur]
+
+func _item_icon(item_id: String) -> Texture2D:
+	if item_id.is_empty():
+		return null
+	var item_db := get_tree().root.get_node_or_null("Main/ItemDatabase")
+	if item_db == null:
+		return null
+	var item: ItemDefinition = item_db.get_item(item_id)
+	if item == null or item.texture_path.is_empty():
+		return null
+	return TexturePackManager.get_texture(item.texture_path)
 
 func _max_duration(item_id: String) -> int:
 	var item_db := get_tree().root.get_node_or_null("Main/ItemDatabase")

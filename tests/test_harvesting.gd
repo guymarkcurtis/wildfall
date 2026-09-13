@@ -23,10 +23,15 @@ func run() -> void:
 		for hit in range(4):
 			player.set("_fire_cooldown", 0.0)
 			player._handle_interaction()
-		if not resource.is_destroyed or player.inventory.get_item_quantity(entry.item) != before + 4:
+		var depleted := resource.is_destroyed
+		var drops_spawned := (main.get("_pickup_nodes") as Array).size() > 0
+		# Loot now has a visible hop before its proximity pickup. Give that
+		# animation and the short magnet travel time a chance to finish.
+		for frame in range(60):
+			await process_frame
+		if not depleted or not drops_spawned or player.inventory.get_item_quantity(entry.item) != before + 4:
 			failures += 1
 			push_error("Harvest failed: " + entry.type)
-		await process_frame
 	var wood_before := player.inventory.get_item_quantity("wood")
 	var planks_before := player.inventory.get_item_quantity("plank")
 	var recipes: Array = main.get("_recipe_defs")

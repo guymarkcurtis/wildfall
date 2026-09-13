@@ -16,6 +16,7 @@ const TILE_SIZE: int = 32
 const CHUNK_SIZE: int = 16
 const INITIAL_CHUNK_RADIUS: int = 3
 const CAVE_SPACE_SCENE := preload("res://scenes/cave_space.tscn")
+const PICKUP_ASSET_ROOT := "res://assets/items/pickups"
 # Cave spaces share the runtime scene tree but live outside the finite surface
 # coordinate range. This keeps surface physics and streamed content separate.
 const CAVE_SPACE_ORIGIN := Vector2(1000000.0, 1000000.0)
@@ -36,6 +37,7 @@ const CAVE_SPACE_ORIGIN := Vector2(1000000.0, 1000000.0)
 @onready var technology_panel: Variant = $HUD/TechnologyPanel
 @onready var mission_manager: MissionManager = $MissionManager
 @onready var mission_panel: Variant = $HUD/MissionPanel
+@onready var world_map: WorldMap = $HUD/WorldMap
 @onready var crafting_panel: CraftingPanel = $HUD/CraftingPanel
 @onready var save_system: SaveSystem = $SaveSystem
 @onready var day_night: DayNightCycle = $DayNightCycle
@@ -50,6 +52,8 @@ const CAVE_SPACE_ORIGIN := Vector2(1000000.0, 1000000.0)
 
 var _world_seed: int = 0
 var _debug_enabled: bool = false
+var _last_debug_tile := Vector2i(999999999, 999999999)
+var _last_debug_diagnostics: Dictionary = {}
 # Live HarvestableResource nodes (children of Main, siblings of the Player
 # so the player's nearby-resource scan can find them).
 var _resource_nodes: Array = []
@@ -60,6 +64,8 @@ var _recipe_defs: Array = []
 # Live Creature nodes (children of Main, siblings of the Player so the
 # player's nearby-creature scan can find them).
 var _creature_nodes: Array = []
+var _pickup_nodes: Array[WorldPickup] = []
+var _pickup_spawn_serial := 0
 # chunk_coords (Vector2i) -> Array of that chunk's creature nodes.
 var _creatures_by_chunk: Dictionary = {}
 var _cave_entrance_nodes: Array[CaveEntrance] = []
@@ -75,6 +81,11 @@ var _feature_markers_by_chunk: Dictionary = {}
 var _active_cave_space: CaveSpace = null
 var _active_cave_id: String = ""
 var _surface_position_before_cave: Vector2 = Vector2.ZERO
+## Live underground harvestables are intentionally separate from the streamed
+## surface resource tables. Their deterministic base candidates belong to a
+## cave identity, while the mutation ledger records only depleted candidate
+## IDs (not an entire cave snapshot).
+var _cave_resource_nodes: Array[HarvestableResource] = []
 # Spawn tiles removed by the player. The world itself is deterministic, so
 # saves only need this small mutation ledger instead of serializing every
 # generated resource and creature in every visited chunk.
@@ -141,6 +152,9 @@ func _ready() -> void:
 	# HUD (health/hunger bars, seed label, optional debug readout).
 	hud.set_player(player)
 	hud.set_seed(_world_seed)
+	if world_map != null:
+		world_map.configure(world_generator, player)
+		world_map.waypoint_changed.connect(_on_map_waypoint_changed)
 
 	# Initialize the item database BEFORE the first refresh: the crafting
 	# panel is filled from item_database.recipes, and nothing else in the
@@ -205,16 +219,24 @@ func _generate_world(seed: int) -> void:
 	# immediately after this reset through the world_state save module.
 	if is_in_cave():
 		_exit_cave(false)
+	_clear_cave_resource_nodes()
 	_destroyed_resource_tiles.clear()
 	_destroyed_creature_tiles.clear()
 	_discovered_cave_ids.clear()
 	_cave_changes.clear()
+	if world_map != null:
+		world_map.set_world_seed(seed)
 	# Free the previous world's resource nodes and rendered terrain first.
 	for node in _resource_nodes:
 		if is_instance_valid(node):
 			node.queue_free()
 	_resource_nodes.clear()
 	_resources_by_chunk.clear()
+	for pickup in _pickup_nodes:
+		if is_instance_valid(pickup):
+			pickup.queue_free()
+	_pickup_nodes.clear()
+	_pickup_spawn_serial = 0
 	_pending_chunk_visuals.clear()
 	terrain_renderer.clear_all()
 
@@ -296,6 +318,7 @@ func _process_one_chunk_visual() -> void:
 ## Test/tool hook: drains deferred chunk presentation deliberately, while
 ## normal play uses one chunk per frame to keep movement responsive.
 func flush_pending_chunk_visuals() -> void:
+	chunk_system.flush_pending_generation()
 	while not _pending_chunk_visuals.is_empty():
 		_process_one_chunk_visual()
 
@@ -308,6 +331,10 @@ func _on_chunk_unloaded(chunk_coords: Vector2i) -> void:
 			_resource_nodes.erase(node)
 			node.queue_free()
 	_resources_by_chunk.erase(chunk_coords)
+	for pickup in _pickup_nodes.duplicate():
+		if is_instance_valid(pickup) and pickup.get_meta("chunk_coords", Vector2i(999999999, 999999999)) == chunk_coords:
+			_pickup_nodes.erase(pickup)
+			pickup.queue_free()
 	# Drop the spawners' records for this chunk too: otherwise their
 	# tile-keyed entries survive the unload and re-entering the chunk
 	# spawns nothing (the guards think the chunk is already done).
@@ -373,7 +400,10 @@ func _spawn_resources_for_chunk(chunk_coords: Vector2i, chunk_data: Dictionary) 
 		# under Main, so the player's nearby-resource scan can find it).
 		var resource := HarvestableResource.new()
 		resource.position = Vector2(x_val, y_val) * float(TILE_SIZE)
-		resource.setup(res_type, float(res_data.get("health", 100.0)), res_data.get("yields", []))
+		resource.setup(res_type, float(res_data.get("health", 100.0)), res_data.get("yields", []),
+				str(res_data.get("display_name", "")), str(res_data.get("harvest_group", "")),
+				str(res_data.get("visual_texture_path", "")), bool(res_data.get("visual_ground_anchor", false)),
+				res_data.get("visual_hit_animation_paths", PackedStringArray()))
 		resource.set_meta("resource_type", res_type)
 		resource.set_meta("chunk_coords", chunk_coords)
 		resource.set_meta("spawn_tile", spawn_tile)
@@ -488,6 +518,7 @@ func enter_cave_from_entrance(entrance: CaveEntrance) -> bool:
 			definition, world_generator.get_content_registry().resources)
 	if generated.is_empty():
 		return false
+	generated = _apply_cave_mutations_to_generated_data(generated)
 	_active_cave_id = entrance.cave_id
 	_surface_position_before_cave = player.global_position
 	_active_cave_space = CAVE_SPACE_SCENE.instantiate() as CaveSpace
@@ -499,6 +530,7 @@ func enter_cave_from_entrance(entrance: CaveEntrance) -> bool:
 	_active_cave_space.setup(generated)
 	_active_cave_space.exit_requested.connect(_on_cave_exit_requested)
 	add_child(_active_cave_space)
+	_spawn_cave_resource_nodes(generated)
 	_discovered_cave_ids[_active_cave_id] = true
 	terrain_renderer.set_world_visible(false)
 	if building_manager != null:
@@ -537,6 +569,7 @@ func _exit_cave(show_toast: bool = true) -> void:
 		return
 	if is_instance_valid(_active_cave_space):
 		_active_cave_space.queue_free()
+	_clear_cave_resource_nodes()
 	_active_cave_space = null
 	_active_cave_id = ""
 	player.global_position = _surface_position_before_cave
@@ -559,8 +592,8 @@ func _exit_cave(show_toast: bool = true) -> void:
 	if show_toast and hud != null:
 		hud.show_toast("Returned to the surface")
 
-## A creature was killed: remove it, hand the rolled loot to the player's
-## inventory, announce the death on the event bus, and free the node.
+## A creature was killed: remove it, bounce its rolled loot into the world,
+## announce the death on the event bus, and free the node.
 func _on_creature_died(creature_node: Node) -> void:
 	if _creature_nodes.has(creature_node):
 		_creature_nodes.erase(creature_node)
@@ -580,9 +613,7 @@ func _on_creature_died(creature_node: Node) -> void:
 			var quantity: int = int(entry.get("quantity", 0))
 			if item_id == "" or quantity <= 0:
 				continue
-			if player and player.inventory:
-				player.inventory.add_item(item_id, quantity)
-			$GameEventBus.item_added.emit(item_id, quantity)
+			_spawn_world_pickup(creature_node.global_position, item_id, quantity, chunk_key)
 	if is_instance_valid(creature_node):
 		creature_node.queue_free()
 
@@ -594,6 +625,12 @@ func _on_tool_broken(item_id: String) -> void:
 func _on_toggle_missions_ui() -> void:
 	if mission_panel != null:
 		mission_panel.toggle()
+
+func _on_map_waypoint_changed(tile: Vector2i, label: String) -> void:
+	if tile.x != 999999999:
+		hud.show_toast("Waypoint set: %s (%d, %d)" % [label, tile.x, tile.y])
+	else:
+		hud.show_toast("Waypoint cleared")
 
 func _on_missions_changed() -> void:
 	if mission_panel != null and mission_panel.visible:
@@ -619,11 +656,99 @@ func _on_resource_depleted(resource_node: Node) -> void:
 	_destroyed_resource_tiles[spawn_tile] = true
 	resource_spawner.remove_resource(spawn_tile)
 
-## A harvestable resource yielded an item: hand it to the player.
-func _on_resource_destroyed(_resource_node: Node, item_id: String, quantity: int) -> void:
-	if player and player.inventory:
-		player.inventory.add_item(item_id, quantity)
-	$GameEventBus.item_added.emit(item_id, quantity)
+## WG-08: cave deposits use the same HarvestableResource interaction and loot
+## path as surface nodes, but their stable mutation key is a cave candidate ID
+## rather than a world tile. This preserves the base-world + mutation-ledger
+## save model and deliberately makes no reset-policy decision.
+func _on_cave_resource_depleted(resource_node: Node) -> void:
+	if _cave_resource_nodes.has(resource_node):
+		_cave_resource_nodes.erase(resource_node)
+	var cave_id := str(resource_node.get_meta("cave_id", ""))
+	var candidate_id := str(resource_node.get_meta("cave_candidate_id", ""))
+	if not cave_id.is_empty() and not candidate_id.is_empty():
+		var changes: Dictionary = _cave_changes.get(cave_id, {})
+		var depleted: Dictionary = changes.get("depleted_deposits", {})
+		depleted[candidate_id] = true
+		changes["depleted_deposits"] = depleted
+		_cave_changes[cave_id] = changes
+
+func _apply_cave_mutations_to_generated_data(generated: Dictionary) -> Dictionary:
+	var cave_id := str(generated.get("cave_id", ""))
+	var changes: Dictionary = _cave_changes.get(cave_id, {})
+	var depleted: Dictionary = changes.get("depleted_deposits", {})
+	if depleted.is_empty():
+		return generated
+	var remaining: Array[Dictionary] = []
+	for candidate_variant in generated.get("resource_candidates", []):
+		var candidate: Dictionary = candidate_variant
+		if not depleted.has(str(candidate.get("candidate_id", ""))):
+			remaining.append(candidate)
+	var updated := generated.duplicate(true)
+	updated["resource_candidates"] = remaining
+	return updated
+
+func _spawn_cave_resource_nodes(generated: Dictionary) -> void:
+	_clear_cave_resource_nodes()
+	for candidate_variant in generated.get("resource_candidates", []):
+		var candidate: Dictionary = candidate_variant
+		var resource := HarvestableResource.new()
+		var cave_position: Vector2 = Vector2(candidate.get("position", Vector2i.ZERO)) * float(TILE_SIZE)
+		resource.position = CAVE_SPACE_ORIGIN + cave_position
+		resource.setup(str(candidate.get("resource_id", "")), float(candidate.get("health", 1.0)),
+				candidate.get("yields", []))
+		resource.set_meta("cave_id", str(generated.get("cave_id", "")))
+		resource.set_meta("cave_candidate_id", str(candidate.get("candidate_id", "")))
+		resource.resource_depleted.connect(_on_cave_resource_depleted.bind(resource))
+		resource.resource_destroyed.connect(func(item_id: String, quantity: int):
+			_on_resource_destroyed(resource, item_id, quantity))
+		add_child(resource)
+		_cave_resource_nodes.append(resource)
+
+func _clear_cave_resource_nodes() -> void:
+	for resource in _cave_resource_nodes:
+		if is_instance_valid(resource):
+			resource.queue_free()
+	_cave_resource_nodes.clear()
+
+## A harvestable resource yielded an item: create a tactile world drop. The
+## inventory changes only after that drop reaches the player.
+func _on_resource_destroyed(resource_node: Node, item_id: String, quantity: int) -> void:
+	var origin: Vector2 = resource_node.global_position + Vector2(TILE_SIZE, TILE_SIZE) * 0.5
+	var chunk_coords: Vector2i = resource_node.get_meta("chunk_coords", Vector2i(999999999, 999999999))
+	_spawn_world_pickup(origin, item_id, quantity, chunk_coords)
+
+func _spawn_world_pickup(origin: Vector2, item_id: String, quantity: int,
+		chunk_coords: Vector2i = Vector2i(999999999, 999999999)) -> WorldPickup:
+	if item_id.is_empty() or quantity <= 0:
+		return null
+	var pickup := WorldPickup.new()
+	pickup.global_position = origin
+	pickup.set_meta("chunk_coords", chunk_coords)
+	add_child(pickup)
+	var texture_path := "%s/%s.png" % [PICKUP_ASSET_ROOT, item_id]
+	var texture := TexturePackManager.get_texture(texture_path)
+	var angle_seed := hash("%s|%s|%d" % [item_id, str(origin), _pickup_spawn_serial])
+	var angle := float(posmod(angle_seed, 6283)) / 1000.0
+	var speed := 58.0 + float(posmod(int(angle_seed / 7), 34))
+	_pickup_spawn_serial += 1
+	pickup.setup(item_id, quantity, player, texture, Vector2.from_angle(angle) * speed)
+	pickup.collection_requested.connect(_on_world_pickup_collection_requested)
+	pickup.tree_exiting.connect(_on_world_pickup_tree_exiting.bind(pickup))
+	_pickup_nodes.append(pickup)
+	return pickup
+
+func _on_world_pickup_collection_requested(item_id: String, quantity: int,
+		pickup: WorldPickup) -> void:
+	if not is_instance_valid(pickup) or player == null or player.inventory == null:
+		return
+	var remaining := player.inventory.add_item(item_id, quantity)
+	var accepted := quantity - remaining
+	if accepted > 0:
+		$GameEventBus.item_added.emit(item_id, accepted)
+	pickup.apply_collection(accepted)
+
+func _on_world_pickup_tree_exiting(pickup: WorldPickup) -> void:
+	_pickup_nodes.erase(pickup)
 
 ## Player death (HUD / respawn handling can hook in here later).
 func _on_player_died() -> void:
@@ -709,7 +834,8 @@ func _process(delta: float) -> void:
 	if camera_controller != null and is_instance_valid(player):
 		camera_controller.set_target(player.get_world_position())
 		if camera_controller.has_method("set_rotation_locked") and seed_input != null:
-			camera_controller.set_rotation_locked(seed_input.is_editing())
+			camera_controller.set_rotation_locked(seed_input.is_editing()
+					or (world_map != null and world_map.is_open()))
 	# Reflect the seed editor (T) state in the HUD seed label.
 	if hud != null and seed_input != null:
 		hud.set_seed_editing(seed_input.is_editing(), seed_input.get_input_buffer())
@@ -730,6 +856,8 @@ func _process(delta: float) -> void:
 		return
 	if Input.is_action_just_pressed("toggle_debug"):
 		_toggle_debug()
+	if Input.is_action_just_pressed("toggle_map") and world_map != null:
+		world_map.toggle()
 	if Input.is_action_just_pressed("save"):
 		save_game()
 	if Input.is_action_just_pressed("load"):
@@ -760,6 +888,8 @@ func _update_world_presentation(_delta: float) -> void:
 ## Toggle the debug overlays (Main's DebugOverlay + the HUD debug label).
 func _toggle_debug() -> void:
 	_debug_enabled = not _debug_enabled
+	# Force the coordinate report to be sampled when the panel is opened.
+	_last_debug_tile = Vector2i(999999999, 999999999)
 	debug_overlay.set_enabled(_debug_enabled)
 	hud.toggle_debug(_debug_enabled)
 
@@ -768,14 +898,17 @@ func _update_debug_overlay() -> void:
 	if not _debug_enabled:
 		return
 	var player_pos: Vector2 = player.get_world_position()
-	var tile_pos: Vector2i = Vector2i(int(player_pos.x / float(TILE_SIZE)), int(player_pos.y / float(TILE_SIZE)))
+	var tile_pos := Vector2i(floori(player_pos.x / float(TILE_SIZE)),
+			floori(player_pos.y / float(TILE_SIZE)))
 	# Show the same chunk ChunkSystem uses (pixel-based, floor) so the debug
 	# label never disagrees with the chunk that is actually loaded.
-	var chunk_pos: Vector2i = ChunkSystem.world_to_chunk_coords(player_pos)
-	var biome: String = world_generator.get_biome_at_world(tile_pos.x, tile_pos.y)
-	debug_overlay.update_debug(player_pos, tile_pos, chunk_pos, _world_seed, biome,
-			world_generator.get_noise_values(float(tile_pos.x), float(tile_pos.y)),
-			Engine.get_frames_per_second())
+	# The full report includes an on-demand river flow probe. Rebuild it only
+	# when the inspected tile changes, keeping the optional overlay negligible
+	# during normal motion and completely inactive while hidden.
+	if tile_pos != _last_debug_tile:
+		_last_debug_tile = tile_pos
+		_last_debug_diagnostics = world_generator.get_tile_diagnostics(tile_pos.x, tile_pos.y)
+	debug_overlay.update_debug(player_pos, _last_debug_diagnostics, Engine.get_frames_per_second())
 
 ## Save the game (F5 / pause Save). Empty path creates a new manual slot.
 func save_game(path: String = "") -> bool:
@@ -888,8 +1021,17 @@ func _is_recipe_unlocked(def: RecipeDefinition) -> bool:
 ## Adapt a RecipeDefinition into the panel's plain-dict schema.
 func _recipe_to_dict(def: RecipeDefinition) -> Dictionary:
 	var display_name: String = def.result_item_id
+	var category := "material"
+	var description := ""
 	if item_database.has_item(def.result_item_id):
 		display_name = item_database.get_item_display_name(def.result_item_id)
+		var item_definition := item_database.get_item(def.result_item_id)
+		if item_definition != null:
+			category = item_definition.category
+			description = item_definition.description
+	var ingredient_names: Dictionary = {}
+	for item_id in def.required_items:
+		ingredient_names[item_id] = item_database.get_item_display_name(item_id) if item_database.has_item(item_id) else str(item_id).capitalize()
 	return {
 		"id": def.recipe_id,
 		"display_name": display_name,
@@ -897,7 +1039,10 @@ func _recipe_to_dict(def: RecipeDefinition) -> Dictionary:
 		"result_quantity": def.result_quantity,
 		"crafting_station": def.crafting_station,
 		"craft_time": def.craft_time,
-		"required_items": def.required_items.duplicate()
+		"required_items": def.required_items.duplicate(),
+		"ingredient_names": ingredient_names,
+		"category": category,
+		"description": description
 	}
 
 ## Apply a crafting request (from the CraftingPanel) to the real inventory.

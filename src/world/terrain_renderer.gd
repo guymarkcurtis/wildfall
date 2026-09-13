@@ -214,7 +214,8 @@ func _update_chunk_surface(chunk_coords: Vector2i, tile_ids: PackedInt32Array) -
 		return
 	var chunk_key := str(chunk_coords)
 	var world_start := _chunk_coords_to_world_start(chunk_coords)
-	var chunk_image := _art_generator.create_contiguous_chunk_image(world_start, tile_ids, CHUNK_SIZE, _water_frame)
+	var border_tile_ids := _loaded_border_tiles(chunk_coords)
+	var chunk_image := _art_generator.create_contiguous_chunk_image(world_start, tile_ids, CHUNK_SIZE, _water_frame, border_tile_ids)
 	var texture := ImageTexture.create_from_image(chunk_image)
 	var sprite: Sprite2D = _chunk_art_sprites.get(chunk_key)
 	if sprite == null or not is_instance_valid(sprite):
@@ -232,6 +233,21 @@ func _update_chunk_surface(chunk_coords: Vector2i, tile_ids: PackedInt32Array) -
 	# both paths occupy exactly the same world footprint.
 	sprite.scale = Vector2.ONE * (float(CHUNK_SIZE * TILE_SIZE) / float(chunk_image.get_width()))
 	sprite.texture = texture
+
+func _loaded_border_tiles(chunk_coords: Vector2i) -> Dictionary:
+	var border: Dictionary = {}
+	for local_y in range(-1, CHUNK_SIZE + 1):
+		for local_x in range(-1, CHUNK_SIZE + 1):
+			if local_x >= 0 and local_x < CHUNK_SIZE and local_y >= 0 and local_y < CHUNK_SIZE:
+				continue
+			var offset := Vector2i(int(floor(float(local_x) / CHUNK_SIZE)), int(floor(float(local_y) / CHUNK_SIZE)))
+			var neighbour_ids: PackedInt32Array = _chunk_tile_ids.get(str(chunk_coords + offset), PackedInt32Array())
+			if neighbour_ids.is_empty():
+				continue
+			var nx := posmod(local_x, CHUNK_SIZE)
+			var ny := posmod(local_y, CHUNK_SIZE)
+			border[Vector2i(local_x, local_y)] = neighbour_ids[ny * CHUNK_SIZE + nx]
+	return border
 
 ## Add sparse, independently placed accents. They make the ground feel alive
 ## without turning every floor pixel into a repeated illustration.

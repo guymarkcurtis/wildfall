@@ -32,6 +32,14 @@ Exact fields of `resources/item_definition.gd`:
 > `is_weapon`, `is_consumable`, `icon_path`, `value` and `custom_data`.
 > None of those exist in `ItemDefinition` — use the fields above.
 
+## Item presentation
+
+Every item uses `assets/items/pickups/<item_id>.png` as its canonical 32×32
+sprite. The same asset is drawn for a world pickup, an inventory or quick-bar
+slot, and the crafted result on a recipe card. Keep the item centred on a
+transparent canvas and add its path to `TexturePackManager.PACK_ASSETS` so it
+is available to texture-pack authors.
+
 ## Categories (as defined in the item database)
 
 | Category | Count | Items |

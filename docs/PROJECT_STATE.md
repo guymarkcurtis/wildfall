@@ -4,6 +4,34 @@
 
 **Phase 2 (Resource Harvesting) COMPLETE, Phase 3 Gameplay COMPLETE,
 Phase 4 core (tool durability + mission system) COMPLETE.**
+
+The pre-playtest UI refinement pass replaces the old undifferentiated crafting
+list with a searchable, five-discipline workbench whose material counts and
+station requirements are readable at a glance. Technology is now presented as
+a connected horizontal research tree rather than another list. The journal,
+survival meters, and global screen-navigation ribbon share the same field-kit
+palette, and the authored jump now has a small visual lift and contact shadow.
+The PixelLab inventory was audited: both Trailblazers already ship complete
+eight-direction walk, axe, pickaxe, sword, bow, and jump art. Hammer and hoe
+remain south-only and are intentionally deferred until those gameplay systems
+are active, avoiding a large unused generation batch.
+The harvesting presentation now uses PixelLab throughout: trees are 160×192
+ground-anchored sprites instead of 32px atlas reductions, each hit plays a
+four-frame recoil-and-settle animation, and all 19 items currently emitted by
+surface resources or creatures have dedicated 32×32 world-drop sprites. Drops
+make a two-hop arc, cast a small contact shadow, then magnetize to the player;
+inventory and mission pickup events fire only when the drop is actually
+collected. These standalone sprites are also part of the texture-pack contract.
+**Art-source rule:** all newly generated raster game art must be created through
+the PixelLab.ai MCP, using the relevant shipped PixelLab asset as a style
+reference when one exists. Do not substitute another image-generation service;
+this keeps the game's tiles, props, characters, and pickups visually coherent.
+Stock and imported artwork may still be mechanically packed, cropped, or
+resized to satisfy an existing texture contract.
+Stock terrain now also blends material changes using the one-tile border from
+already loaded neighbouring chunks. The surface currently entering the stream
+uses that context without repainting the surrounding chunk ring, keeping the
+improvement inside the existing visual-frame budget.
 The full loop works end-to-end and is covered by the automated test suite:
 deterministic world generation with 6 biomes → chunk streaming (7×7
 viewport) → biome-aware resource spawning → E-key harvesting with tool
@@ -41,7 +69,7 @@ it (event bus → Main, same wiring as the I-key inventory). The harness grew
 The 2026-09-11 pass added the two Phase 4 core systems: **tool
 durability** (consume on use, break at zero with a bare-hand fallback,
 re-craft at full, persisted in save v5) and the **mission system**
-(7 data-driven missions tracking real pickups/kills/builds, M-key
+(7 data-driven missions tracking real pickups/kills/builds, J-key
 journal, prerequisite-gated chain, item + tech rewards, save/load).
 The pass also fixed a real save-system bug the harness exposed: two
 saves written in the same second tie on timestamp, so "most recent
@@ -64,9 +92,9 @@ remain only as a fallback when an art file is missing), and added the
 two new atlases to the texture-pack export. All requests in
 `docs/ART_REQUESTS.md` are DONE.
 
-## CURRENT TEST RESULTS (2026-09-11)
+## CURRENT TEST RESULTS (2026-09-14)
 
-Automated headless run of the real main scene — **239/239 checks passed,
+Automated headless run of the real main scene — **428/428 checks passed,
 0 failures, 0 script errors**:
 
 | Test | Status |
@@ -88,8 +116,8 @@ Automated headless run of the real main scene — **239/239 checks passed,
 | Technology (U panel, costs, prerequisite gating, recipe/build access, save/load) | PASS |
 | Texture packs (full-resolution world art, stock-card export, station atlas + structured metadata, explicit Apply + preview, editable pack creation, live switch, fallback) | PASS |
 | Tool durability (defined max values, consumed per landed swing/shot, break at zero with bare-hand fallback, re-craft at full, non-durable items, save/load round trip) | PASS |
-| Missions (M-key journal, auto-accept on new world, prerequisite lock, progress from real pickups/kills/builds, item + tech rewards, 7/7 completions, save/load) | PASS |
-| Generated art (roster 2688×1024, 7 unique species columns, 2×9 parts atlas with all 18 cells drawn, 5-cell utilities atlas, 4-cell station atlas) | PASS (9 checks) |
+| Missions (J-key journal, auto-accept on new world, prerequisite lock, progress from real pickups/kills/builds, item + tech rewards, 7/7 completions, save/load) | PASS |
+| Generated art (roster, building/station sheets, four biome tree species, 19 world-pickup sprites) | PASS |
 
 A 30-second headless run of the actual game also completed with 0 errors,
 0 warnings and 0 leaked objects.
@@ -109,8 +137,8 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - **Chunk System**: 16×16 tile chunks, radius-3 (7×7) viewport streaming; reloads are deterministic (B3)
 - **Terrain Rendering**: TileMapLayer, 8 terrain types (water, sand, grass, forest, dirt, stone, snow, mud) with per-biome ground colors and per-tile biome lookup
 - **Biome System**: 6 biomes (temperate forest, grassland, mountain, desert, arctic, swamp), per-chunk selection + per-tile refinement
-- **Resource Nodes**: Interactive HarvestableResource (health, biome-aware yields, proximity highlight)
-- **Harvest System**: Tool-based damage multipliers (axe→trees ×2, pickaxe→rock/ore ×2), yields on destruction
+- **Resource Nodes**: Interactive HarvestableResource (health, biome-aware yields, proximity highlight); trees use a 160×192 PixelLab sprite and recoil on every hit
+- **Harvest System**: Tool-based damage multipliers (axe→trees ×2, pickaxe→rock/ore ×2); yields bounce into the world, magnetize nearby, then enter inventory
 - **Resource Spawner**: Deterministic, biome-aware placement on reachable terrain only (desert rock yields sand; mountain yields copper; arctic yields tin)
 - **Debug Overlay**: FPS, position, chunk, seed, biome, noise values
 - **Seed Input**: T opens the editor (buffer pre-filled), Enter confirms + full world regeneration, Escape cancels; seed 0–999999
@@ -129,12 +157,12 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - `src/core/` — GameEventBus, CameraController, SeedInput
 - `src/entities/` — Player (CharacterBody2D with harvesting, RefCounted components), Creature (Phase 3: wander/flee AI, loot on death)
 - `src/components/` — HealthComponent, HungerComponent, InventoryComponent (tool durability lives here)
-- `src/world/` — WorldGenerator, ChunkSystem, NoiseLayers, TerrainRenderer, ResourceSpawner, HarvestableResource, Mission (Phase 4 data)
+- `src/world/` — WorldGenerator, ChunkSystem, NoiseLayers, TerrainRenderer, ResourceSpawner, HarvestableResource, WorldPickup, Mission (Phase 4 data)
 - `src/ui/` — HUD, DebugOverlay, InventoryPanel, InventorySlot, BuildPalette, TechnologyPanel, CraftingPanel, MissionPanel (Phase 4)
 - `src/systems/` — SaveSystem, ItemDatabase, BuildingManager, TechnologySystem, TexturePackManager, CreatureSpawner, MissionManager (Phase 4)
 - `resources/` — ItemDefinition, RecipeDefinition, BiomeDefinition, CreatureDefinition, BuildingDefinition, TechnologyDefinition (wired)
 - `scenes/` — `main.tscn` is the only wired scene (see dead-code inventory in ARCHITECTURE.md)
-- `tests/` — `test_game.gd` headless harness (230 checks)
+- `tests/` — `test_game.gd` headless harness (426 checks)
 - `docs/` — Project documentation
 
 ## RECENTLY COMPLETED (2026-09-10 review)
@@ -259,7 +287,7 @@ A 30-second headless run of the actual game also completed with 0 errors,
   counts while a mission is IN_PROGRESS, and a mission arms on accept.
   First Steps auto-accepts on a new world; the chain gates on completed
   prerequisites; completion grants item rewards + free tech unlocks
-  (stone_building, metalworking). The M-key journal (MissionPanel)
+  (stone_building, metalworking). The J-key journal (MissionPanel)
   lists active/completed/available missions with accept buttons and
   refreshes on every state change; missions persist in save v5.
 - **Save-slot tiebreak fix**: same-second manual saves tied on timestamp
@@ -274,7 +302,7 @@ A 30-second headless run of the actual game also completed with 0 errors,
 ## RECENTLY COMPLETED (2026-09-13 rivers and streams — WG-06)
 
 - `WorldGenerator` now builds a connected-hydrology river mask per chunk:
-  `R = river_halo_tiles` (fixture 16, live 24) is both the path-length cap
+  `R = river_halo_tiles` (fixture 16, live 8) is both the path-length cap
   and the contribution radius (Chebyshev). The stage rect is the chunk core
   grown 2R+1 tiles per side (unclamped at the world edge), and every land
   tile within R tiles of the core is a unit source. Each source walks
@@ -299,8 +327,8 @@ A 30-second headless run of the actual game also completed with 0 errors,
   the key while live content stays unperturbed; `river_halo_tiles = 0`
   disables the stage (the key stays present but empty, the on-demand query
   returns -1).
-- Config: `world_generation_config.tres` gains `river_halo_tiles` (live 24)
-  and `river_accumulation_threshold` (32); the fixture config commits 16/32.
+- Config: `world_generation_config.tres` uses `river_halo_tiles` (live 8)
+  and `river_accumulation_threshold` (10); the fixture config commits 16/32.
   The R=48 live variant was probed and rejected — +13 river tiles at
   roughly 4x the per-chunk flow cost (473 ms vs 134 ms).
 - Harness section 2f: 12 checks (harness grew 355 to 367) — committed

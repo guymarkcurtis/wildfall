@@ -342,7 +342,7 @@ and never dead-ends), stopping at a repeated tile, a water tile or the rect
 edge; each distinct visit increments the tile's count. A core tile is a river
 tile when it is land and at least `river_accumulation_threshold` distinct
 sources drain through it; water tiles are always 0. Both parameters live in
-`WorldGenerationConfig` (live 24 / 32, fixture 16 / 32); `river_halo_tiles =
+`WorldGenerationConfig` (live 8 / 10, fixture 16 / 32); `river_halo_tiles =
 0` disables the stage entirely (empty payload field, on-demand queries closed
 at -1). Boundedness: a core tile's status depends only on the (2R+1)-grown
 rect - its contributing sources are its R-ball and their at-most-R-step paths
@@ -371,7 +371,7 @@ this prominently) - the flow stays deterministic and seam-safe, and wetland
 treatment is explicitly deferred to a later card; rendering and gameplay
 effects are out of scope for this card.
 
-### WG-07 — Replace costly spawn attempts with density fields
+### WG-07 — Replace costly spawn attempts with density fields — COMPLETE (2026-09-13)
 
 **Goal:** make natural distributions intentional and scalable.
 
@@ -384,7 +384,16 @@ Keep existing visual nodes and mutation-ledger keys compatible.
 **Done when:** results are stable across chunk order, spacing holds over chunk
 borders, and a dense-content stress test remains bounded.
 
-### WG-08 — Make the existing cave space playable
+Delivered: surface placement is now a coordinate-derived density field. Each
+land tile chooses at most one data-eligible resource from a stable tile seed;
+the world baseline density, definition density multiplier, abundance, mode,
+environment, water-distance and terrain-feature rules decide whether it is a
+candidate. A bounded local priority comparison enforces spacing across chunk
+borders, independent of load order, and unloads use a chunk-local resource
+index rather than scanning every loaded resource. Harness coverage proves
+reversed chunk order and fixture spacing reproduce the same placements.
+
+### WG-08 — Make the existing cave space playable — COMPLETE (2026-09-13)
 
 **Goal:** complete the minimum separate-space loop without deciding resets.
 
@@ -398,7 +407,14 @@ policy behind an interface/config seam with no permanent default policy.
 layout; harvesting a deposit persists through reload; no mineral resource names
 appear in cave-generator source.
 
-### WG-09 — Expand cave-definition expressiveness
+Delivered: cave deposit candidates become live `HarvestableResource` nodes in
+the separate cave space, so normal targeting, tool damage and loot work
+unchanged. Depletion stores only a stable unique candidate ID under the cave's
+existing `cave_changes` mutation ledger; re-entry regenerates the base cave
+and filters those IDs before rendering/nodes are created. No reset policy was
+selected. The harness covers live harvest, ledger shape and re-entry absence.
+
+### WG-09 — Expand cave-definition expressiveness — COMPLETE (2026-09-13)
 
 **Goal:** prepare content authoring for future cave variety, not new caves.
 
@@ -410,7 +426,15 @@ document fields as reserved extension points.
 **Done when:** designers can author a second cave type asset without an engine
 edit, even if it shares the first generator algorithm.
 
-### WG-10 — Add compact generation diagnostics
+Delivered: `CaveDefinition` now supports optional room-size and tunnel-length
+ranges plus branching chance, and reserves generic hazard/enemy/POI,
+underground-water, feature-tag, deposit-table and loot-table fields. Legacy
+fixed geometry remains the zero-value fallback. The generator interprets
+geometry generically and carries the reserved metadata into its snapshot;
+validation rejects impossible ranges/chances. A harness definition proves an
+alternate cave layout is deterministic without a generator change.
+
+### WG-10 — Add compact generation diagnostics — COMPLETE (2026-09-13)
 
 **Goal:** make bad seeds observable and reproducible.
 
@@ -422,7 +446,15 @@ existing rendering. Keep it off by default and avoid polished UI work.
 **Done when:** a developer can report a bad seed and precise location without
 instrumenting source code.
 
-### WG-11 — Establish fixed-seed regression and performance checks
+Delivered: the existing off-by-default debug toggle now reports the seed,
+config/version, tile and chunk coordinates, exact tile/pixel chunk boundaries,
+region cell, biome, elevation/moisture/temperature/water fields, physical
+water classification/origin/distance, and river status. The underlying
+coordinate-only `get_tile_diagnostics()` API works for unloaded chunks too;
+the UI refreshes its more expensive river probe only when the inspected tile
+changes. Harness coverage verifies the report shape and boundary math.
+
+### WG-11 — Establish fixed-seed regression and performance checks — COMPLETE (2026-09-13)
 
 **Goal:** protect determinism and large-world viability.
 
@@ -435,7 +467,16 @@ migration requires it.
 **Done when:** accidental changes to a fixed world are caught by tests and the
 test output identifies the mismatched layer/coordinate.
 
-### WG-12 — Finish content-authoring documentation
+Delivered: the headless harness pins three seed-9173 coordinate samples (each
+field and classification is labelled with its tile) plus separate environment,
+hydrology, biome, and candidate fingerprints for three chunks. It also runs a
+fresh `ChunkSystem` through the configured 3-radius queue, logs the time for
+all 49 chunks, and asserts queue/load completion without a machine-specific
+time limit. No save migration was needed: the existing generator/config
+versions already remain in the relevant generated data and no save format
+meaning changed.
+
+### WG-12 — Finish content-authoring documentation — COMPLETE (2026-09-13)
 
 **Goal:** make asset-only content work practical for another developer.
 
@@ -447,6 +488,14 @@ project architecture docs.
 
 **Done when:** a developer can add a normal biome/resource definition without
 editing procedural-generation source or a central source registry.
+
+Delivered: `WORLD_CONTENT_AUTHORING.md` now has start-to-finish biome and
+resource workflows, including environmental/adjacency data, distributions,
+terrain presentation, yields, validation, fixed-seed verification, and the
+current boundary between data-defined generation and bespoke resource art.
+It also contains concise POI/cave workflows. `ARCHITECTURE.md` links the guide
+from the generation pipeline, so content authors have one entry point without
+needing to inspect generator source.
 
 ## Recommended sequencing
 

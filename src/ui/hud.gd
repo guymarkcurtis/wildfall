@@ -11,10 +11,14 @@ var _debug_enabled: bool = false
 var _player: Node = null
 var _info_label: Label = null
 var _toast_label: Label = null
+var _health_text: Label = null
+var _hunger_text: Label = null
 
 func _ready() -> void:
 	$Overlay.self_modulate.a = 0.8
 	debug_label.visible = false
+	_style_survival_bars()
+	_build_navigation_ribbon()
 	_info_label = Label.new()
 	_info_label.name = "WorldInfoLabel"
 	_info_label.position = Vector2(8.0, 62.0)
@@ -44,11 +48,75 @@ func toggle_debug(enabled: bool) -> void:
 func _on_health_changed(current: float, max_health: int) -> void:
 	health_bar.value = current
 	health_bar.max_value = max_health
+	if _health_text != null:
+		_health_text.text = "HEALTH  %d / %d" % [int(current), max_health]
 
 ## Update hunger bar.
 func _on_hunger_changed(current: float, max_hunger: float) -> void:
 	hunger_bar.value = current
 	hunger_bar.max_value = max_hunger
+	if _hunger_text != null:
+		_hunger_text.text = "HUNGER  %d / %d" % [int(current), int(max_hunger)]
+
+func _style_survival_bars() -> void:
+	var background := StyleBoxFlat.new()
+	background.bg_color = Color(0.035, 0.045, 0.035, 0.92)
+	background.border_color = Color(0.34, 0.39, 0.29, 0.92)
+	background.set_border_width_all(1)
+	background.set_corner_radius_all(4)
+	var health_fill := StyleBoxFlat.new()
+	health_fill.bg_color = Color("9e4942")
+	health_fill.set_corner_radius_all(3)
+	var hunger_fill := StyleBoxFlat.new()
+	hunger_fill.bg_color = Color("bf914b")
+	hunger_fill.set_corner_radius_all(3)
+	health_bar.add_theme_stylebox_override("background", background)
+	health_bar.add_theme_stylebox_override("fill", health_fill)
+	hunger_bar.add_theme_stylebox_override("background", background.duplicate())
+	hunger_bar.add_theme_stylebox_override("fill", hunger_fill)
+	_health_text = _bar_label("HEALTH  100 / 100")
+	health_bar.add_child(_health_text)
+	_hunger_text = _bar_label("HUNGER  100 / 100")
+	hunger_bar.add_child(_hunger_text)
+
+func _bar_label(initial_text: String) -> Label:
+	var label := Label.new()
+	label.text = initial_text
+	label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 11)
+	label.add_theme_color_override("font_color", Color("f0eed7"))
+	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+	label.add_theme_constant_override("shadow_offset_x", 1)
+	label.add_theme_constant_override("shadow_offset_y", 1)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return label
+
+func _build_navigation_ribbon() -> void:
+	var ribbon := PanelContainer.new()
+	ribbon.name = "NavigationRibbon"
+	ribbon.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	ribbon.offset_left = -350.0
+	ribbon.offset_top = 8.0
+	ribbon.offset_right = 350.0
+	ribbon.offset_bottom = 34.0
+	ribbon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.035, 0.05, 0.038, 0.82)
+	style.border_color = Color(0.30, 0.37, 0.23, 0.78)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(5)
+	ribbon.add_theme_stylebox_override("panel", style)
+	$Overlay.add_child(ribbon)
+	var text := Label.new()
+	text.text = "I  INVENTORY     C  CRAFT     U  TECHNOLOGY     J  JOURNAL     M  MAP"
+	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	text.add_theme_font_size_override("font_size", 11)
+	text.add_theme_color_override("font_color", Color("cbd0a9"))
+	text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ribbon.add_child(text)
 
 ## Update debug overlay.
 func _process(_delta: float) -> void:

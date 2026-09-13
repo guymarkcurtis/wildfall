@@ -46,6 +46,14 @@ assets/tiles/wildfall-resources-atlas.png
 assets/tiles/wildfall-ground-details.png
 assets/tiles/wildfall-crafting-stations.png
 assets/resources/wildfall-forage-plants.png
+assets/resources/tree-large.png
+assets/resources/tree-shake/frame_01.png
+assets/resources/tree-shake/frame_02.png
+assets/resources/tree-shake/frame_03.png
+assets/resources/tree-shake/frame_04.png
+assets/resources/trees/pine-tree.png
+assets/resources/trees/willow-tree.png
+assets/resources/trees/meadow-tree.png
 assets/characters/explorer-base-walk.png
 assets/characters/explorer-storm-walk.png
 assets/characters/actions/male-axe.png
@@ -89,6 +97,12 @@ drawings.
 order: **campfire, furnace, workbench, anvil**. These are the visuals for the
 placeable stations that enable nearby crafting recipes. The manifest repeats
 this ordering for image tools, and it must be preserved when refining the art.
+
+The four large tree sprites are standalone transparent **160×192 px** assets,
+ground-anchored at their bottom centre: the broadleaf tree serves temperate
+forest, pine serves mountain/arctic, willow serves swamp, and meadow tree
+serves grassland. Packs may replace any species independently while preserving
+that canvas, transparency, and root placement.
 
 ## Live refresh scope
 

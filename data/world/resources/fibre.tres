@@ -12,3 +12,4 @@ distribution_mode = "patch"
 cluster_radius = 2
 base_health = 3.0
 yields = [{"item_id":"fibre","min_qty":3,"max_qty":6,"chance":1.0}]
+harvest_group = "forage"

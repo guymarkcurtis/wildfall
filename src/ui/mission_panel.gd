@@ -1,6 +1,6 @@
 ## The in-game mission journal: lists active, available, and completed
 ## missions with their live progress, rewards, and unmet prerequisites.
-## Opened and closed with M (bus toggle_missions_ui); Escape closes it.
+## Opened and closed with J (bus toggle_missions_ui); Escape closes it.
 class_name MissionPanel
 extends Control
 
@@ -23,7 +23,7 @@ func configure(manager: MissionManager) -> void:
 	if _window != null and visible:
 		refresh()
 
-## M key path: open the journal if hidden, close it if visible.
+## J key path: open the journal if hidden, close it if visible.
 func toggle() -> void:
 	if _window == null:
 		return
@@ -46,7 +46,7 @@ func _build_ui() -> void:
 	_window = PanelContainer.new()
 	_window.name = "MissionWindow"
 	_window.anchors_preset = Control.LayoutPreset.PRESET_CENTER
-	_window.size = Vector2(640.0, 460.0)
+	_window.size = Vector2(720.0, 520.0)
 	_window.add_theme_stylebox_override("panel", _make_style())
 	add_child(_window)
 
@@ -58,9 +58,10 @@ func _build_ui() -> void:
 	_window.add_child(_column)
 
 	var header := Label.new()
-	header.text = "Missions"
+	header.text = "FIELD JOURNAL"
 	header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	header.add_theme_font_size_override("font_size", 20)
+	header.add_theme_font_size_override("font_size", 24)
+	header.add_theme_color_override("font_color", Color("e6e9b8"))
 	_column.add_child(header)
 
 	_status = Label.new()
@@ -83,7 +84,7 @@ func _build_ui() -> void:
 	_entries.add_theme_constant_override("separation", 10)
 	_scroll.add_child(_entries)
 
-## Rebuild the entry list. The journal is invisible until M is pressed,
+## Rebuild the entry list. The journal is invisible until J is pressed,
 ## so refreshing eagerly would waste frames on an empty window.
 func refresh() -> void:
 	if _entries == null or _window == null or not visible or _mission_manager == null:
@@ -183,10 +184,10 @@ func _make_entry(mission: Mission, is_active: bool, is_completed: bool) -> Panel
 
 func _make_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.09, 0.12, 0.09, 0.97)
-	style.border_color = Color(0.34, 0.37, 0.28, 0.9)
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(6)
+	style.bg_color = Color(0.04, 0.055, 0.045, 0.988)
+	style.border_color = Color(0.43, 0.51, 0.28, 0.95)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(10)
 	style.shadow_color = Color(0.0, 0.0, 0.0, 0.5)
 	style.shadow_size = 10
 	style.shadow_offset = Vector2(0, 6)

@@ -20,6 +20,11 @@ constrain against (see the WG-05 section below), plus a connected
 river/stream flow mask derived from the same water mask and elevation
 (see the WG-06 section below).
 
+Runtime streaming separates procedural data work from the following frame's
+terrain/entity presentation work. This prevents both indivisible costs from
+landing in the same 60 Hz frame; resource-spacing candidates are also memoized
+within each chunk so overlapping neighbour windows do not repeat field queries.
+
 POI candidate generation is a generic stage: every discovered
 `POIDefinition` contributes candidates from its own spacing grid, biome and
 environment constraints, and `spawn_weight`. Cave entrances are one consumer
@@ -47,6 +52,25 @@ Every POI — cave-linked or not — uses its data-defined `min_spacing_tiles` t
 derive stable world-space anchor cells. This avoids per-chunk scattering and
 prevents adjacent chunks from producing overlapping candidates, while
 preserving independent generation and reload of each chunk.
+
+## Reproducing a world location
+
+Press the debug toggle (F3) during development to show a compact report for
+the player tile. It is off by default. Record the seed, config/version, tile
+and chunk coordinates when filing a world-generation issue; the panel also
+shows the exact chunk boundaries in tiles and pixels, region cell, biome,
+environmental fields, physical-water class/origin/distance, and river status.
+
+`WorldGenerator.get_tile_diagnostics(x, y)` exposes the same coordinate-only
+report to tools and tests, including for chunks that are not currently loaded.
+The overlay recomputes the report only when the inspected tile changes, because
+its river probe is intentionally a diagnostic query rather than a per-frame
+rendering dependency.
+
+The headless harness protects fixed-world output using seed-9173 coordinate
+samples and separate chunk fingerprints for environment, hydrology, biome, and
+candidate layers. Its configured-radius streaming run prints elapsed time for
+trend tracking but has no machine-dependent performance threshold.
 
 ## Overview
 
@@ -215,8 +239,8 @@ as a bounded deterministic stage over the same elevation and water-mask
 fields (no new noise layer, no content-name knowledge):
 
 - **Configuration.** `world_generation_config.tres` carries two new
-  fields: `river_halo_tiles` (R; live 24, fixture 16; 0 disables the
-  stage) and `river_accumulation_threshold` (K; 32 in both configs). R
+  fields: `river_halo_tiles` (R; live 8, fixture 16; 0 disables the
+  stage) and `river_accumulation_threshold` (K; live 10, fixture 32). R
   plays both roles: it is the maximum length of a flow path *and* the
   radius (Chebyshev) inside the chunk core that makes a land tile a
   flow source.
@@ -363,7 +387,7 @@ a chunk data dictionary:
 }
 ```
 
-(Terrain tiles, vegetation and resources are not stored in this dict —
+(Terrain tiles and vegetation are not stored in this dict —
 the TerrainRenderer and ResourceSpawner derive them from the noise
 arrays + biome, keyed by the same chunk seed.)
 

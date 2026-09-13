@@ -18,12 +18,12 @@
 - [x] Creature definitions (7 types, wired)
 - [x] Modular building definitions and stackable story cutaway (wood + stone structural kits)
 - [x] Technology tree (U-panel research, costs, prerequisites, recipe/build-tier gates, saved unlocks)
-- [x] Art assets: all sheets generated + wired — terrain, resources, characters, 7-species creature roster, building parts, utilities, crafting stations (docs/ART_REQUESTS.md, all requests DONE)
+- [x] Art assets: all sheets generated + wired — terrain, resources, characters, 7-species creature roster, building parts, utilities, crafting stations, large animated tree, and 19 PixelLab pickup sprites
 
 ## Phase 3: Gameplay
 
 - [x] Tile-based terrain rendering (orthogonal 32px top-down tiles)
-- [x] Resource node placement and pickup
+- [x] Resource node placement, hit feedback, bouncing world drops, and proximity pickup
 - [x] Creature spawn + wander/flee AI (7 types, biome-gated, E-to-kill, loot)
 - [x] Player collision with terrain (water blocks; rocky ground is walkable)
 - [x] Mouse-aimed ranged combat (face cursor, LMB fires bow/arrows)
@@ -39,7 +39,7 @@
 - [x] Expandable inventory window with persistent, movable (click or drag) 1–9 quick bar
 - [x] Runtime texture-pack system (stock card export, editable overrides, live Options/Pause switching)
 - [x] Tool durability (consume on use, break at zero → bare hands, re-craft to replace, saved in v5)
-- [x] Mission system (7 data-driven missions tracking real play, M-key journal, prerequisite chain, item + tech rewards, saved in v5)
+- [x] Mission system (7 data-driven missions tracking real play, J-key journal, prerequisite chain, item + tech rewards, saved in v5)
 - [ ] Sound effects
 - [ ] Music
 - [ ] Particle effects

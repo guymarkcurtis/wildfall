@@ -7,6 +7,10 @@ extends Resource
 @export var display_name: String = "Unnamed Resource"
 @export var spawn_weight: float = 1.0
 @export_range(0.0, 1.0) var abundance: float = 1.0
+## WG-07: scales the world's baseline surface candidate density. Unlike
+## abundance this is a spatial field control, so it never needs repeated
+## random placement attempts to achieve a distribution.
+@export_range(0.0, 4.0, 0.05) var density_multiplier: float = 1.0
 @export var distribution_mode: String = "uniform"
 @export var min_spacing_tiles: int = 0
 @export var cluster_radius: int = 2
@@ -26,6 +30,20 @@ extends Resource
 @export var base_health: float = 5.0
 @export var yields: Array[Dictionary] = []
 @export var biome_yields: Dictionary = {}
+## Generic harvesting classification consumed by tools, such as "tree" or
+## "mineral". This is deliberately separate from the resource ID so a new
+## tree species never needs an ID-specific gameplay branch.
+@export var harvest_group: String = ""
+## Optional bespoke world sprite. Empty keeps the resource atlas/fallback
+## presentation. The path is data so content can add a species without a
+## renderer or spawner registration change.
+@export_file("*.png") var visual_texture_path: String = ""
+## Large upright props anchor their visual bottom to the resource tile while
+## keeping the shared small collision footprint at that tile.
+@export var visual_ground_anchor: bool = false
+## Optional impact frames for this visual. An empty list keeps a small generic
+## recoil, which lets new content ship before bespoke animation frames exist.
+@export var visual_hit_animation_paths: PackedStringArray = []
 @export var custom_data: Dictionary = {}
 
 func is_valid() -> bool:

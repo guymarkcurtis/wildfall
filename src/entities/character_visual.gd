@@ -58,7 +58,17 @@ func play_jump() -> void:
 	queue_redraw()
 
 func _draw() -> void:
-	if _action_elapsed < 0.0 or _action_type == "jump" or not _current_action_frames().is_empty():
+	# A soft contact shadow sells height in the top-down jump while collision
+	# remains entirely owned by Player. It shrinks/fades at the apex.
+	if _action_type == "jump" and _action_elapsed >= 0.0:
+		var duration: float = ACTION_FRAME_SECONDS * max(1, _current_action_frames().size())
+		var phase := clampf(_action_elapsed / duration, 0.0, 1.0)
+		var lift := sin(phase * PI)
+		draw_set_transform(Vector2(0, 8), 0.0, Vector2(1.0 - lift * 0.28, 0.34 - lift * 0.08))
+		draw_circle(Vector2.ZERO, 18.0, Color(0.02, 0.025, 0.02, 0.34 - lift * 0.14))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		return
+	if _action_elapsed < 0.0 or not _current_action_frames().is_empty():
 		return
 	var progress := clampf(_action_elapsed / (ACTION_FRAME_SECONDS * COLUMNS), 0.0, 1.0)
 	# Only the held tool rotates in this fallback. The body always comes from
@@ -151,7 +161,13 @@ func _apply_frame() -> void:
 		if not action_frames.is_empty():
 			var action_frame := mini(int(_action_elapsed / ACTION_FRAME_SECONDS), action_frames.size() - 1)
 			_sprite.texture = action_frames[action_frame] as Texture2D
+			if _action_type == "jump":
+				var duration: float = ACTION_FRAME_SECONDS * action_frames.size()
+				_sprite.position.y = -20.0 - sin(clampf(_action_elapsed / duration, 0.0, 1.0) * PI) * 13.0
+			else:
+				_sprite.position.y = -20.0
 			return
+	_sprite.position.y = -20.0
 	if _uses_directional_art:
 		var directional_frames: Array = _directional_walk_textures.get(_facing_direction, [])
 		if not directional_frames.is_empty():

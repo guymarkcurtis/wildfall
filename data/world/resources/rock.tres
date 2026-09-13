@@ -14,3 +14,4 @@ cluster_radius = 2
 base_health = 8.0
 yields = [{"item_id":"stone","min_qty":2,"max_qty":4,"chance":1.0},{"item_id":"clay","min_qty":1,"max_qty":2,"chance":0.3}]
 biome_yields = {"desert":[{"item_id":"sand","min_qty":2,"max_qty":4,"chance":1.0}],"mountain":[{"item_id":"copper_ore","min_qty":1,"max_qty":2,"chance":0.25}],"arctic":[{"item_id":"tin_ore","min_qty":1,"max_qty":2,"chance":0.25}]}
+harvest_group = "mineral"

@@ -1,7 +1,7 @@
 ## Separate generated cave-space runtime node.
-## This is intentionally a lightweight placeholder space: geometry is supplied
-## by CaveSpaceGenerator, while transition UX and reset/depletion policy remain
-## owned by Main/save systems.
+## Geometry is supplied by CaveSpaceGenerator. Harvestable deposits are real
+## nodes owned by Main (so the Player's normal interaction loop can use them);
+## this node only renders the non-depleted deterministic cave snapshot.
 class_name CaveSpace
 extends Node2D
 

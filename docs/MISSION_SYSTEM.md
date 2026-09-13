@@ -68,7 +68,7 @@ at any time. All seven can be completed in a single session — the harness
 asserts exactly that.
 
 Verification: `tests/test_game.gd` "Missions" section (32 checks) covers
-the M-key/bus toggle, the panel window, auto-accept on a new world,
+the J-key/bus toggle, the panel window, auto-accept on a new world,
 lock + unmet-prerequisite reporting, progress from real pickups/kills/
 builds, rewards (items + tech unlocks), completion capping, the full
 7-of-7 chain, and persistence across a save/load cycle.

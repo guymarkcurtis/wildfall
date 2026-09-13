@@ -31,6 +31,92 @@ const PACK_ASSETS: PackedStringArray = [
 	"assets/tiles/wildfall-building-parts.png",
 	"assets/tiles/wildfall-building-utilities.png",
 	"assets/resources/wildfall-forage-plants.png",
+	"assets/resources/tree-large.png",
+	"assets/resources/tree-shake/frame_01.png",
+	"assets/resources/tree-shake/frame_02.png",
+	"assets/resources/tree-shake/frame_03.png",
+	"assets/resources/tree-shake/frame_04.png",
+	"assets/resources/trees/pine-tree.png",
+	"assets/resources/trees/willow-tree.png",
+	"assets/resources/trees/meadow-tree.png",
+	"assets/items/pickups/wood.png",
+	"assets/items/pickups/fibre.png",
+	"assets/items/pickups/berry.png",
+	"assets/items/pickups/stone.png",
+	"assets/items/pickups/clay.png",
+	"assets/items/pickups/sand.png",
+	"assets/items/pickups/copper_ore.png",
+	"assets/items/pickups/tin_ore.png",
+	"assets/items/pickups/iron_ore.png",
+	"assets/items/pickups/coal.png",
+	"assets/items/pickups/gold_ore.png",
+	"assets/items/pickups/herb.png",
+	"assets/items/pickups/mushroom.png",
+	"assets/items/pickups/wheat.png",
+	"assets/items/pickups/meat.png",
+	"assets/items/pickups/fish.png",
+	"assets/items/pickups/hide.png",
+	"assets/items/pickups/feather.png",
+	"assets/items/pickups/bone.png",
+	"assets/items/pickups/anvil.png",
+	"assets/items/pickups/apple.png",
+	"assets/items/pickups/arrow.png",
+	"assets/items/pickups/bed.png",
+	"assets/items/pickups/bread.png",
+	"assets/items/pickups/bronze_ingot.png",
+	"assets/items/pickups/campfire.png",
+	"assets/items/pickups/charcoal.png",
+	"assets/items/pickups/chest.png",
+	"assets/items/pickups/cooked_fish.png",
+	"assets/items/pickups/cooked_meat.png",
+	"assets/items/pickups/copper_ingot.png",
+	"assets/items/pickups/farm_soil.png",
+	"assets/items/pickups/fence.png",
+	"assets/items/pickups/flour.png",
+	"assets/items/pickups/furnace.png",
+	"assets/items/pickups/glass.png",
+	"assets/items/pickups/gold_ingot.png",
+	"assets/items/pickups/iron_axe.png",
+	"assets/items/pickups/iron_ingot.png",
+	"assets/items/pickups/iron_pickaxe.png",
+	"assets/items/pickups/iron_sword.png",
+	"assets/items/pickups/leaf.png",
+	"assets/items/pickups/plank.png",
+	"assets/items/pickups/potion_health.png",
+	"assets/items/pickups/potion_mana.png",
+	"assets/items/pickups/seed_wheat.png",
+	"assets/items/pickups/soup.png",
+	"assets/items/pickups/stone_axe.png",
+	"assets/items/pickups/stone_brick.png",
+	"assets/items/pickups/stone_door.png",
+	"assets/items/pickups/stone_floor.png",
+	"assets/items/pickups/stone_foundation.png",
+	"assets/items/pickups/stone_hammer.png",
+	"assets/items/pickups/stone_hoe.png",
+	"assets/items/pickups/stone_pickaxe.png",
+	"assets/items/pickups/stone_pillar.png",
+	"assets/items/pickups/stone_ramp.png",
+	"assets/items/pickups/stone_roof.png",
+	"assets/items/pickups/stone_stairs.png",
+	"assets/items/pickups/stone_sword.png",
+	"assets/items/pickups/stone_wall.png",
+	"assets/items/pickups/stone_window.png",
+	"assets/items/pickups/torch.png",
+	"assets/items/pickups/wooden_axe.png",
+	"assets/items/pickups/wooden_bow.png",
+	"assets/items/pickups/wooden_door.png",
+	"assets/items/pickups/wooden_floor.png",
+	"assets/items/pickups/wooden_foundation.png",
+	"assets/items/pickups/wooden_hammer.png",
+	"assets/items/pickups/wooden_pickaxe.png",
+	"assets/items/pickups/wooden_pillar.png",
+	"assets/items/pickups/wooden_ramp.png",
+	"assets/items/pickups/wooden_roof.png",
+	"assets/items/pickups/wooden_stairs.png",
+	"assets/items/pickups/wooden_sword.png",
+	"assets/items/pickups/wooden_wall.png",
+	"assets/items/pickups/wooden_window.png",
+	"assets/items/pickups/workbench.png",
 	"assets/characters/explorer-base-walk.png",
 	"assets/characters/explorer-storm-walk.png",
 	"assets/creatures/alien-creature-roster.png"
@@ -337,6 +423,24 @@ static func _asset_metadata() -> Array[Dictionary]:
 			"editor_note": "Keep the four 32 x 32 cells in this exact left-to-right order and preserve transparency."
 		},
 		{
+			"path": "assets/tiles/wildfall-building-parts.png",
+			"name": "Building-parts atlas",
+			"purpose": "Wood and stone structural pieces used by the building system.",
+			"used_for": ["walls", "floors", "doors", "roofs"],
+			"layout": {"kind": "atlas", "columns": 2, "rows": 9,
+					"cell_order": "wood column first, stone column second; structural types top to bottom"},
+			"editor_note": "Keep every cell at 32 x 32 and preserve the 2 by 9 layout."
+		},
+		{
+			"path": "assets/tiles/wildfall-building-utilities.png",
+			"name": "Building-utilities atlas",
+			"purpose": "Utility objects placed in player-built structures.",
+			"used_for": ["building utilities"],
+			"layout": {"kind": "atlas", "columns": 5, "rows": 1,
+					"cell_order": "five utilities from left to right"},
+			"editor_note": "Keep the five 32 x 32 cells in their current order and preserve transparency."
+		},
+		{
 			"path": "assets/resources/wildfall-forage-plants.png",
 			"name": "Forage-plant atlas",
 			"purpose": "Small harvestable and decorative plant variants.",
@@ -369,6 +473,68 @@ static func _asset_metadata() -> Array[Dictionary]:
 			"editor_note": "Keep the 4 by 2 grid, variant positions, and transparent background."
 		}
 	])
+	# These standalone PixelLab sprites sit between the forage atlas and the
+	# character sheets in PACK_ASSETS. Insert them at the same point so the
+	# exported pack manifest remains a one-to-one ordered contract.
+	var standalone_metadata: Array[Dictionary] = [{
+		"path": "assets/resources/tree-large.png",
+		"name": "Large broadleaf tree",
+		"purpose": "Ground-anchored harvestable tree at gameplay scale.",
+		"used_for": ["surface tree", "tree idle frame"],
+		"layout": {"kind": "sprite", "width": 160, "height": 192},
+		"editor_note": "Keep the roots at the bottom-centre and preserve transparency."
+	}]
+	for tree_frame_index in range(1, 5):
+		standalone_metadata.append({
+			"path": "assets/resources/tree-shake/frame_0%d.png" % tree_frame_index,
+			"name": "Tree shake frame %d" % tree_frame_index,
+			"purpose": "Impact response frame played whenever a tree is struck.",
+			"used_for": ["tree hit animation"],
+			"layout": {"kind": "animation_frame", "width": 160, "height": 192,
+					"frame": tree_frame_index, "frame_count": 4},
+			"editor_note": "Keep the roots planted and match the idle tree canvas exactly."
+		})
+	standalone_metadata.append_array([
+		{
+			"path": "assets/resources/trees/pine-tree.png",
+			"name": "Pine tree",
+			"purpose": "Ground-anchored harvestable evergreen for mountain and arctic biomes.",
+			"used_for": ["pine_tree", "arctic vegetation", "mountain vegetation"],
+			"layout": {"kind": "sprite", "width": 160, "height": 192},
+			"editor_note": "Keep the trunk and roots at the bottom-centre and preserve transparency."
+		},
+		{
+			"path": "assets/resources/trees/willow-tree.png",
+			"name": "Willow tree",
+			"purpose": "Ground-anchored harvestable wetland tree for swamp biomes.",
+			"used_for": ["willow_tree", "swamp vegetation"],
+			"layout": {"kind": "sprite", "width": 160, "height": 192},
+			"editor_note": "Keep the trunk and roots at the bottom-centre and preserve transparency."
+		},
+		{
+			"path": "assets/resources/trees/meadow-tree.png",
+			"name": "Meadow tree",
+			"purpose": "Ground-anchored harvestable open-canopy tree for grassland biomes.",
+			"used_for": ["meadow_tree", "grassland vegetation"],
+			"layout": {"kind": "sprite", "width": 160, "height": 192},
+			"editor_note": "Keep the trunk and roots at the bottom-centre and preserve transparency."
+		}
+	])
+	var pickup_item_ids := []
+	for asset_path in PACK_ASSETS:
+		if asset_path.begins_with("assets/items/pickups/"):
+			pickup_item_ids.append(asset_path.get_file().get_basename())
+	for pickup_item_id in pickup_item_ids:
+		standalone_metadata.append({
+			"path": "assets/items/pickups/%s.png" % pickup_item_id,
+			"name": "%s pickup" % str(pickup_item_id).capitalize(),
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [str(pickup_item_id), "bounce pickup"],
+			"layout": {"kind": "sprite", "width": 32, "height": 32},
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels."
+		})
+	for standalone_index in range(standalone_metadata.size()):
+		assets.insert(16 + standalone_index, standalone_metadata[standalone_index])
 	return assets
 
 static func _write_contact_card() -> void:

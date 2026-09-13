@@ -11,6 +11,11 @@ checks). Flip each to **DONE + date** as files arrive.
 
 ## Conventions (apply to every request)
 
+- **Generation source**: create all new raster game art with the **PixelLab.ai
+  MCP**. Use the closest shipped PixelLab asset as a style reference whenever
+  the request has one; do not use another image-generation service for game
+  assets. Mechanical packing, cropping, and contract-size resampling after
+  generation are allowed.
 - **Style**: match the existing Wildfall sheets — painterly,
   warm frontier-explorer palette. References:
   `assets/tiles/wildfall-terrain-atlas.png` (world art) and the
