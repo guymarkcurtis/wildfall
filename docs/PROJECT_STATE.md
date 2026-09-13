@@ -271,6 +271,57 @@ A 30-second headless run of the actual game also completed with 0 errors,
   mission checks, plus the reworked durability/mission blocks), 0
   failures, 0 script errors — green on two consecutive runs.
 
+## RECENTLY COMPLETED (2026-09-13 rivers and streams — WG-06)
+
+- `WorldGenerator` now builds a connected-hydrology river mask per chunk:
+  `R = river_halo_tiles` (fixture 16, live 24) is both the path-length cap
+  and the contribution radius (Chebyshev). The stage rect is the chunk core
+  grown 2R+1 tiles per side (unclamped at the world edge), and every land
+  tile within R tiles of the core is a unit source. Each source walks
+  downhill — the strictly-lower minimum among its 8 in-rect neighbours in
+  the fixed NW, N, NE, W, E, SW, S, SE tie order, falling back to the
+  overall in-rect minimum at a local minimum — for at most R steps; water
+  tiles are counted but terminate a path. A core land tile is a river tile
+  when at least `K = river_accumulation_threshold` (32 in both configs)
+  distinct sources have visited it.
+- The mask rides the chunk payload as the new `river_mask` key (0/1 over
+  the chunk core; water is always 0) and is mirrored by the public
+  on-demand query `is_river_at_world`, which re-samples its own
+  (2R+1)-grown rect. A core tile's river status depends only on that
+  (2R+1)-grown rect — its sources sit inside its R-ball and its
+  at-most-R-step paths stay inside the one-ring margin — so the per-chunk
+  mask is byte-identical to a world-wide reference and the stage is
+  seam-safe; the corner chunk's unclamped stage rect still lands inside
+  the world reference rect, so corner flows are identical too.
+- Content side: nothing in the content system consumes `river_mask` yet —
+  no content-name branches, and rendering/gameplay wiring is explicitly
+  out of scope for this card (the card's own scope). The live world gains
+  the key while live content stays unperturbed; `river_halo_tiles = 0`
+  disables the stage (the key stays present but empty, the on-demand query
+  returns -1).
+- Config: `world_generation_config.tres` gains `river_halo_tiles` (live 24)
+  and `river_accumulation_threshold` (32); the fixture config commits 16/32.
+  The R=48 live variant was probed and rejected — +13 river tiles at
+  roughly 4x the per-chunk flow cost (473 ms vs 134 ms).
+- Harness section 2f: 12 checks (harness grew 355 to 367) — committed
+  config pins; all 9,216 fixture tiles equal an independently
+  re-implemented flow/accumulation reference over the 162x162 world-wide
+  rect (299 river tiles, none on water); fresh-instance / lone-corner
+  (unclamped edge rect) / reversed-order byte-identical reproducibility;
+  downstream fate audit (151 drain to water / 0 exit the window / 148
+  meander in closed basins); on-demand agreement at 12 sampled tiles;
+  disable-by-zero; and a structural live audit (256-entry payload key,
+  never on water, on-demand agreement, content checks staying green).
+- Documented limitations: closed basins whose floor never reaches water
+  within the halo meander instead of draining (fixture 148 of 299; at
+  K=32 essentially every live river path) — a closed-basin veto was
+  trialled and found vacuous (meanders return further than R), and a 4R
+  veto trace would break seam-safety; paths that exhaust their R steps or
+  leave the stage rect are not traced further. Wetlands and waterfalls are
+  deferred per the card's done-when.
+- See `WORLD_GENERATION.md` ("Rivers and streams") and
+  `WORLD_CONTENT_AUTHORING.md` for the authoring side.
+
 ## RECENTLY COMPLETED (2026-09-12 water classification + shore distance — WG-05)
 
 - Water is now a classified physical system: every tile of every chunk
@@ -430,9 +481,10 @@ A 30-second headless run of the actual game also completed with 0 errors,
 green. Durability and the mission system are done too — see
 RECENTLY COMPLETED below.)
 
-1. **World-generation refactor — next card WG-06** (add deterministic
-   rivers and streams) per `docs/WORLD_GENERATION_REFACTOR_PLAN.md`.
-   WG-01–WG-05 are complete, and WG-07/WG-08 remain unblocked.
+1. **World-generation refactor — next card WG-07** (replace costly spawn
+   attempts with density fields) per
+   `docs/WORLD_GENERATION_REFACTOR_PLAN.md`. WG-01–WG-06 are complete,
+   and WG-08 and later remain unblocked.
 2. **Sound effects** (next open Phase 4 item in `docs/ROADMAP.md`) —
    the game currently has no audio: UI clicks, harvesting, combat
    hits, creature deaths, building placement/demolition, mission

@@ -8,6 +8,15 @@ extends Node
 const CHUNK_SIZE: int = 16 # Compatibility constant for existing callers.
 const GENERATOR_VERSION: int = 2
 const CONFIG_PATH := "res://data/world/world_generation_config.tres"
+# WG-06: fixed 8-neighbour order for the flow stage. The order is part of
+# the definition: flow ties (equal-elevation neighbours) resolve to the
+# first neighbour in this order, so every tile's destination is a pure
+# function of coordinates and field values, never of generation history.
+const RIVER_FLOW_NEIGHBORS: Array[Vector2i] = [
+	Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1),
+	Vector2i(-1, 0), Vector2i(1, 0),
+	Vector2i(-1, 1), Vector2i(0, 1), Vector2i(1, 1)
+]
 
 var noise_layers: NoiseLayers = null
 var current_seed: int = 0
@@ -131,6 +140,9 @@ func generate_chunk(chunk_coords: Vector2i, seed: int = -1) -> Dictionary:
 	var dist_rect: PackedInt32Array = fields["water_dist_rect"]
 	var dist_rect_start: Vector2i = fields["water_dist_rect_start"]
 	var dist_rect_side: int = int(fields["water_dist_rect_side"])
+	# WG-06: the flow stage's core river mask (empty array when the
+	# stage is disabled in the config).
+	var river_mask: PackedInt32Array = fields["river_mask"]
 	for index in range(fields["elevation"].size()):
 		var world_x: int = fields["world_start"].x + (index % size)
 		var world_y: int = fields["world_start"].y + (index / size)
@@ -177,6 +189,14 @@ func generate_chunk(chunk_coords: Vector2i, seed: int = -1) -> Dictionary:
 		"water_class": fields["water_class"],
 		"water_origin": fields["water_origin"],
 		"distance_to_water": chunk_dist,
+		# WG-06: river/stream mask over the chunk core (0/1, row-major;
+		# water tiles are never river tiles). A land tile is 1 when at
+		# least river_accumulation_threshold distinct sources within
+		# river_halo_tiles drain through it in the bounded flow stage.
+		# The value is a pure coordinate function, so identical tiles in
+		# any chunks agree (seams cannot form); empty when disabled.
+		# Rendering and gameplay consumers arrive with later cards.
+		"river_mask": river_mask,
 		"biome": _select_biome(fields["elevation"], fields["moisture"], fields["temperature"],
 				fields["world_start"] + Vector2i(size / 2, size / 2),
 				chunk_dist[size / 2 * size + size / 2]
@@ -334,6 +354,49 @@ func _on_demand_shore_distance(world_x: int, world_y: int) -> int:
 			rect_elevation, rect_moisture, rect_water)
 	return _distance_from_rect(world_x, world_y, dist_rect, rect_start, rect_side)
 
+## WG-06: on-demand river status for one world tile: 1 when the tile is
+## land and at least river_accumulation_threshold distinct sources within
+## river_halo_tiles drain through it in the bounded flow stage, 0
+## otherwise (water tiles are never river tiles), -1 when the stage is
+## disabled (config halo 0). Mirrors the per-chunk river_mask payload, so
+## on-demand queries and rendered chunks never disagree. The query samples
+## its own rect around the single tile (its (4*halo + 3)-sided margin),
+## so it is a diagnostic API: chunk consumers read the payload mask
+## instead of paying a per-tile sampling cost.
+func is_river_at_world(world_x: int, world_y: int) -> int:
+	if noise_layers == null or not is_instance_valid(noise_layers):
+		initialize(current_seed)
+	return _on_demand_river_status(world_x, world_y)
+
+## WG-06: single-tile variant of the flow stage. The rect margin
+## (2*halo + 1 around the tile) is the same bound as the chunk stage with
+## a 1-tile core, so the result is the tile's value in the chunk payload
+## of any chunk containing it.
+func _on_demand_river_status(world_x: int, world_y: int) -> int:
+	var river_halo: int = get_configuration().river_halo_tiles
+	if river_halo <= 0:
+		return -1
+	var rect_start := Vector2i(world_x, world_y) - Vector2i(2 * river_halo + 1, 2 * river_halo + 1)
+	var rect_side: int = 4 * river_halo + 3
+	var rect_elevation := PackedFloat32Array()
+	var rect_moisture := PackedFloat32Array()
+	var rect_water := PackedFloat32Array()
+	rect_elevation.resize(rect_side * rect_side)
+	rect_moisture.resize(rect_side * rect_side)
+	rect_water.resize(rect_side * rect_side)
+	for y in range(rect_side):
+		for x in range(rect_side):
+			var tile_x: int = rect_start.x + x
+			var tile_y: int = rect_start.y + y
+			var values := get_noise_values(float(tile_x), float(tile_y))
+			rect_elevation[y * rect_side + x] = values["elevation"]
+			rect_moisture[y * rect_side + x] = values["moisture"]
+			rect_water[y * rect_side + x] = values["water"]
+	var mask := _build_river_mask(rect_start, rect_side, Vector2i(world_x, world_y), 1,
+			river_halo, get_configuration().river_accumulation_threshold,
+			rect_elevation, rect_moisture, rect_water)
+	return int(mask[0])
+
 ## WG-05: true when any registered content kind (biomes, POIs, terrain
 ## features, resources) declares a min or max distance to water. The result
 ## is memoized per registry instance, so the on-demand BFS runs only for
@@ -425,15 +488,22 @@ func _load_configuration() -> WorldGenerationConfig:
 func _generate_environmental_fields(chunk_coords: Vector2i) -> Dictionary:
 	var size: int = get_configuration().chunk_size_tiles
 	var world_start := chunk_coords * size
-	# WG-05: sample one rectangle grown by the shore-distance cap around the
-	# chunk (UNCLAMPED: the fields are pure coordinate functions, so water
-	# beyond the finite world is real water) and slice the chunk core out
-	# of it. The sliced core is byte-identical to the pre-WG-05 chunk-only
-	# sampling; the halo is what makes the per-chunk distance field exact
-	# for every core tile without a second BFS.
+	# WG-05 + WG-06: sample ONE rectangle around the chunk, grown by the
+	# larger of the shore-distance cap (WG-05) and the river flow halo
+	# (WG-06, 2*halo + 1: every tile within river_halo_tiles of the core
+	# is a flow source, its path is at most river_halo_tiles long, so the
+	# halo plus one ring keeps every source's whole path inside the rect
+	# with a full neighbour ring - which is what makes per-chunk results
+	# byte-identical to a world-wide computation). UNCLAMPED: the fields
+	# are pure coordinate functions, so water beyond the finite world is
+	# real water. The sliced core stays byte-identical to the pre-WG-05
+	# chunk-only sampling; the halo is what makes the per-chunk distance
+	# field exact without a second BFS.
 	var water_cap: int = get_configuration().distance_to_water_cap_tiles
-	var rect_start := world_start - Vector2i(water_cap, water_cap)
-	var rect_side: int = size + 2 * water_cap
+	var river_halo: int = get_configuration().river_halo_tiles
+	var halo: int = maxi(water_cap, 2 * river_halo + 1)
+	var rect_start := world_start - Vector2i(halo, halo)
+	var rect_side: int = size + 2 * halo
 	var rect_elevation := PackedFloat32Array()
 	var rect_moisture := PackedFloat32Array()
 	var rect_temperature := PackedFloat32Array()
@@ -455,7 +525,7 @@ func _generate_environmental_fields(chunk_coords: Vector2i) -> Dictionary:
 	var temperature := PackedFloat32Array()
 	var water := PackedFloat32Array()
 	for y in range(size):
-		var row_base: int = (y + water_cap) * rect_side + water_cap
+		var row_base: int = (y + halo) * rect_side + halo
 		elevation.append_array(rect_elevation.slice(row_base, row_base + size))
 		moisture.append_array(rect_moisture.slice(row_base, row_base + size))
 		temperature.append_array(rect_temperature.slice(row_base, row_base + size))
@@ -469,7 +539,7 @@ func _generate_environmental_fields(chunk_coords: Vector2i) -> Dictionary:
 				rect_elevation, rect_moisture, rect_water)
 		water_dist.resize(size * size)
 		for y in range(size):
-			var row_base: int = (y + water_cap) * rect_side + water_cap
+			var row_base: int = (y + halo) * rect_side + halo
 			for x in range(size):
 				var raw_dist: int = water_dist_rect[row_base + x]
 				# Saturated: tiles at or beyond the cap read the cap, i.e.
@@ -486,9 +556,21 @@ func _generate_environmental_fields(chunk_coords: Vector2i) -> Dictionary:
 		var water_level: float = get_configuration().water_level
 		for y in range(size):
 			for x in range(size):
-				_tile_water_class_origin(y, x, water_cap, rect_side,
+				_tile_water_class_origin(y, x, halo, rect_side,
 						rect_elevation, rect_moisture, rect_water, water_level,
 						water_class, water_origin)
+	# WG-06: bounded flow/accumulation stage over the SAME rect (its
+	# margin is at least 2*river_halo + 1 by the halo definition above),
+	# so a core tile's river status depends only on this rect and is
+	# therefore identical however the chunk is generated. Closed basins
+	# whose drainage lies outside the halo simply meander or recirculate
+	# on the basin floor; wetland treatment of those basins is a later
+	# card, and no name-based special case exists here.
+	var river_mask := PackedInt32Array()
+	if river_halo > 0:
+		river_mask = _build_river_mask(rect_start, rect_side, world_start, size,
+				river_halo, get_configuration().river_accumulation_threshold,
+				rect_elevation, rect_moisture, rect_water)
 	return {
 		"world_start": world_start,
 		"elevation": elevation,
@@ -500,19 +582,22 @@ func _generate_environmental_fields(chunk_coords: Vector2i) -> Dictionary:
 		"water_dist_rect_start": rect_start,
 		"water_dist_rect_side": rect_side,
 		"water_class": water_class,
-		"water_origin": water_origin
+		"water_origin": water_origin,
+		# WG-06: chunk-core river mask (0/1, row-major, water tiles 0),
+		# or empty when the stage is disabled (config halo 0).
+		"river_mask": river_mask
 	}
 
 ## WG-05: fill the per-tile water class and origin of the rect core into
 ## the payload arrays. The 3x3 neighbourhood of every core tile is read
 ## from the surrounding rect arrays, so the values agree with the
 ## on-demand queries that sample the same unclamped fields.
-func _tile_water_class_origin(core_y: int, core_x: int, water_cap: int, rect_side: int,
+func _tile_water_class_origin(core_y: int, core_x: int, offset: int, rect_side: int,
 		rect_elevation: PackedFloat32Array, rect_moisture: PackedFloat32Array,
 		rect_water: PackedFloat32Array, water_level: float,
 		water_class: PackedStringArray, water_origin: PackedStringArray) -> void:
-	var ry: int = core_y + water_cap
-	var rx: int = core_x + water_cap
+	var ry: int = core_y + offset
+	var rx: int = core_x + offset
 	var center: int = ry * rect_side + rx
 	var tile_is_water := _is_water(rect_elevation[center], rect_moisture[center], rect_water[center])
 	var adjacent_water := 0
@@ -583,6 +668,100 @@ func _build_water_distance_rect(rect_start: Vector2i, rect_side: int, cap: int,
 					if dist[j] < cap:
 						queue.append(j)
 	return dist
+
+## WG-06: bounded flow/accumulation stage. Every land tile within
+## Chebyshev river_halo of the core is a unit water source; each source
+## traces one path of at most river_halo steps downstream (stopping when
+## it enters water, revisits a tile, or leaves the rect) and every tile
+## its path touches gains one distinct-source count. A core tile is a
+## river tile when it is land and at least threshold distinct sources
+## drain through it. Boundedness: a core tile's count depends only on
+## sources within the halo, whose whole paths stay inside the rect's one
+## ring of margin, so the rect alone determines every core value and the
+## per-chunk mask is byte-identical to a world-wide computation.
+func _build_river_mask(rect_start: Vector2i, rect_side: int, core_start: Vector2i,
+		core_side: int, river_halo: int, threshold: int,
+		rect_elevation: PackedFloat32Array, rect_moisture: PackedFloat32Array,
+		rect_water: PackedFloat32Array) -> PackedInt32Array:
+	var counts := PackedInt32Array()
+	counts.resize(rect_side * rect_side)
+	var core_min_x: int = int(core_start.x) - river_halo
+	var core_max_x: int = int(core_start.x) + int(core_side) - 1 + river_halo
+	var core_min_y: int = int(core_start.y) - river_halo
+	var core_max_y: int = int(core_start.y) + int(core_side) - 1 + river_halo
+	for ry in range(rect_side):
+		var world_y: int = int(rect_start.y) + int(ry)
+		if world_y < core_min_y or world_y > core_max_y:
+			continue
+		for rx in range(rect_side):
+			var world_x: int = int(rect_start.x) + int(rx)
+			if world_x < core_min_x or world_x > core_max_x:
+				continue
+			var i: int = ry * rect_side + rx
+			if _is_water(rect_elevation[i], rect_moisture[i], rect_water[i]):
+				continue
+			# The per-source visited set is what keeps a source that
+			# recirculates (closed-basin meander) counting once per tile
+			# instead of once per lap.
+			var visited: Dictionary = {}
+			var t: int = i
+			for step in range(river_halo):
+				if visited.has(t):
+					break
+				visited[t] = true
+				counts[t] += 1
+				if _is_water(rect_elevation[t], rect_moisture[t], rect_water[t]):
+					break
+				var t_y: int = t / rect_side
+				var t_x: int = t % rect_side
+				t = _river_flow_destination(t_x, t_y, rect_side, rect_elevation)
+				if t == -1:
+					break
+	var river_mask := PackedInt32Array()
+	river_mask.resize(core_side * core_side)
+	for cy in range(core_side):
+		var row: int = (int(core_start.y) + int(cy) - int(rect_start.y)) * rect_side \
+				+ (int(core_start.x) - int(rect_start.x))
+		for cx in range(core_side):
+			var i: int = row + int(cx)
+			if _is_water(rect_elevation[i], rect_moisture[i], rect_water[i]):
+				river_mask[cy * core_side + cx] = 0
+			else:
+				river_mask[cy * core_side + cx] = 1 if counts[i] >= threshold else 0
+	return river_mask
+
+## WG-06: deterministic downstream destination of a land tile in a
+## sampled rect: the strictly lower in-rect neighbour with the minimum
+## elevation, ties resolved by the fixed RIVER_FLOW_NEIGHBORS order.
+## With no strictly lower neighbour, the overall lowest in-rect
+## neighbour: a closed basin spills over its lowest rim point, so the
+## flow is total on land (no dead ends, no dead tiles). -1 only when the
+## tile has no in-rect neighbour at all (the rect's one-ring edge).
+func _river_flow_destination(rx: int, ry: int, side: int,
+		elevations: PackedFloat32Array) -> int:
+	var self_e: float = elevations[ry * side + rx]
+	var best: int = -1
+	var best_e: float = INF
+	for n in RIVER_FLOW_NEIGHBORS:
+		var nx: int = rx + n.x
+		var ny: int = ry + n.y
+		if nx < 0 or nx >= side or ny < 0 or ny >= side:
+			continue
+		var e: float = elevations[ny * side + nx]
+		if e < self_e and (best == -1 or e < best_e):
+			best = ny * side + nx
+			best_e = e
+	if best == -1:
+		for n in RIVER_FLOW_NEIGHBORS:
+			var nx2: int = rx + n.x
+			var ny2: int = ry + n.y
+			if nx2 < 0 or nx2 >= side or ny2 < 0 or ny2 >= side:
+				continue
+			var e2: float = elevations[ny2 * side + nx2]
+			if best == -1 or e2 < best_e:
+				best = ny2 * side + nx2
+				best_e = e2
+	return best
 
 func _is_water(elevation: float, moisture: float, water_value: float) -> bool:
 	var config := get_configuration()

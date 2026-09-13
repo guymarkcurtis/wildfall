@@ -1323,6 +1323,175 @@ func _run_checks() -> void:
 			and _registry_errors_mention(inverted_registry.validation_errors, "can never spawn"),
 			"WG-05 invalid fixture: validation names the distance-to-water rules it breaks (min > max; surface resource with max distance 0)")
 
+	# --- 2f. WG-06: connected hydrology (rivers and streams) ----------------
+	# Rivers are a bounded flow/accumulation stage over the same noise rect
+	# the water fields use, grown by (2 * R + 1) tiles on every side: a
+	# core tile's river status depends only on that rect (contributing
+	# sources are its R-ball and their at-most-R-step paths stay inside the
+	# one-ring margin), so per-chunk masks are byte-identical to a
+	# world-wide computation and cannot differ across chunk boundaries.
+	# Rendering and gameplay effects stay out of scope for this card; the
+	# payload gains only a 0/1 river_mask field.
+
+	# 2f.1 The committed configuration values.
+	_check(int(water_fixture_config.river_halo_tiles) == 16 \
+			and int(water_fixture_config.river_accumulation_threshold) == 32,
+			"WG-06: the fixture world commits river_halo_tiles=16 / river_accumulation_threshold=32")
+	_check(int(world_config.river_halo_tiles) == 24 \
+			and int(world_config.river_accumulation_threshold) == 32,
+			"WG-06: the live world commits river_halo_tiles=24 / river_accumulation_threshold=32")
+
+	# 2f.2 Independent whole-world reference: re-sample the 96x96 fixture
+	# world with the river stage's (2*16+1)-tile margin (a 162x162 rect)
+	# and re-run the flow/accumulation model in harness-local code. Every
+	# one of the 9,216 payload tiles must equal the reference, and the
+	# reference pins the probed 299 river tiles.
+	var river_halo: int = int(water_fixture_config.river_halo_tiles)
+	var river_threshold: int = int(water_fixture_config.river_accumulation_threshold)
+	var river_world_side: int = int(water_fixture_config.world_dimensions_chunks.x) * fixture_chunk_size
+	var river_margin: int = 2 * river_halo + 1
+	var river_ref_side: int = river_world_side + 2 * river_margin
+	var river_ref_start: Vector2i = water_fixture_config.world_origin_chunk * fixture_chunk_size \
+			- Vector2i(river_margin, river_margin)
+	var river_ref_elevations := PackedFloat32Array()
+	river_ref_elevations.resize(river_ref_side * river_ref_side)
+	var river_ref_water := PackedInt32Array()
+	river_ref_water.resize(river_ref_side * river_ref_side)
+	for wry in range(river_ref_side):
+		for wrx in range(river_ref_side):
+			var river_tile_x: int = int(river_ref_start.x) + int(wrx)
+			var river_tile_y: int = int(river_ref_start.y) + int(wry)
+			var river_tile_values: Dictionary = water_fixture_gen.get_noise_values(float(river_tile_x), float(river_tile_y))
+			var river_is_water: bool = water_fixture_gen._is_water(
+					float(river_tile_values["elevation"]), float(river_tile_values["moisture"]), float(river_tile_values["water"]))
+			river_ref_water[int(wry) * river_ref_side + int(wrx)] = 1 if river_is_water else 0
+			river_ref_elevations[int(wry) * river_ref_side + int(wrx)] = float(river_tile_values["elevation"])
+	var river_core_start: Vector2i = water_fixture_config.world_origin_chunk * fixture_chunk_size
+	var wg06_river_reference := _wg06_river_reference(river_ref_start, river_ref_side, river_core_start,
+			river_world_side, river_halo, river_threshold, river_ref_elevations, river_ref_water)
+	var river_reference_matches: bool = true
+	var river_count: int = 0
+	var river_on_water: int = 0
+	for chunk_coords in fixture_chunk_coords:
+		var fixture_payload: Dictionary = water_first[chunk_coords]
+		if not fixture_payload.has("river_mask"):
+			river_reference_matches = false
+			continue
+		var river_mask: PackedInt32Array = fixture_payload["river_mask"]
+		var chunk_water_mask: PackedByteArray = fixture_payload["water_mask"]
+		if river_mask.size() != fixture_chunk_size * fixture_chunk_size:
+			river_reference_matches = false
+			continue
+		var river_chunk_start: Vector2i = chunk_coords * fixture_chunk_size
+		for index in range(fixture_chunk_size * fixture_chunk_size):
+			var wx: int = int(river_chunk_start.x) + (index % fixture_chunk_size)
+			var wy: int = int(river_chunk_start.y) + (index / fixture_chunk_size)
+			var ref_index: int = (wy - int(river_ref_start.y)) * river_ref_side + (wx - int(river_ref_start.x))
+			var core_index: int = (wy - int(river_core_start.y)) * river_world_side + (wx - int(river_core_start.x))
+			if int(river_mask[index]) != int(wg06_river_reference[core_index]):
+				river_reference_matches = false
+			if int(river_mask[index]) == 1:
+				river_count += 1
+				if int(chunk_water_mask[index]) == 1:
+					river_on_water += 1
+	_check(river_reference_matches and river_count == 299 and river_on_water == 0,
+			"WG-06: all 9,216 fixture tiles match the independent whole-world flow reference, which pins exactly 299 river tiles, never on water")
+
+	# 2f.3 The card's reproducibility legs: a fresh generator instance
+	# (fresh launch), the lone corner chunk generated in isolation
+	# (unload/reload at a world edge, where the stage rect runs unclamped
+	# past the world bounds), and reversed chunk order (no cross-chunk
+	# state) must all reproduce the river masks byte-identically.
+	var river_fresh_gen := WorldGenerator.new()
+	river_fresh_gen.initialize(42, water_fixture_config)
+	river_fresh_gen.content_registry = water_fixture_registry
+	var river_fresh_ok: bool = true
+	for chunk_coords in fixture_chunk_coords:
+		var fresh_payload: Dictionary = river_fresh_gen.generate_chunk(chunk_coords)
+		if str(fresh_payload.get("river_mask", "%%missing%%")) != str(water_first[chunk_coords].get("river_mask", "%%missing%%")):
+			river_fresh_ok = false
+	_check(river_fresh_ok,
+			"WG-06: a fresh generator instance reproduces every fixture river mask byte-identically (fresh launch)")
+	var river_lone_gen := WorldGenerator.new()
+	river_lone_gen.initialize(42, water_fixture_config)
+	river_lone_gen.content_registry = water_fixture_registry
+	var river_lone_payload: Dictionary = river_lone_gen.generate_chunk(lone_chunk_coords)
+	_check(str(river_lone_payload.get("river_mask", "%%missing%%")) == str(water_first[lone_chunk_coords].get("river_mask", "%%missing%%")),
+			"WG-06: the lone corner chunk (stage rect unclamped past the world edge) regenerated in isolation matches its in-box twin byte-identically (reload)")
+	var river_reversed_gen := WorldGenerator.new()
+	river_reversed_gen.initialize(42, water_fixture_config)
+	river_reversed_gen.content_registry = water_fixture_registry
+	var river_reversed_ok: bool = true
+	for step in range(fixture_chunk_coords.size()):
+		var chunk_coords: Vector2i = fixture_chunk_coords[fixture_chunk_coords.size() - 1 - int(step)]
+		var river_reversed_payload: Dictionary = river_reversed_gen.generate_chunk(chunk_coords)
+		if str(river_reversed_payload.get("river_mask", "%%missing%%")) != str(water_first[chunk_coords].get("river_mask", "%%missing%%")):
+			river_reversed_ok = false
+	_check(river_reversed_ok,
+			"WG-06: reversed chunk generation order reproduces every fixture river mask byte-identically (no cross-chunk state)")
+
+	# 2f.4 Downstream fate: trace each reference river downstream over the
+	# same 162x162 reference rect, capped at 4R steps. The probed split: 151
+	# rivers drain into water, 0 reach the window edge, 148 meander or
+	# recirculate on closed-basin floors (documented limitation - wetland
+	# treatment is a later card; a 'looped' count also covers long
+	# meanders that exhaust the 4R cap without revisiting a tile). A river
+	# tile can never end in an infinite loop.
+	var river_audit: Dictionary = _wg06_downstream_audit(river_core_start, river_world_side,
+			wg06_river_reference, river_halo, river_ref_start, river_ref_side,
+			river_ref_elevations, river_ref_water)
+	_check(int(river_audit["reached_water"]) == 151 and int(river_audit["exited_rect"]) == 0 \
+			and int(river_audit["looped"]) == 148,
+			"WG-06: the independent downstream audit of all 299 reference rivers matches the probed fate split (151 drain to water / 0 exit the window / 148 meander in closed basins)")
+
+	# 2f.5 With the stage in use (fixture world), the public on-demand query
+	# runs its own (2R+1)-margin rect and must agree with the payload.
+	var fixture_river_on_demand_ok: bool = true
+	for index in on_demand_sample_indices:
+		var wx: int = index % fixture_chunk_size
+		var wy: int = index / fixture_chunk_size
+		if water_fixture_gen.is_river_at_world(wx, wy) != int(fixture_chunk_zero_payload["river_mask"][index]):
+			fixture_river_on_demand_ok = false
+	_check(fixture_river_on_demand_ok,
+			"WG-06: with the stage in use, the on-demand is_river_at_world query agrees with the chunk payload at all 12 sampled tiles")
+
+	# 2f.6 river_halo_tiles = 0 disables the stage: empty river_mask
+	# payload, on-demand query closed at -1, zero added cost.
+	var river_disabled_config := water_fixture_config.duplicate() as WorldGenerationConfig
+	river_disabled_config.river_halo_tiles = 0
+	var river_disabled_gen := WorldGenerator.new()
+	river_disabled_gen.initialize(42, river_disabled_config)
+	river_disabled_gen.content_registry = water_fixture_registry
+	var river_disabled_payload: Dictionary = river_disabled_gen.generate_chunk(Vector2i(0, 0))
+	_check(river_disabled_payload.has("river_mask") \
+			and (river_disabled_payload["river_mask"] as PackedInt32Array).is_empty() \
+			and river_disabled_gen.is_river_at_world(0, 0) == -1,
+			"WG-06: river_halo_tiles = 0 disables the stage - empty river_mask payload and the on-demand query stays closed at -1")
+
+	# 2f.7 The live world: the streamed chunk payload gains the river_mask
+	# key; water tiles are never river tiles; on-demand queries agree with
+	# the payload. Content stays unperturbed - every pre-WG-06 check above
+	# (water fields, biomes, POIs, features, resources) still passes, since
+	# nothing consumes river_mask yet.
+	var live_river_check: bool = live_chunk_data.has("river_mask") \
+			and (live_chunk_data["river_mask"] as PackedInt32Array).size() == live_chunk_size * live_chunk_size
+	_check(live_river_check,
+			"WG-06: the live chunk payload gains the river_mask key at full chunk size")
+	var live_river_mask: PackedInt32Array = live_chunk_data["river_mask"]
+	var live_river_mask_ok: bool = live_river_check
+	var live_river_on_demand_ok: bool = true
+	for index in on_demand_sample_indices:
+		var wx: int = index % live_chunk_size
+		var wy: int = index / live_chunk_size
+		if int(live_river_mask[index]) == 1 and int((live_chunk_data["water_mask"] as PackedByteArray)[index]) == 1:
+			live_river_mask_ok = false
+		if live_generator.is_river_at_world(wx, wy) != int(live_river_mask[index]):
+			live_river_on_demand_ok = false
+	_check(live_river_mask_ok,
+			"WG-06 live world: no river tile of the streamed chunk sits on a water tile")
+	_check(live_river_on_demand_ok,
+			"WG-06 live world: the on-demand is_river_at_world query agrees with the streamed chunk payload at all 12 sampled tiles")
+
 	# --- 3. Terrain + resources --------------------------------------------
 	_check(terrain_renderer.get_used_cells().size() > 0, "Terrain rendered for initial chunks (%d tiles)" % terrain_renderer.get_used_cells().size())
 	_check(TileSetGenerator.MATERIAL_PIXELS_PER_TILE == 4, "Stock terrain keeps its lightweight streaming resolution")
@@ -2036,3 +2205,145 @@ func _wg05_bfs_reference(side_x: int, side_y: int, cap: int, water_rect: PackedI
 					if dist[j] < cap:
 						queue.append(j)
 	return dist
+
+## WG-06 fixed neighbour order (NW, N, NE, W, E, SW, S, SE). The order is
+## part of the flow model: elevation ties resolve to the first neighbour in
+## this order, so the harness reference and the generator's private
+## RIVER_FLOW_NEIGHBORS must stay in sync or the 9,216-tile identity check
+## in 2f.2 fails.
+const WG06_REF_NEIGHBORS: Array[Vector2i] = [
+	Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1),
+	Vector2i(-1, 0), Vector2i(1, 0),
+	Vector2i(-1, 1), Vector2i(0, 1), Vector2i(1, 1)
+]
+
+## WG-06 independent reference flow destination: the strictly lower in-rect
+## neighbour with the minimum elevation, ties resolved by the fixed
+## WG06_REF_NEIGHBORS order; with no strictly lower neighbour, the overall
+## lowest in-rect neighbour (a closed basin spills over its lowest rim
+## point, so the flow is total on land). -1 only at the rect's one-ring
+## edge. From-scratch re-implementation of the generator's private
+## _river_flow_destination.
+func _wg06_ref_flow_destination(rx: int, ry: int, side: int,
+		elevations: PackedFloat32Array) -> int:
+	var self_e: float = elevations[ry * side + rx]
+	var best: int = -1
+	var best_e: float = INF
+	for n in WG06_REF_NEIGHBORS:
+		var nx: int = rx + int(n.x)
+		var ny: int = ry + int(n.y)
+		if nx < 0 or nx >= side or ny < 0 or ny >= side:
+			continue
+		var e: float = elevations[ny * side + nx]
+		if e < self_e and (best == -1 or e < best_e):
+			best = ny * side + nx
+			best_e = e
+	if best == -1:
+		for n in WG06_REF_NEIGHBORS:
+			var nx2: int = rx + int(n.x)
+			var ny2: int = ry + int(n.y)
+			if nx2 < 0 or nx2 >= side or ny2 < 0 or ny2 >= side:
+				continue
+			var e2: float = elevations[ny2 * side + nx2]
+			if e2 < best_e:
+				best = ny2 * side + nx2
+				best_e = e2
+	return best
+
+## WG-06 independent reference for the bounded flow/accumulation stage:
+## every land tile within Chebyshev distance river_halo of the core is a
+## unit source; each source walks at most river_halo downstream steps,
+## stopping at a repeated tile, a water tile or the rect edge, and each
+## distinct visit gains one count. A core tile is a river tile when it is
+## land and at least threshold distinct sources drain through it. Fresh
+## arrays, explicit fills.
+func _wg06_river_reference(rect_start: Vector2i, rect_side: int,
+		core_start: Vector2i, core_side: int, river_halo: int, threshold: int,
+		rect_elevations: PackedFloat32Array, rect_water: PackedInt32Array) -> PackedInt32Array:
+	var counts := PackedInt32Array()
+	counts.resize(rect_side * rect_side)
+	var core_min_x: int = int(core_start.x) - river_halo
+	var core_max_x: int = int(core_start.x) + int(core_side) - 1 + river_halo
+	var core_min_y: int = int(core_start.y) - river_halo
+	var core_max_y: int = int(core_start.y) + int(core_side) - 1 + river_halo
+	for ry in range(rect_side):
+		var world_y: int = int(rect_start.y) + int(ry)
+		if world_y < core_min_y or world_y > core_max_y:
+			continue
+		for rx in range(rect_side):
+			var world_x: int = int(rect_start.x) + int(rx)
+			if world_x < core_min_x or world_x > core_max_x:
+				continue
+			var i: int = ry * rect_side + rx
+			if rect_water[i] == 1:
+				continue
+			var visited: Dictionary = {}
+			var t: int = i
+			for step in range(river_halo):
+				if visited.has(t):
+					break
+				visited[t] = true
+				counts[t] += 1
+				if rect_water[t] == 1:
+					break
+				var t_y: int = t / rect_side
+				var t_x: int = t % rect_side
+				t = _wg06_ref_flow_destination(t_x, t_y, rect_side, rect_elevations)
+				if t == -1:
+					break
+	var river_mask := PackedInt32Array()
+	river_mask.resize(core_side * core_side)
+	river_mask.fill(0)
+	for cy in range(core_side):
+		var row: int = (int(core_start.y) + int(cy) - int(rect_start.y)) * rect_side \
+				+ (int(core_start.x) - int(rect_start.x))
+		for cx in range(core_side):
+			var i: int = row + int(cx)
+			if rect_water[i] == 1:
+				river_mask[cy * core_side + cx] = 0
+			else:
+				river_mask[cy * core_side + cx] = 1 if counts[i] >= threshold else 0
+	return river_mask
+
+## WG-06 downstream fate audit, mirroring the probe's trace semantics: each
+## river tile's path is followed for at most 4 * river_halo steps over the
+## reference rect - outcome 1 = reached a water tile, 2 = left the rect,
+## 3 = revisited a tile; a trace that exhausts its 4R steps without any of
+## those (a long closed-basin meander) also counts as 3.
+func _wg06_downstream_audit(core_start: Vector2i, core_side: int,
+		river_mask: PackedInt32Array, river_halo: int,
+		rect_start: Vector2i, rect_side: int,
+		rect_elevations: PackedFloat32Array, rect_water: PackedInt32Array) -> Dictionary:
+	var reached_water: int = 0
+	var exited_rect: int = 0
+	var looped: int = 0
+	for cy in range(core_side):
+		for cx in range(core_side):
+			if river_mask[cy * core_side + cx] != 1:
+				continue
+			var rx: int = int(core_start.x) + int(cx) - int(rect_start.x)
+			var ry: int = int(core_start.y) + int(cy) - int(rect_start.y)
+			var t: int = ry * rect_side + rx
+			var seen: Dictionary = {}
+			var outcome: int = -1
+			for step in range(4 * river_halo):
+				if seen.has(t):
+					outcome = 3
+					break
+				seen[t] = true
+				if rect_water[t] == 1:
+					outcome = 1
+					break
+				var destination: int = _wg06_ref_flow_destination(
+						t % rect_side, t / rect_side, rect_side, rect_elevations)
+				if destination == -1:
+					outcome = 2
+					break
+				t = destination
+			if outcome == 1:
+				reached_water += 1
+			elif outcome == 2:
+				exited_rect += 1
+			else:
+				looped += 1
+	return {"reached_water": reached_water, "exited_rect": exited_rect, "looped": looped}

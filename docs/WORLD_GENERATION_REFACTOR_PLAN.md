@@ -318,7 +318,7 @@ relationships by relying on data/environment values, never adjacency bans.
 **Done when:** tests prove deterministic classifications and a content rule can
 use shore distance without a water-name special case.
 
-### WG-06 — Add deterministic rivers and streams
+### WG-06 — Add deterministic rivers and streams — COMPLETE (2026-09-13)
 
 **Goal:** introduce connected hydrology as a world-system extension.
 
@@ -329,6 +329,47 @@ the priority is seamless, reproducible paths across chunk borders.
 
 **Done when:** a fixed seed produces identical cross-chunk paths after unload,
 reload, and fresh launch. Do not add wetlands or waterfalls yet.
+
+Delivered: `WorldGenerator` gains a bounded flow/accumulation stage over the
+same rect the environmental-field sampling already uses, grown from
+`distance_to_water_cap_tiles` to `maxi(cap, 2 * river_halo_tiles + 1)`.
+Every land tile within Chebyshev distance `river_halo_tiles` of the chunk core
+is a unit source that traces a deterministic downstream path (the strictly
+lower in-rect neighbour with minimum elevation, ties resolved by the fixed
+NW/N/NE/W/E/SW/S/SE neighbour order; with no strictly lower neighbour the
+closed basin spills over its lowest rim point, so the flow is total on land
+and never dead-ends), stopping at a repeated tile, a water tile or the rect
+edge; each distinct visit increments the tile's count. A core tile is a river
+tile when it is land and at least `river_accumulation_threshold` distinct
+sources drain through it; water tiles are always 0. Both parameters live in
+`WorldGenerationConfig` (live 24 / 32, fixture 16 / 32); `river_halo_tiles =
+0` disables the stage entirely (empty payload field, on-demand queries closed
+at -1). Boundedness: a core tile's status depends only on the (2R+1)-grown
+rect - its contributing sources are its R-ball and their at-most-R-step paths
+stay inside the one-ring margin - so per-chunk masks are byte-identical to a
+world-wide reference computation and cannot differ across chunk boundaries.
+The payload gains one 0/1 `river_mask` key (256 entries per 16x16 chunk) and
+`is_river_at_world` provides the single-tile on-demand variant over its own
+(2R+1) margin. Harness section 2f (12 checks) covers the committed config
+pins, a 162x162 world-wide reference that re-samples the 96x96 fixture world
+and re-implements the flow/accumulation model in harness-local code (all
+9,216 payload tiles equal the reference, which pins the 299 probed river
+tiles, never on water), the card's reproducibility legs (a fresh generator
+instance, the lone corner chunk with its stage rect running unclamped past
+the world edge, and reversed chunk order all reproduce every mask
+byte-identically), a downstream fate audit of all 299 reference rivers
+(151 drain into water / 0 reach the window edge / 148 meander or recirculate
+on closed-basin floors), on-demand versus payload agreement at 12 sampled
+tiles, the disable-by-zero contract, and the live audit (payload gains the
+key at full chunk size, water tiles are never river tiles, on-demand queries
+agree, and every pre-WG-06 content check stays green because nothing consumes
+`river_mask` yet). Limitations: paths that hit the R-step cap or leave the
+stage rect are not traced further (very long streams may not appear
+end-to-end); a closed basin whose floor never reaches water inside the halo meanders or
+recirculates on the basin floor instead of draining (the live world shows
+this prominently) - the flow stays deterministic and seam-safe, and wetland
+treatment is explicitly deferred to a later card; rendering and gameplay
+effects are out of scope for this card.
 
 ### WG-07 — Replace costly spawn attempts with density fields
 

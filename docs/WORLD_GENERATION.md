@@ -16,7 +16,9 @@ remain independent of those bounds so a future effectively infinite world can
 reuse the same generation APIs. Water is a physical system, not a normal biome: a coastline/inland-lake
 mask, a per-tile class (land / shore / coast / deep_water), an origin
 (ocean or lake), and a Chebyshev shore-distance field that content can
-constrain against (see the WG-05 section below).
+constrain against (see the WG-05 section below), plus a connected
+river/stream flow mask derived from the same water mask and elevation
+(see the WG-06 section below).
 
 POI candidate generation is a generic stage: every discovered
 `POIDefinition` contributes candidates from its own spacing grid, biome and
@@ -206,6 +208,69 @@ only gain the three new keys. Not wired this card: renderer
 presentation of the new classes (water still renders from the mask) and
 exact (unsaturated) distances beyond the cap.
 
+## Rivers and streams (WG-06)
+
+Water is also a source of flow: connected rivers and streams are computed
+as a bounded deterministic stage over the same elevation and water-mask
+fields (no new noise layer, no content-name knowledge):
+
+- **Configuration.** `world_generation_config.tres` carries two new
+  fields: `river_halo_tiles` (R; live 24, fixture 16; 0 disables the
+  stage) and `river_accumulation_threshold` (K; 32 in both configs). R
+  plays both roles: it is the maximum length of a flow path *and* the
+  radius (Chebyshev) inside the chunk core that makes a land tile a
+  flow source.
+- **Flow.** A source tile flows to the strictly-lower minimum elevation
+  among its 8 in-rect neighbours, ties broken by a fixed neighbour
+  order (NW, N, NE, W, E, SW, S, SE — the order is part of the
+  definition); a local minimum (no lower neighbour) instead flows to
+  the overall minimum inside the rect; the one-ring border of the rect
+  has no destination (paths stop there). Water tiles are counted when a
+  path reaches them, but paths never enter water — water is the
+  terminal of the connected system, not part of the river mask.
+- **Accumulation.** Every source traces at most R steps downstream,
+  deduplicated per source by a visited set, and each distinct visit
+  increments the visited tile's source count. A core land tile is a
+  **river tile** when at least K distinct sources have visited it;
+  water tiles are never river tiles.
+- **Boundedness / seam-safety.** The stage runs on the chunk core
+  grown 2R+1 tiles per side (unclamped at the world edge; the shared
+  environmental rect is grown to the larger of the WG-05 shore cap and
+  2R+1, so the extra halo is free). A core tile's river status depends
+  only on that (2R+1)-grown rect — its sources sit inside its R-ball
+  and its at-most-R-step paths stay inside the one-ring margin — so a
+  chunk generated alone is byte-identical to the same chunk generated
+  inside a box, in any order, and per-chunk masks equal a world-wide
+  reference tile-for-tile. A corner chunk's unclamped stage rect still
+  lands inside the world reference rect (touching its edge), so corner
+  flows are identical too. The harness pins all of this (fresh
+  instance / lone corner chunk / reversed order, plus a 162×162
+  world-wide reference over the 96×96 fixture: 299 river tiles, none
+  on water, and a downstream fate audit of 151 drain to water / 0
+  exit the window / 148 meander in closed basins).
+- **Payload + on-demand.** The mask rides the chunk payload as
+  `river_mask` (0/1 over the chunk core; the key is present but empty
+  while the stage is disabled) and is mirrored by the public query
+  `is_river_at_world`, which re-samples its own (2R+1)-grown rect on
+  demand and returns -1 while the stage is disabled.
+
+Not wired this card: rendering and gameplay effects — nothing consumes
+`river_mask` yet (payload-only, like WG-05), and the card explicitly
+defers wetlands and waterfalls. Two documented limitations: (1) paths
+that exhaust their R steps or leave the stage rect are not traced
+further, so very long streams may not appear end-to-end; (2) closed
+basins whose floor never reaches water inside the halo meander and
+recirculate
+instead of draining — present in the fixture (148 of the 299 river
+tiles) and prominent in the live world (at K=32 essentially every live
+river path ends in a closed-basin meander). A veto for closed basins
+was trialled and rejected: vetoing paths that return to their source
+within R steps was vacuous (basin meanders return further than R), and
+extending the veto trace to 4R would break the seam-safety argument
+above. The live world's R=48 variant was also probed and rejected:
++13 river tiles at roughly 4× the per-chunk flow cost (473 ms vs
+134 ms per chunk).
+
 ## Generation Layers
 
 The `FastNoiseLite` instances (Godot 4.x API), all using
@@ -271,6 +336,10 @@ a chunk data dictionary:
     "distance_to_water": PackedInt32Array,  # WG-05: 0 on water, 1..cap-1
                                          # exact, cap = no water within
                                          # cap - 1 tiles
+    "river_mask": PackedInt32Array,      # WG-06: 0/1 connected-hydrology
+                                         # river flag per core tile (water
+                                         # tiles 0; empty while the flow
+                                         # stage is disabled)
     "biomes": PackedStringArray,        # per-tile biome ids (post-stage)
     "region_cells": Array,              # coherent-region stage: one entry per
                                          # world-aligned cell of this chunk —

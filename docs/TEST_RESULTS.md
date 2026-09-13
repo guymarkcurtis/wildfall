@@ -1,8 +1,8 @@
 # Wildfall Test Results
 
 ## Test Run Summary
-- **Current verification**: 355 checks passed, 0 failures, 0 script errors (Godot 4.7.2 headless run after the data-driven world-generation, regional-biome, POI-spacing, cave-runtime, directional-animation, fixed-world-direction control, startup content-validation (WG-01), the generic POI layer (WG-02), the coherent-region stage (WG-03), and the terrain-feature candidate layer (WG-04), and the water classification +
-  shore distance field (WG-05) work; includes registry, large-world configuration, underground-mineral filtering, deterministic regional/POI/cave identity, underground cave deposits, cave entry/exit, discovery-ledger checks, authored player-direction/action frames, jumping, all four fixed WASD axes, the 20-check invalid-content validation suite, the 11-check coherent-region suite (fixture data-driven region floors, world-aligned cell grid, no sub-floor fragments, metadata-respecting merges, tile-for-tile payload/query agreement, seam-chunk and reversed-order stability, and a live-seed dormant no-op), and the 15-check terrain-feature suite (asset discovery/validation, dormant live world, regeneration + seam + reversed-order stability, halo/owner invariants, min-spacing, and the spawner's no_spawn veto end-to-end), and
+- **Current verification**: 367 checks passed, 0 failures, 0 script errors (Godot 4.7.2 headless run after the data-driven world-generation, regional-biome, POI-spacing, cave-runtime, directional-animation, fixed-world-direction control, startup content-validation (WG-01), the generic POI layer (WG-02), the coherent-region stage (WG-03), and the terrain-feature candidate layer (WG-04), and the water classification +
+  shore distance field (WG-05), and the connected-hydrology stage (WG-06) work; includes registry, large-world configuration, underground-mineral filtering, deterministic regional/POI/cave identity, underground cave deposits, cave entry/exit, discovery-ledger checks, authored player-direction/action frames, jumping, all four fixed WASD axes, the 20-check invalid-content validation suite, the 11-check coherent-region suite (fixture data-driven region floors, world-aligned cell grid, no sub-floor fragments, metadata-respecting merges, tile-for-tile payload/query agreement, seam-chunk and reversed-order stability, and a live-seed dormant no-op), and the 15-check terrain-feature suite (asset discovery/validation, dormant live world, regeneration + seam + reversed-order stability, halo/owner invariants, min-spacing, and the spawner's no_spawn veto end-to-end), and
   the 28-check water-classification suite (fixture classes/origins over all
   9,216 tiles against the halo-expanded 12,544-tile reference, the
   Chebyshev shore
@@ -11,7 +11,16 @@
   new min/max distance constraints without any water-name special case,
   on-demand query agreement behind the open gate, the invalid-fixture
   distance validation, and a live audit proving biomes stay byte-identical
-  while the three new payload keys ride along))
+  while the three new payload keys ride along), and
+  the 12-check rivers-and-streams suite (connected hydrology: committed
+  config pins; all 9,216 fixture tiles matching an independently
+  re-implemented flow/accumulation reference over the 162x162 world-wide
+  rect, pinning 299 rivers, never on water; fresh-instance / lone-corner
+  (unclamped edge rect) / reversed-order byte-identical reproducibility;
+  downstream fate audit (151 drain to water / 0 exit the window / 148
+  meander in closed basins); on-demand query agreement at 12 sampled
+  tiles; disable-by-zero contract; and a live audit proving the payload
+  gains the key while content stays unperturbed))
 - **Godot Version**: 4.7.2.stable (linux.x86_64, official) — the project was upgraded to Godot 4.7 on 2026-09-11 (editor config sync from the Mac) and the Linux verification binary was upgraded to match
 - **Test Script**: `tests/test_game.gd` (SceneTree harness that boots the real `main.tscn`, validates world, UI, inventory, building, technology progression, texture-pack export/live switching, save persistence of player-caused world mutations, and resource accessibility, then exits with the failure count as its exit code)
 
@@ -288,6 +297,74 @@ without filling it with the -1 unvisited sentinel, which silently produced
 an all-zero field — the world-wide reference check above is what catches
 exactly that class of error. The renderer's presentation of the new classes
 is a documented seam, not wired this card.
+
+## Rivers and streams — WG-06 (2026-09-13)
+
+`WorldGenerator` now builds a connected-hydrology river mask per chunk.
+`R = river_halo_tiles` (fixture 16, live 24) is both the path-length cap
+and the contribution radius (Chebyshev): the stage rect is the chunk core
+grown 2R+1 tiles per side (unclamped at the world edge), and every land
+tile within R tiles of the core is a unit source. Each source walks
+downhill — the strictly-lower minimum among its 8 in-rect neighbours in
+the fixed NW, N, NE, W, E, SW, S, SE tie order, falling back to the
+overall in-rect minimum at a local minimum — for at most R steps; water
+tiles are counted but terminate a path, so paths never enter water. A
+core land tile is a river tile when at least
+`K = river_accumulation_threshold` (32 in both configs) distinct sources
+have visited it. The mask rides the chunk payload as the new `river_mask`
+key (0/1 over the chunk core; water is always 0) and is mirrored by the
+public on-demand query `is_river_at_world`, which re-samples its own
+(2R+1)-grown rect on demand. Because a core tile's river status depends
+only on that (2R+1)-grown rect — its sources sit inside its R-ball and its
+at-most-R-step paths stay inside the one-ring margin — the per-chunk mask
+is byte-identical to a world-wide reference, which is what makes the stage
+seam-safe; the corner chunk's unclamped stage rect still lands inside the
+world reference rect (touching its edge), so corner flows are identical
+too.
+
+- 12 checks in harness section 2f, over the WG-05 6x6-chunk
+  `water_classification` fixture (96x96 tiles, seed 42, committed R=16,
+  K=32; the live config commits R=24, K=32):
+- Committed config pins: the fixture config commits 16/32, the live
+  config commits 24/32.
+- World-wide reference: every one of the 9,216 payload tiles equals an
+  independently re-implemented flow/accumulation reference (its own
+  neighbour table, its own flow rule, its own source/visited tracing)
+  computed over the 162x162 world-wide rect (96 + 2x33), pinning exactly
+  299 river tiles, none on water.
+- Reproducibility: a fresh generator instance (fresh launch), a
+  lone-corner-chunk regeneration in isolation (unload/reload at the
+  unclamped world edge), and reversed-order generation all reproduce all
+  36 chunk masks byte-for-byte.
+- Downstream fate: tracing the 299 fixture river tiles to their terminal
+  tile, 151 drain to water, 0 exit the window, and 148 meander in closed
+  basins (the looped bucket also counts paths that exhaust the 4R audit
+  trace cap; an infinite loop is impossible by construction).
+- On-demand: `is_river_at_world` agrees with the payload at 12 scattered
+  sample tiles in the fixture world.
+- Disable-by-zero: `river_halo_tiles = 0` leaves the `river_mask` key
+  present but empty, and the on-demand query returns -1.
+- Live audit: the live payloads gain a 256-entry `river_mask`; river
+  tiles never sit on water tiles; the on-demand query agrees at the same
+  12 scattered tiles; and the pre-existing content checks stay green. The
+  live seed is random per fresh launch, so no absolute live river count
+  is pinned — the audit is structural, as in 2e.4.
+
+Design notes: rendering and gameplay effects are explicitly out of scope
+for this card — nothing consumes `river_mask` yet (payload-only, like
+WG-05). Closed basins are a documented limitation: where the basin floor
+never reaches water within the halo, a stream meanders/recirculates
+instead of draining — prominent in the live world (at K=32 essentially
+every live river path ends in a closed-basin meander; the seed-7 probe
+found 0 live paths draining to water) and present in the fixture (148 of
+the 299 river tiles). A closed-basin veto was trialled and rejected: a
+veto on paths that return to their own source within R steps was vacuous
+(basin meanders return further than R), and extending the veto trace to 4R
+would break seam-safety. Wetlands and waterfalls are deferred per the
+card's own done-when; paths that exhaust their R steps or leave the stage
+rect are not traced further, so very long streams may not appear
+end-to-end. The R=48 live variant was probed and rejected: +13 river
+tiles at roughly 4x the per-chunk flow cost (473 ms vs 134 ms).
 
 ## Player directional animation (2026-09-12)
 

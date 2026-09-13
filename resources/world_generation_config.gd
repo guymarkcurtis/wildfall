@@ -27,6 +27,24 @@ extends Resource
 ## on a water body name.
 @export_range(0, 64) var distance_to_water_cap_tiles: int = 16
 
+## WG-06: halo, in Chebyshev tiles from the chunk edge, of the bounded
+## flow stage that derives the river/stream mask. Every land tile within
+## the halo of the chunk is a unit water source; each source traces at
+## most halo steps downstream over the elevation field, stopping when it
+## enters water. A land tile is a river tile when at least
+## river_accumulation_threshold distinct sources drain through it. The
+## stage samples the one rect the chunk already samples, grown by the
+## halo, so a tile's river status depends only on that rect and is
+## identical however the chunk is generated. 0 disables the stage:
+## payloads carry an empty river_mask and on-demand queries return -1.
+@export_range(0, 64) var river_halo_tiles: int = 24
+
+## WG-06: distinct-source accumulation a land tile needs to count as a
+## river tile in the flow stage above. Higher values thin the network
+## toward trunk channels; lower values flood the mask with sheet flow.
+## Must stay >= 1 whenever the stage is enabled.
+@export_range(1, 256) var river_accumulation_threshold: int = 32
+
 ## Low-frequency regional sampling keeps biome regions broad while preserving
 ## local environmental variation at their boundaries.
 @export_range(0.01, 1.0) var regional_field_coordinate_scale: float = 0.18

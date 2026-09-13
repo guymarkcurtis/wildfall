@@ -118,6 +118,20 @@ placement code). The shipped world currently carries no feature assets, so
 the stage is dormant there and adding your first feature changes placement
 only where your asset's tags are consumed.
 
+## Rivers and streams (WG-06)
+
+Rivers are a physical world system like the water mask, not content: there
+is no per-river asset and no per-biome authoring. Placement is entirely
+derived from the elevation and water fields — a land tile is a river tile
+when enough nearby land sources drain through it in the bounded flow stage
+(see `WORLD_GENERATION.md`, "Rivers and streams"). To tune or disable
+rivers you edit `world_generation_config.tres`, not content assets:
+`river_halo_tiles` (R; 0 disables the stage) and
+`river_accumulation_threshold`
+(K; the distinct-source count that makes a tile a river tile). No
+`data/world/` asset change, registry validation, or content migration is
+involved.
+
 ## Caves and POIs
 
 POI and cave assets are separate from surface biomes. A cave definition links
