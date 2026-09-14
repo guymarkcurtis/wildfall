@@ -10,6 +10,9 @@ extends Node2D
 
 const TILE_SIZE := 32
 const CRAFTING_STATION_RANGE := 72.0
+## Cosmetic local-light budget. Selection is deterministic (distance, then
+## stable placement key) so identical saves render the same surviving lights.
+const MAX_VISIBLE_LOCAL_LIGHTS := 32
 
 ## Deterministic lookup priority for the ambiguous tile+story query.
 const LAYER_QUERY_PRIORITY := ["object", "connector", "floor", "ground", "edge", "overhead"]
@@ -58,6 +61,30 @@ func _physics_process(delta: float) -> void:
 	if item_database != null:
 		for record in _record_list:
 			FuelConsumer.tick(record, delta, item_database)
+	_refresh_local_light_budget()
+
+## Keep expensive PointLight2D nodes bounded in dense player builds. The
+## player-centered margin matches the per-building local cull; a camera that
+## follows the player therefore sees all candidates it can meaningfully show.
+func _refresh_local_light_budget() -> void:
+	var candidates: Array[BuildingRecord] = []
+	for record in _record_list:
+		if record.node == null or not is_instance_valid(record.node) \
+				or not record.node.has_local_light():
+			continue
+		if player != null and is_instance_valid(player) \
+				and record.node.global_position.distance_to(player.global_position) > Building.LIGHT_CULL_RADIUS_PX:
+			record.node.set_light_budget_allowed(false)
+			continue
+		candidates.append(record)
+	candidates.sort_custom(func(a: BuildingRecord, b: BuildingRecord) -> bool:
+		var origin := player.global_position if player != null and is_instance_valid(player) else Vector2.ZERO
+		var a_distance := a.node.global_position.distance_squared_to(origin)
+		var b_distance := b.node.global_position.distance_squared_to(origin)
+		return a_distance < b_distance if not is_equal_approx(a_distance, b_distance) else a.placement_key() < b.placement_key()
+	)
+	for index in candidates.size():
+		candidates[index].node.set_light_budget_allowed(index < MAX_VISIBLE_LOCAL_LIGHTS)
 
 ## Generic vertical-connector traversal: when the player ENTERS a connector's
 ## landing zone (edge-triggered, so standing still never re-triggers), the

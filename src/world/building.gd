@@ -55,6 +55,10 @@ var _appearance_sprite: Sprite2D = null
 var _appearance_state: String = ""
 var _light: PointLight2D = null
 static var _shared_light_texture: GradientTexture2D = null
+## BuildingManager owns the global nearest-first cap. Individual buildings
+## still perform their cheap range/daylight checks, but never self-promote
+## above that shared cap.
+var _light_budget_allowed := true
 var _label: Label = null
 var _health_bar: ProgressBar = null
 
@@ -186,12 +190,21 @@ func _update_light() -> void:
 	var in_light_budget := player == null or global_position.distance_to(player.global_position) <= LIGHT_CULL_RADIUS_PX
 	var allowed_by_daylight := profile.daylight_policy == "always" or (cycle != null and cycle.is_nighttime())
 	var powered := not profile.requires_power or bool(capability_state.get("enabled", false))
-	_light.visible = in_light_budget and allowed_by_daylight and powered
+	_light.visible = _light_budget_allowed and in_light_budget and allowed_by_daylight and powered
 	if definition.appearance_profile != null:
 		var appearance: AppearanceProfile = definition.appearance_profile
 		set_appearance_state(appearance.powered_state if powered else appearance.unpowered_state)
 	if _light.visible:
 		_light.energy = profile.energy * (1.0 + sin(Time.get_ticks_msec() * 0.008) * 0.08 if profile.flicker else 1.0)
+
+## BuildingManager calls this after deterministic nearest-first selection.
+## Kept on the generic light capability so new light-bearing content needs no
+## manager or item-ID branch.
+func set_light_budget_allowed(allowed: bool) -> void:
+	_light_budget_allowed = allowed
+
+func has_local_light() -> bool:
+	return _light != null and definition != null and definition.light_profile != null
 
 ## Build an authored state-sheet sprite when art is available. Assets may
 ## provide states before their dedicated sheet ships; in that case the normal

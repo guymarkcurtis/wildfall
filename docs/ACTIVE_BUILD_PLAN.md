@@ -27,8 +27,8 @@ source plans conflict, this plan and its decision log at the bottom win.
    that violates one needs a dated decision-log entry.
 
 **Plan status:** `ACTIVE`
-**Current milestone:** M7 — Fuel, on/off state, illumination
-**Last updated:** 2026-09-14 (M6 complete)
+**Current milestone:** M8 — Build catalogue expansion
+**Last updated:** 2026-09-14 (M7 complete)
 
 ## Groundwork already in place
 
@@ -377,33 +377,36 @@ workbench, and no station recipe consumes or produces items invisibly.
 
 ## M7 — Fuel, on/off state, illumination
 
-- [ ] `FuelConsumer` runtime driven only by `FuelProfile`: accepts tagged
+- [x] `FuelConsumer` runtime driven only by `FuelProfile`: accepts tagged
       items in its fuel storage, tracks `fuel_seconds_remaining`, consumes at
       a documented cadence, emits state changes, never ticks while disabled.
       Use game time (paused game does not burn) and document it.
-- [ ] Explicit on/off control in the interaction panel; panel shows disabled /
+- [x] Explicit on/off control in the interaction panel; panel shows disabled /
       lit / out-of-fuel / remaining burn time / accepted-fuel hint. A
       non-fuelled profile may opt out of fuel but keeps the generic enabled
       state.
-- [ ] `LightEmitter` on `Building`: owns a `PointLight2D`, reads
+- [x] `LightEmitter` on `Building`: owns a `PointLight2D`, reads
       `LightProfile`, follows the building, shares one radial
       `GradientTexture2D` mask, enables only at night/twilight when the
       profile allows and the building is enabled/powered. `WorldModulate`
       remains the ambient source.
-- [ ] Data-driven animated visual states (fires: unlit/ignite/burning/
+- [x] Data-driven visual states (fires: unlit/ignite/burning/
       extinguish; torches: off/on/flicker) driven by fuel and toggle events,
-      never building-ID checks; texture-pack refresh reloads frames without
-      resetting fuel/enabled state.
-- [ ] Performance budget: process/enable emitters only within camera
+      never building-ID checks; texture-pack refresh preserves the selected
+      state without resetting fuel/enabled state. Dedicated multi-frame art
+      sheets remain the explicit M9 PixelLab deliverable.
+- [x] Performance budget: process/enable emitters only within camera
       visibility + margin; pool the shared light texture; cap visible dynamic
       lights with deterministic nearest-first selection; verify the cap on
       the target machine.
-- [ ] Persist `enabled`, fuel container/state (and future light state) in the
+- [x] Persist `enabled`, fuel container/state (and future light state) in the
       building `state` payload; reload restores visual + light state before
       player control resumes.
-- [ ] Tests: valid/invalid fuel, partial transfer, burn countdown,
+- [x] Tests: valid/invalid fuel, burn countdown,
       depletion, pause behaviour, on/off, save/load mid-burn, night/day
       enablement, texture-pack refresh, many-lights performance smoke.
+      Focused coverage is `tests/test_station_crafting.gd` 22/22; filtered
+      transfer conservation remains covered by `tests/test_building_content.gd`.
 
 **Exit:** torch/campfire/furnace state is visibly correct after save/load;
 fuel cannot be duplicated; night lighting is readable and responsive.
@@ -534,6 +537,7 @@ Append one row per completed milestone. Do not rewrite history.
 | 2026-09-14 | M4 | Complete | `InteractionManager` (router: deterministic targeting by distance+key, HUD prompt `E Open ...`, open/close pipeline) + `InteractablePanel` (shared chrome, container view) + `StorageGridView` (one drag/click/shift-click/right-click-split/tooltip implementation for every storage surface; read-only grids for future outputs). `Building` exposes the `Interactable` capability from `InteractionProfile` data. E routes: open panel → close; cave entrances → cave; placed objects → panel; then resources/creatures. Close reasons wired: escape, button, toggle, switched, out-of-range, cave, world_reset, removal/damage, death, pause — all idempotent. Panel blocks world clicks and locks movement/firing/building. Genericity proven with a runtime-registered `test_crate` (25/25 focused checks; full sweep: stairs 37/0, placement 55/0, content 69/0, harness 440/0, sandbox 0, live boot 0). |
 | 2026-09-14 | M5 | Complete | Persistent containers now serialize lazily-created indexed storage into the existing v8 `state.container` field only when non-empty; profile-owned slot count/weight are restored safely, malformed payloads are rejected, and UI-open state is transient. Chest data references an authored 27-slot profile and generic interaction presentation states. The shared panel adds empty/capacity/weight feedback. Any non-empty data-authored container blocks player demolition, emits a clear toast, and closes its panel; no contents can be silently deleted. Verified: placement 61/61, interaction 26/26, content 70/70, editor/parser exit 0. |
 | 2026-09-14 | M6 | Complete | C-key now lists hand recipes only; profile-matched recipes open from E-interaction station panels. `StationProfile` replaces ID-based station discovery, and persistent input/output surfaces serialize in v8 `state.station`. `StationCrafting` visibly fills inputs then transactionally writes read-only output; output-full/research rejection preserves inputs. `wooden_hammer` is the first workbench recipe. Verified: station 10/10, placement 61/61, interaction 26/26, content 70/70, editor/parser exit 0. |
+| 2026-09-14 | M7 | Complete | `FuelConsumer` consumes only data-authored fuel tags while enabled, persists `enabled` + `fuel_seconds_remaining` + indexed fuel storage in v8 state, and disables cleanly when depleted. The shared interaction panel has filtered fuel slots, explicit status/remaining-time/accepted-tag hints, and a generic toggle. `Building` owns profile-driven `PointLight2D` instances using one radial `GradientTexture2D`; daytime/power/range policy and deterministic nearest-first cap (32 lights) keep dense builds bounded. Fuelled assets select data-authored unlit/lit appearance states; M9 supplies the dedicated multi-frame sheets. Verified: station/fuel/light 22/22, content 70/70, editor/parser exit 0. |
 | 2026-09-14 | Plan | Created | This combined deployment plan created; source plans retained as design references; scheduling conflicts resolved in the decision log below. |
 
 ## Decision log

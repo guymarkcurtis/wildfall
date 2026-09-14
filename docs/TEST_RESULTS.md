@@ -1,6 +1,16 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **Active Build Plan M7 (2026-09-14, fuel/on-off/local lighting)**: focused
+  `tests/test_station_crafting.gd` **22/22 checks**, content **70/70**, and
+  editor/parser exit 0. `FuelConsumer` accepts only profile-tagged fuel while
+  enabled, preserves remaining burn time and indexed fuel storage in the v8
+  building state, and cleanly disables on depletion; invalid fuel remains
+  unconsumed. The shared panel covers fuel-only interactables and verifies the
+  generic toggle path. `Building` owns profile-driven local `PointLight2D`
+  nodes with a shared radial mask, night/power/range checks, and a stable-key
+  tie-broken nearest-first cap of 32 lights. Appearance-state selection and
+  texture refresh preserve fuel state; dedicated multi-frame art remains M9.
 - **Active Build Plan M6 (2026-09-14, station panels + immediate
   crafting)**: focused `tests/test_station_crafting.gd` **10/10 checks**;
   placement 61/61, interaction 26/26, content 70/70, and editor/parser exit

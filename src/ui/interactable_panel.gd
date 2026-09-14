@@ -169,7 +169,8 @@ func open_station(title: String, help: String, input_storage: InventoryStorage,
 		_station_recipe_box.add_child(button)
 	_refresh()
 
-func configure_fuel(storage: InventoryStorage, enabled: bool, seconds_remaining: float) -> void:
+func configure_fuel(storage: InventoryStorage, enabled: bool, seconds_remaining: float,
+		accepted_fuel_hint: String = "") -> void:
 	_fuel_storage = storage
 	if fuel_grid != null:
 		fuel_grid.queue_free()
@@ -179,11 +180,23 @@ func configure_fuel(storage: InventoryStorage, enabled: bool, seconds_remaining:
 	fuel_grid.slot_pressed.connect(_on_grid_slot_pressed)
 	fuel_grid.quick_transfer_requested.connect(_on_quick_transfer)
 	fuel_grid.drag_transfer_requested.connect(_on_drag_transfer)
+	var status := "Disabled"
+	if enabled:
+		status = "Lit" if seconds_remaining > 0.0 else "Out of fuel"
+	var status_label := Label.new()
+	status_label.text = "Status: %s  •  %.0fs remaining" % [status, seconds_remaining]
+	_window.add_child(status_label)
+	status_label.position = Vector2(24, 218)
+	if not accepted_fuel_hint.is_empty():
+		var hint_label := Label.new()
+		hint_label.text = "Accepts: %s" % accepted_fuel_hint
+		_window.add_child(hint_label)
+		hint_label.position = Vector2(24, 238)
 	var toggle := Button.new()
-	toggle.text = ("Turn off" if enabled else "Turn on") + "  •  %.0fs fuel" % seconds_remaining
+	toggle.text = "Turn off" if enabled else "Turn on"
 	toggle.pressed.connect(func(): fuel_toggle_requested.emit())
 	_window.add_child(toggle)
-	toggle.position = Vector2(24, 220)
+	toggle.position = Vector2(24, 258)
 	_refresh()
 
 func close_panel() -> void:

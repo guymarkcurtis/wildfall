@@ -285,7 +285,8 @@ func _setup_fuel_controls(record: BuildingRecord, panel: InteractablePanel) -> v
 					return true
 			return false)
 	panel.configure_fuel(storage, bool(record.capability_state.get("enabled", false)),
-			float(record.capability_state.get("fuel_seconds_remaining", 0.0)))
+			float(record.capability_state.get("fuel_seconds_remaining", 0.0)),
+			", ".join(profile.accepted_tags))
 	panel.fuel_toggle_requested.connect(_on_fuel_toggle_requested.bind(record))
 	if not storage.changed.is_connected(_on_open_storage_changed):
 		storage.changed.connect(_on_open_storage_changed)

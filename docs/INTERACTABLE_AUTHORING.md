@@ -224,7 +224,12 @@ capability design must not preclude any of these later.
       `wooden_hammer` is the representative workbench recipe. Powered status
       is profile-driven; fuel capacity and timed queues arrive in Phase 5 on
       the same surfaces.
-- [ ] **Phase 5** — author fuel and light (`FuelProfile`, `LightProfile`,
-      animated state sheets); the shared light mask and the light budget.
+- [x] **Phase 5** — `FuelConsumer` burns only enabled, tagged fuel from its
+      profile-owned storage and persists `enabled` / remaining seconds in the
+      placed record. The shared panel shows fuel status, time, accepted tags,
+      and a generic toggle. `Building` owns profile-driven local lights using
+      one radial mask, range culling, and a deterministic nearest-first cap of
+      32. Fuelled appearance profiles select authored powered/unpowered names;
+      dedicated multi-frame sheets remain Phase 6/M9 art work.
 - [ ] **Phase 6** — art contract (PixelLab state sheets + shared
       `GradientTexture2D` light mask) and the texture‑pack manifest entries.

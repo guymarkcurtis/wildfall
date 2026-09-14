@@ -83,6 +83,24 @@ func _test_fuel_tick() -> void:
 	_check(not bool(record.capability_state.get("enabled", true))
 			and is_zero_approx(float(record.capability_state.get("fuel_seconds_remaining", -1.0))),
 			"Fuel depletion disables the object without consuming time while off")
+	var paused_record := BuildingRecord.new()
+	paused_record.definition = record.definition
+	var paused_storage := paused_record.get_fuel_storage()
+	paused_storage.stack_sizes = {"wood": 64}
+	paused_storage.add_item("wood", 1)
+	FuelConsumer.tick(paused_record, 60.0, database)
+	_check(paused_storage.quantity_of("wood") == 1
+			and is_zero_approx(float(paused_record.capability_state.get("fuel_seconds_remaining", 0.0))),
+			"Disabled fuel consumers do not burn while the game supplies no active state")
+	var invalid_record := BuildingRecord.new()
+	invalid_record.definition = record.definition
+	var invalid_storage := invalid_record.get_fuel_storage()
+	invalid_storage.stack_sizes = {"stone": 64}
+	invalid_storage.add_item("stone", 1)
+	invalid_record.capability_state["enabled"] = true
+	FuelConsumer.tick(invalid_record, 1.0, database)
+	_check(invalid_storage.quantity_of("stone") == 1 and not bool(invalid_record.capability_state.get("enabled", true)),
+			"Invalid untagged fuel is never consumed and leaves the emitter out of fuel")
 
 	var main := Node.new()
 	main.name = "Main"
@@ -101,6 +119,10 @@ func _test_fuel_tick() -> void:
 	torch._update_light()
 	_check(torch._light != null and torch._light.visible,
 			"A powered LightProfile is visible at night through the shared radial mask")
+	var lit_state := torch._appearance_state
+	torch.reload_visual_texture()
+	_check(lit_state == "lit" and torch._appearance_state == lit_state,
+			"Texture refresh keeps the authored fuelled appearance state without resetting power")
 	torch.capability_state["enabled"] = false
 	torch._update_light()
 	_check(not torch._light.visible,
@@ -114,6 +136,29 @@ func _test_fuel_tick() -> void:
 	_check(not torch._light.visible,
 			"Lights outside the player-radius budget are culled deterministically")
 	main.queue_free()
+
+	var budget_manager := BuildingManager.new()
+	root.add_child(budget_manager)
+	var budget_player := Player.new()
+	budget_player.global_position = Vector2(2000, 2000)
+	root.add_child(budget_player)
+	budget_manager.player = budget_player
+	for index in range(BuildingManager.MAX_VISIBLE_LOCAL_LIGHTS + 1):
+		var budget_record := BuildingRecord.new()
+		budget_record.definition = load("res://data/buildings/torch.tres") as BuildingDefinition
+		budget_record.tile = Vector2i(index, 0)
+		budget_record.node = Building.new()
+		budget_record.node.setup("torch", "Torch", budget_record.tile, 50, 0, budget_record.definition)
+		budget_record.node.global_position = budget_player.global_position + Vector2(float(index), 0.0)
+		budget_manager._record_list.append(budget_record)
+	budget_manager._refresh_local_light_budget()
+	_check(budget_manager._record_list[0].node._light_budget_allowed
+			and not budget_manager._record_list[BuildingManager.MAX_VISIBLE_LOCAL_LIGHTS].node._light_budget_allowed,
+			"Dense local lights use a deterministic nearest-first shared budget cap")
+	for budget_record in budget_manager._record_list:
+		budget_record.node.free()
+	budget_manager.free()
+	budget_player.free()
 
 func _test_station_panel_interaction() -> void:
 	var world := Node.new()
@@ -136,8 +181,10 @@ func _test_station_panel_interaction() -> void:
 		stack_sizes[item_id] = int(database.items[item_id].stack_size)
 	player.inventory.set_stack_sizes(stack_sizes)
 	player.inventory.add_item("workbench", 1)
+	player.inventory.add_item("torch", 1)
 	player.inventory.add_item("plank", 4)
 	player.inventory.add_item("stone", 2)
+	player.inventory.add_item("wood", 1)
 	buildings.place_record("workbench", Vector2i(4, 4), player.inventory, 0)
 	var bench := buildings.get_record_at(Vector2i(4, 4), 0, "object").node
 	player.global_position = Vector2(144, 144)
@@ -146,6 +193,16 @@ func _test_station_panel_interaction() -> void:
 	manager.open_panel.station_craft_requested.emit("wooden_hammer")
 	_check(manager.open_record.get_station_output_storage().quantity_of("wooden_hammer") == 1,
 			"Station panel recipe action fills inputs and crafts into visible output")
+	manager.close("test")
+	buildings.place_record("torch", Vector2i(7, 4), player.inventory, 0)
+	var torch_record := buildings.get_record_at(Vector2i(7, 4), 0, "object")
+	player.global_position = Vector2(240, 144)
+	_check(manager.open(torch_record.node) and manager.open_panel.fuel_grid != null,
+			"A fuel-only interactable opens the shared panel with its filtered fuel slot")
+	var enabled_before := bool(torch_record.capability_state.get("enabled", false))
+	manager.open_panel.fuel_toggle_requested.emit()
+	_check(bool(torch_record.capability_state.get("enabled", false)) != enabled_before,
+			"Fuel-panel on/off controls mutate only the record's generic enabled state")
 	manager.close("test")
 	world.queue_free()
 

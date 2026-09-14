@@ -98,8 +98,9 @@ Each entry describes one placed record: `item_id`, tile `x`/`y`, `story`,
 `layer` (one of `ground`, `floor`, `edge`, `object`, `overhead`,
 `connector`), optional `orientation` (edge parts: `north`/`east`/`south`/
 `west`), `health`, optional `footprint: [w, h]` for multi-tile objects, and
-an optional `state` dictionary reserved for capability state (M5+:
-container slots, fuel, station inputs/outputs). Edge orientations are
+an optional `state` dictionary reserved for capability state (M5+: container
+slots; `enabled`; `fuel` indexed slots plus `fuel_seconds_remaining`; station
+inputs/outputs). Edge orientations are
 canonical in the runtime index — the east edge of one tile is the same slot
 as the west edge of its neighbour — so saved orientation + coordinates
 unambiguously identify the slot.
