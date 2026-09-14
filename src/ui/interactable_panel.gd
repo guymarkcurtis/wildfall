@@ -10,10 +10,12 @@ extends Control
 ## InteractionManager owns the actual close pipeline and stays idempotent.
 signal close_requested(reason: String)
 signal station_craft_requested(recipe_id: String)
+signal fuel_toggle_requested
 
 var object_grid: StorageGridView = null
 var player_grid: StorageGridView = null
 var output_grid: StorageGridView = null
+var fuel_grid: StorageGridView = null
 var is_open: bool = false
 
 var _dim: ColorRect = null
@@ -26,6 +28,7 @@ var _player_capacity_label: Label = null
 var _player_storage: InventoryStorage = null
 var _object_storage: InventoryStorage = null
 var _output_storage: InventoryStorage = null
+var _fuel_storage: InventoryStorage = null
 var _station_recipe_box: VBoxContainer = null
 var _selected: Dictionary = {} # {grid: String, index: int} or empty
 
@@ -166,6 +169,23 @@ func open_station(title: String, help: String, input_storage: InventoryStorage,
 		_station_recipe_box.add_child(button)
 	_refresh()
 
+func configure_fuel(storage: InventoryStorage, enabled: bool, seconds_remaining: float) -> void:
+	_fuel_storage = storage
+	if fuel_grid != null:
+		fuel_grid.queue_free()
+	fuel_grid = StorageGridView.new()
+	_content_box.add_child(fuel_grid)
+	fuel_grid.setup(storage, "fuel", 1)
+	fuel_grid.slot_pressed.connect(_on_grid_slot_pressed)
+	fuel_grid.quick_transfer_requested.connect(_on_quick_transfer)
+	fuel_grid.drag_transfer_requested.connect(_on_drag_transfer)
+	var toggle := Button.new()
+	toggle.text = ("Turn off" if enabled else "Turn on") + "  •  %.0fs fuel" % seconds_remaining
+	toggle.pressed.connect(func(): fuel_toggle_requested.emit())
+	_window.add_child(toggle)
+	toggle.position = Vector2(24, 220)
+	_refresh()
+
 func close_panel() -> void:
 	is_open = false
 	visible = false
@@ -252,10 +272,14 @@ func _storage_for(grid_id: String) -> InventoryStorage:
 		return _player_storage
 	if grid_id == "output":
 		return _output_storage
+	if grid_id == "fuel":
+		return _fuel_storage
 	return null
 
 func _other_storage(grid_id: String) -> InventoryStorage:
-	return _player_storage if grid_id == "object" else _object_storage
+	if grid_id == "object" or grid_id == "fuel":
+		return _player_storage
+	return _object_storage
 
 func _refresh() -> void:
 	if object_grid != null:
@@ -266,6 +290,8 @@ func _refresh() -> void:
 		player_grid.highlight_selected(int(_selected.get("index", -1)) if str(_selected.get("grid", "")) == "player" else -1)
 	if output_grid != null:
 		output_grid.refresh()
+	if fuel_grid != null:
+		fuel_grid.refresh()
 	if _object_capacity_label != null:
 		_object_capacity_label.text = _storage_summary("Container", _object_storage)
 	if _player_capacity_label != null:

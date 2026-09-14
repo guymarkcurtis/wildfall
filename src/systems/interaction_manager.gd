@@ -131,6 +131,9 @@ func close(reason: String) -> void:
 	if open_record != null and open_record.station_output_storage != null \
 			and open_record.station_output_storage.changed.is_connected(_on_open_storage_changed):
 		open_record.station_output_storage.changed.disconnect(_on_open_storage_changed)
+	if open_record != null and open_record.fuel_storage != null \
+			and open_record.fuel_storage.changed.is_connected(_on_open_storage_changed):
+		open_record.fuel_storage.changed.disconnect(_on_open_storage_changed)
 	open_panel = null
 	open_building = null
 	open_record = null
@@ -225,9 +228,10 @@ func _build_container_view(building: Building, record: BuildingRecord, panel: In
 	return true
 
 func _build_station_view(building: Building, record: BuildingRecord, panel: InteractablePanel) -> bool:
-	if player == null or player.inventory == null or building.definition == null \
-			or building.definition.station_profile == null:
+	if player == null or player.inventory == null or building.definition == null:
 		return false
+	if building.definition.station_profile == null:
+		return _build_fuel_view(building, record, panel)
 	var inputs := record.get_station_input_storage()
 	var outputs := record.get_station_output_storage()
 	if inputs == null or outputs == null:
@@ -250,7 +254,47 @@ func _build_station_view(building: Building, record: BuildingRecord, panel: Inte
 	for storage in [inputs, outputs]:
 		if not storage.changed.is_connected(_on_open_storage_changed):
 			storage.changed.connect(_on_open_storage_changed)
+	_setup_fuel_controls(record, panel)
 	return true
+
+func _build_fuel_view(building: Building, record: BuildingRecord, panel: InteractablePanel) -> bool:
+	if building.definition.fuel_profile == null:
+		return false
+	var storage := record.get_fuel_storage()
+	if storage == null:
+		return false
+	storage.stack_sizes = player.inventory.get_stack_sizes()
+	panel.open_for(building.get_interaction_prompt().capitalize(), "Fuel slot accepts only authored fuel tags.", storage, player.inventory.get_storage())
+	_setup_fuel_controls(record, panel)
+	return true
+
+func _setup_fuel_controls(record: BuildingRecord, panel: InteractablePanel) -> void:
+	if record.definition == null or record.definition.fuel_profile == null or player == null:
+		return
+	var profile: FuelProfile = record.definition.fuel_profile
+	var storage := record.get_fuel_storage()
+	storage.stack_sizes = player.inventory.get_stack_sizes()
+	var database := get_parent().get_node_or_null("ItemDatabase") as ItemDatabase
+	for index in range(storage.slot_count()):
+		storage.set_slot_filter(index, func(item_id: String) -> bool:
+			var item := database.get_item(item_id) if database != null else null
+			if item == null:
+				return false
+			for tag in profile.accepted_tags:
+				if item.has_tag(tag):
+					return true
+			return false)
+	panel.configure_fuel(storage, bool(record.capability_state.get("enabled", false)),
+			float(record.capability_state.get("fuel_seconds_remaining", 0.0)))
+	panel.fuel_toggle_requested.connect(_on_fuel_toggle_requested.bind(record))
+	if not storage.changed.is_connected(_on_open_storage_changed):
+		storage.changed.connect(_on_open_storage_changed)
+
+func _on_fuel_toggle_requested(record: BuildingRecord) -> void:
+	if open_record != record:
+		return
+	record.capability_state["enabled"] = not bool(record.capability_state.get("enabled", false))
+	_on_open_storage_changed()
 
 func _on_station_craft_requested(recipe_id: String, record: BuildingRecord) -> void:
 	if open_record != record or player == null or player.inventory == null:
