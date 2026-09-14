@@ -73,10 +73,39 @@ func _test_fuel_tick() -> void:
 	_check(record.capability_state.get("fuel_seconds_remaining", 0.0) > 0.0
 			and storage.quantity_of("wood") == 0,
 			"FuelConsumer consumes only an item accepted by the profile's fuel tags")
+	var saved := record.serialize()
+	var restored := BuildingRecord.new()
+	restored.deserialize(saved, record.definition)
+	_check(float(restored.capability_state.get("fuel_seconds_remaining", 0.0)) > 0.0
+			and bool(restored.capability_state.get("enabled", false)),
+			"Enabled state and remaining fuel persist in the v8 building state payload")
 	FuelConsumer.tick(record, 301.0, database)
 	_check(not bool(record.capability_state.get("enabled", true))
 			and is_zero_approx(float(record.capability_state.get("fuel_seconds_remaining", -1.0))),
 			"Fuel depletion disables the object without consuming time while off")
+
+	var main := Node.new()
+	main.name = "Main"
+	root.add_child(main)
+	var cycle := DayNightCycle.new()
+	cycle.name = "DayNightCycle"
+	main.add_child(cycle)
+	cycle.set_time(22.0)
+	var building_parent := Node2D.new()
+	main.add_child(building_parent)
+	var torch := Building.new()
+	torch.setup("torch", "Torch", Vector2i.ZERO, 50, 0,
+			load("res://data/buildings/torch.tres") as BuildingDefinition)
+	torch.capability_state["enabled"] = true
+	building_parent.add_child(torch)
+	torch._update_light()
+	_check(torch._light != null and torch._light.visible,
+			"A powered LightProfile is visible at night through the shared radial mask")
+	torch.capability_state["enabled"] = false
+	torch._update_light()
+	_check(not torch._light.visible,
+			"Powering an authored light off hides it without an item-id branch")
+	main.queue_free()
 
 func _test_station_panel_interaction() -> void:
 	var world := Node.new()
