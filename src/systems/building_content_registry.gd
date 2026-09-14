@@ -107,7 +107,7 @@ func _validate_profile_directory(directory: String) -> void:
 		var script: Script = profile.get_script()
 		var known := script != null and script.get_global_name() in [
 				"InteractionProfile", "ContainerProfile", "StationProfile",
-				"FuelProfile", "LightProfile", "AppearanceProfile"]
+				"FuelProfile", "LightProfile", "AppearanceProfile", "ConnectorProfile"]
 		if not known:
 			validation_errors.append("%s: not a recognised capability profile script" % path)
 		elif profile.has_method("validate"):

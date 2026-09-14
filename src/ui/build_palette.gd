@@ -118,7 +118,7 @@ func _refresh() -> void:
 	if _manager == null:
 		_story_label.text = "Build system unavailable"
 		return
-	_story_label.text = "Story %d of %d" % [_manager.selected_story + 1, BuildingManager.MAX_STORIES]
+	_story_label.text = "Story %d of %d" % [_manager.selected_story + 1, BuildingRecord.MAX_STORIES]
 	var items := _manager.get_owned_building_items()
 	_last_signature = "%d|%s|%s" % [_manager.selected_story, _manager.selected_item_id, ",".join(items)]
 	for child in _parts_list.get_children():

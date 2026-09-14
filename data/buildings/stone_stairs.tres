@@ -1,5 +1,6 @@
 [gd_resource type="Resource" script_class="BuildingDefinition" format=3]
 
+[ext_resource type="Resource" path="res://data/interactables/stair_connector.tres" id="1_dbina"]
 [ext_resource type="Script" path="res://resources/building_definition.gd" id="1_rjlry"]
 
 [resource]
@@ -20,3 +21,4 @@ required_support_tags = PackedStringArray("structure")
 visual_family_id = "stone"
 atlas_path = "res://assets/tiles/wildfall-building-parts.png"
 atlas_cell = Vector2i(1, 6)
+connector_profile = ExtResource("1_dbina")

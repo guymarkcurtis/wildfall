@@ -20,7 +20,7 @@ generic fields; it never branches on an id such as `if building_id ==
 | `support_tags` | What this part PROVIDES to parts above it (`structure`, `cover`). |
 | `allowed_orientations` | Orientations offered at placement; empty = single default. |
 | `visual_family_id`, `atlas_path`, `atlas_cell` | Presentation metadata (column,row) on the atlas sheet. |
-| `*_profile` references | Capability data: `interaction_profile`, `container_profile`, `station_profile`, `fuel_profile`, `light_profile`, `appearance_profile`. |
+| `*_profile` references | Capability data: `interaction_profile`, `container_profile`, `station_profile`, `fuel_profile`, `light_profile`, `appearance_profile`, `connector_profile` (vertical traversal — stairs; later ladders/hatches/portals). |
 
 ## Capability profiles
 

@@ -13,6 +13,19 @@
 class_name BuildingRecord
 extends RefCounted
 
+# --- Shared placement-model vocabulary (single source; no cycles) ---
+
+## Validated story limit (M0 scope freeze).
+const MAX_STORIES := 4
+## Aligned top-down render bands: story N occupies z [N*STRIDE, N*STRIDE+LAYER Z).
+const STORY_Z_STRIDE := 20
+## First collision bit owned by building stories (bit 4 = value 16). Bits 0-3
+## stay with terrain and creatures; stories 0-3 map to bits 4-7.
+const STORY_COLLISION_BASE := 16
+
+## Within-band z offsets by placement layer.
+const LAYER_Z := {"ground": 0, "floor": 1, "object": 2, "connector": 3, "edge": 4, "overhead": 5}
+
 var definition: BuildingDefinition = null
 var item_id: String = ""
 var tile: Vector2i = Vector2i.ZERO
@@ -47,7 +60,9 @@ func occupies_tiles() -> bool:
 	return layer != "edge"
 
 ## Every canonical key this record reserves. Multi-tile footprints reserve
-## one key per covered cell; edge records reserve exactly one edge key.
+## one key per covered cell; edge records reserve exactly one edge key;
+## connectors with a stairwell also reserve the floor slot above (the
+## opening), so no floor can later block the hole.
 func reserved_keys() -> Array[String]:
 	var keys: Array[String] = []
 	if layer == "edge":
@@ -56,6 +71,9 @@ func reserved_keys() -> Array[String]:
 	for dx in range(footprint.x):
 		for dy in range(footprint.y):
 			keys.append(tile_key(tile + Vector2i(dx, dy), story, layer))
+	if layer == "connector" and definition != null and definition.connector_profile != null \
+			and definition.connector_profile.reserve_stairwell:
+		keys.append(tile_key(tile, story + definition.connector_profile.upper_story_offset, "floor"))
 	return keys
 
 ## Stable identity for UI ownership and save `state` (extends the M1

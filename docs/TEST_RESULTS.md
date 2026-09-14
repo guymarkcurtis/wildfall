@@ -1,6 +1,22 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **Active Build Plan M3 (2026-09-14, active story + playable stairs)**: new
+  focused suite `tests/test_building_stairs.gd` **37/37 checks** (connector
+  profile data on both stairs, stairwell reservation blocking/placement/
+  release, edge-triggered traversal up/down with no re-trigger bounce,
+  velocity clear, demolition-under-player safety, story collision bits +
+  player mask/z retargeting with clamp, aligned-band presentation policy incl.
+  roof cutaway/toggle/build-mode blueprint, and a full two-floor 4×4 house
+  build with the stairwell opening). Placement suite 55/0, content suite
+  69/0, sandbox harness 0 failures, full harness **440/0** (cutaway checks
+  updated to the active/build-mode focus policy), 900-frame live boot
+  0 script errors. M3 shipped: `active_story` ownership (player collision
+  mask per story bit, render band, story-0 interaction gate), aligned
+  `STORY_Z_STRIDE` bands replacing `STORY_RISE`, `ConnectorProfile` stairs
+  with reserved stairwell openings, per-story collision bits, HUD
+  `Floor L#`/`Build L#` indicator, sandbox roof toggle + active-story
+  selector; fresh screenshots in `docs/sandbox_baseline/m3_aligned_*.png`.
 - **Active Build Plan M2 (2026-09-14, layered grid + save v8)**: new focused
   suite `tests/test_building_placement.gd` **55/55 checks** (canonical edge
   key normalization, layer coexistence + duplicate rejection, doubled-edge

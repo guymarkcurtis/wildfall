@@ -220,8 +220,8 @@ func _test_collision_rules() -> void:
 	var inventory := _make_inventory({"wooden_wall": 2, "wooden_door": 1, "wooden_floor": 1})
 	manager.place_record("wooden_wall", Vector2i(50, 50), inventory, 0, "north")
 	var wall := manager.get_record_at(Vector2i(50, 50), 0, "edge", "north")
-	_check(wall != null and wall.node != null and wall.node.collision_layer == 1,
-			"An edge wall on the active story collides")
+	_check(wall != null and wall.node != null and wall.node.collision_layer == BuildingRecord.STORY_COLLISION_BASE,
+			"An edge wall on the active story owns its story collision bit")
 	var shape: CollisionShape2D = null
 	for child in wall.node.get_children():
 		if child is CollisionShape2D:

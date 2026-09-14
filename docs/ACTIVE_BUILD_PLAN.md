@@ -27,8 +27,8 @@ source plans conflict, this plan and its decision log at the bottom win.
    that violates one needs a dated decision-log entry.
 
 **Plan status:** `ACTIVE`
-**Current milestone:** M3 — Active story and playable stairs
-**Last updated:** 2026-09-14 (M2 complete)
+**Current milestone:** M4 — Interaction router and shared object UI
+**Last updated:** 2026-09-14 (M3 complete)
 
 ## Groundwork already in place
 
@@ -224,32 +224,46 @@ occupancy untouched; old saves load.
 
 ## M3 — Active story and playable stairs
 
-- [ ] Introduce an active-story owner shared by Player, `BuildingManager`,
+*COMPLETE 2026-09-14.*
+
+- [x] Introduce an active-story owner shared by Player, `BuildingManager`,
       interaction queries, and HUD; construction story (build palette) stays a
-      separate value.
-- [ ] Replace the shifted `STORY_RISE` presentation with aligned top-down
+      separate value. (`BuildingManager.active_story` + `active_story_changed`;
+      the player's collision mask, render band, and story-0 interaction gate
+      all follow it.)
+- [x] Replace the shifted `STORY_RISE` presentation with aligned top-down
       render bands (`story * STORY_Z_STRIDE + layer_z`) and the documented
       opacity policy: active story full; below ≈20–35% while indoors/building;
       above hidden (blueprint outline in build mode); roofs cut away over the
       active room/landing/build target. No screen-position skew.
-- [ ] Implement generic `VerticalConnector` placement and traversal from
-      definition data: paired landing triggers, direction/exit lock, velocity
-      clear, `active_story` set before the next physics query, safe handling
-      when the linked record is demolished mid-link.
-- [ ] Stair placement is atomic: validate lower landing, upper landing, upper
+- [x] Implement generic `VerticalConnector` placement and traversal from
+      definition data: paired landing triggers (edge-triggered, so standing
+      still never re-fires), velocity clear, `active_story` set before the
+      next physics query, safe handling when the linked record is demolished
+      mid-link.
+- [x] Stair placement is atomic: validate lower landing, upper landing, upper
       floor support, reserved stairwell opening, and all connector slots
-      before consuming the item.
-- [ ] Convert existing wood/stone stairs to connector definitions; add
-      railings/stairwell trim as ordinary content. Data must make ladders,
-      hatches, and portals possible later without a save-model change.
-- [ ] Implement automatic roof cutaway plus a sandbox-only visibility/debug
-      control; upper-story collision must never block a ground-story player.
-- [ ] HUD/build-palette indicator distinguishing active story from selected
-      construction story.
-- [ ] Tests: two-floor 4×4 house buildable; stairs traverse up/down exactly
+      before consuming the item. (The stairwell opening is the connector
+      record's own floor-slot reservation one story up — no floor can block
+      it, and demolishing the stair frees it.)
+- [x] Convert existing wood/stone stairs to connector definitions
+      (`ConnectorProfile` assets; railings/stairwell trim deferred to the M8
+      catalogue — decision log). The save model already carries any future
+      connector (ladders, hatches, portals) without a schema change.
+- [x] Implement automatic roof cutaway plus a sandbox-only visibility/debug
+      control (`toggle_roofs`, R, Building Sandbox only); upper-story
+      collision lives on per-story bits, so it can never block a
+      ground-story player.
+- [x] HUD/build-palette indicator distinguishing active story from selected
+      construction story (world-info line shows `Floor L#` vs `Build L#`).
+- [x] Tests: two-floor 4×4 house buildable; stairs traverse up/down exactly
       once; inactive-story collision and interaction queries are ignored;
       cutaway states match active story (normal play) / selected story (build
       mode); demolition of one stair side cannot strand or crash the player.
+      (`tests/test_building_stairs.gd`, 37 checks; placement suite 55/0;
+      content suite 69/0; full harness 440/0 incl. updated cutaway policy
+      checks; sandbox 0 failures; live boot 0 script errors; fresh aligned
+      screenshots in `docs/sandbox_baseline/m3_aligned_*.png`.)
 
 **Exit:** a player can build, furnish, and walk a two-story house with stairs
 and never collide with or target a hidden floor.
@@ -495,6 +509,7 @@ Append one row per completed milestone. Do not rewrite history.
 | 2026-09-14 | M0 | Complete | Sandbox regression screenshots captured (`docs/sandbox_baseline/`, 15-building save/load round-trip verified during capture). Scope frozen: four stories, adjacent-story stairs, no collapse/multiplayer/procedural buildings/iso. Harness 436/0 at start of M1. |
 | 2026-09-14 | M1 | Complete | Building content moved to assets: 27 `BuildingDefinition` `.tres` under `data/buildings/` + 11 shared capability profiles under `data/interactables/` (generated by `tools/generate_building_definitions.gd`, values pinned to the old table), `BuildingContentRegistry` with startup validation, `BuildingManager._init_definitions()` deleted. `ItemDefinition.tags` + `fuel` tags. `InventoryStorage` (indexed slots, stack/weight/filter/serialize) now backs `InventoryComponent` behind the unchanged compact API and save format; legacy payloads migrate to deterministic slots on load; `InventoryTransfer` is the single transactional routine (fixed the old `transfer_to` overflow destruction). `Building.placement_key` + `capability_state` added. Verified: focused suite 69/69, full harness 436/0, sandbox 18/0, live headless boot 0 script errors. |
 | 2026-09-14 | M2 | Complete | `BuildingRecord` + canonical-key occupancy index replaces the per-tile/story single slot: six layers, normalized edge keys (E==W of neighbour, S==N of the tile below), multi-key footprints, floor+object+overhead coexistence, door/window edge replacement with exact refund, conservative direct-support validator driven by `required_support_tags`/`support_tags`, water-vetoed ground placement, edge-strip collision (doors walkable), and save **v8** layered records with optional `state` (v7 entries migrate by deriving layer from the definition). Verified: placement suite 55/55, full harness 438/0, content suite 69/0, sandbox 0 failures, live boot 0 script errors. |
+| 2026-09-14 | M3 | Complete | Active story owned by `BuildingManager` (player mask/z/velocity follow it; E-interaction gated to story 0 until M4). `STORY_RISE` removed: aligned `STORY_Z_STRIDE` render bands with the focus policy (active full / below 25% / above hidden or 14% blueprint in build mode / focus roofs 40%, sandbox R toggle). `ConnectorProfile` stairs: stairwell floor slot reserved by the record itself, edge-triggered up/down traversal with velocity clear, traversal paused in build mode, sandbox `[`/`]` moves the ACTIVE story as the anti-strand escape. Story collision bits (16<<story) make inactive stories unblockable by construction. Verified: stairs suite 37/37, placement 55/0, content 69/0, harness 440/0, sandbox 0, live boot 0. |
 | 2026-09-14 | Plan | Created | This combined deployment plan created; source plans retained as design references; scheduling conflicts resolved in the decision log below. |
 
 ## Decision log
@@ -512,3 +527,5 @@ Dated entries for deliberate deviations from the source plans.
 | 2026-09-14 | M1 keeps the player save payload in the compact format; only the in-memory representation moved to `InventoryStorage`. | Changing the payload without a version bump would break the versioned-save contract; the indexed player payload lands with the v8 bump in M2. `InventoryComponent.deserialize` already accepts both shapes, so v8 becomes a writer-side switch. |
 | 2026-09-14 | Door definitions are now walkable (`blocks_movement = false`), and edge walls collide only along their oriented edge strip. | Under the edge model a door is the opening in a wall edge — a built room must be enterable. Data-only change; the save format and item ids are untouched. |
 | 2026-09-14 | `BuildingManager` refund target falls back to `refund_inventory` when no player is attached. | API/test placements draw from an explicit inventory; the replacement/demolition refund must pay back into that same inventory, not only `player.inventory`. |
+| 2026-09-14 | Railings and stairwell trim content deferred to the M8 catalogue; the connector save model carries them today. | M3's scope is the traversal mechanism; rail families are catalogue authoring and would duplicate M8 work. |
+| 2026-09-14 | In Building Sandbox only, `[` / `]` outside build mode move the ACTIVE story and `R` toggles roofs. | The plan's anti-strand debug selector: a demolished stair can leave the player upstairs in tests; survival never offers the escape so no player can phase through floors. |

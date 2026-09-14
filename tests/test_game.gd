@@ -2239,8 +2239,14 @@ func _run_checks() -> void:
 		_check(not buildings.place_building_item("wooden_floor", Vector2i(9, 9), player_ent.inventory, 1),
 			"Upper-story placement needs structure directly below it")
 		buildings.set_selected_story(1)
+		_check(not buildings.get_building_at(structure_tile, 1).visible,
+			"Cutaway hides the story above the active story during normal play")
+		buildings.set_build_mode(true)
 		_check(buildings.get_building_at(structure_tile, 1).visible and buildings.get_building_at(structure_tile, 0).visible,
-			"Cutaway keeps the selected story and its support visible")
+			"Cutaway keeps the selected story and its support visible in build mode")
+		buildings.set_build_mode(false)
+		_check(not buildings.get_building_at(structure_tile, 1).visible,
+			"Leaving build mode restores the active-story cutaway")
 		buildings.set_selected_story(0)
 		player_ent.global_position = Vector2.ZERO
 		var cooked_meat: RecipeDefinition = item_database.get_recipe("cooked_meat")

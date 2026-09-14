@@ -3,7 +3,6 @@ class_name Building
 extends StaticBody2D
 
 const TILE_SIZE: float = 32.0
-const STORY_RISE: float = 12.0
 const STATION_TEXTURE_PATH := "res://assets/tiles/wildfall-crafting-stations.png"
 const STATION_CELL_INDEX := {"campfire": 0, "furnace": 1, "workbench": 2, "anvil": 3}
 const PARTS_TEXTURE_PATH := "res://assets/tiles/wildfall-building-parts.png"
@@ -60,11 +59,14 @@ func setup(item_id: String, item_name: String, tile: Vector2i, hp: int = 50, sto
 	placement_key = "%d:%d:%d" % [tile.x, tile.y, story]
 	layer = placement_layer if placement_layer != "" else (str(definition.effective_placement_layer()) if definition != null else "object")
 	orientation = edge_orientation
-	position = Vector2(tile) * TILE_SIZE + Vector2(0.0, -story * STORY_RISE)
+	# Aligned top-down: every story sits on the same world X/Y (the floor-plan
+	# model). Stories are told apart by render band and opacity, never by
+	# shifting position up the screen.
+	position = Vector2(tile) * TILE_SIZE
 	part_type = str(definition.get("part_type")) if definition != null else "utility"
 	tier = str(definition.get("tier")) if definition != null else ""
 	blocks_movement = bool(definition.get("blocks_movement")) if definition != null else _id_blocks(item_id)
-	z_index = story * 2
+	z_index = _render_band()
 	_setup_visuals()
 	_setup_collision()
 
@@ -202,18 +204,44 @@ func _setup_collision() -> void:
 	shape.shape = rect
 	shape.position = center
 	add_child(shape)
-	collision_layer = 1
+	# Stories own dedicated collision bits, so the player's mask (owned by
+	# the active-story state) only ever sees the active story's bodies.
+	collision_layer = BuildingRecord.STORY_COLLISION_BASE << clampi(story, 0, BuildingRecord.MAX_STORIES - 1)
 	collision_mask = 0
-	if not blocks_movement or story > 0 or layer == "overhead":
-		# Upper stories are a cutaway construction plane and roofs are pure
-		# presentation: neither may block the player's active-story movement.
+	if not blocks_movement or layer == "overhead":
+		# Walkable parts and roofs never block anyone.
 		collision_layer = 0
 
-## Top-down cutaway: keep the current construction story crisp, fade the
-## stories beneath it, and hide the stories above it.
-func set_cutaway_story(active_story: int) -> void:
-	visible = story <= active_story
-	modulate = Color(1.0, 1.0, 1.0, 1.0 if story == active_story else 0.48)
+## Within-band z for this part's placement layer.
+func _render_band() -> int:
+	var story_band := clampi(story, 0, BuildingRecord.MAX_STORIES - 1) * BuildingRecord.STORY_Z_STRIDE
+	return story_band + int(BuildingRecord.LAYER_Z.get(layer, 2))
+
+## Top-down cutaway policy. The focus story is the player's active story in
+## normal play and the selected construction story in build mode.
+##   focus story: full colour (roofs/overheads fade so interiors read; the
+##                sandbox roof toggle can hide them completely)
+##   below focus: ~25% ghost — orientation only, never a second floor
+##   above focus: hidden while moving; a faint blueprint in build mode
+## All stories stay aligned in X/Y — no screen-position skew.
+func set_presentation(focus_story: int, build_mode: bool, roofs_visible: bool = true) -> void:
+	var delta := story - focus_story
+	if delta > 0:
+		if build_mode:
+			visible = true
+			modulate = Color(0.75, 0.85, 1.0, 0.14) # blueprint hint
+		else:
+			visible = false
+		return
+	visible = true
+	if delta < 0:
+		modulate = Color(1.0, 1.0, 1.0, 0.25)
+		return
+	if layer == "overhead":
+		modulate = Color(1.0, 1.0, 1.0, 0.4 if roofs_visible else 0.0)
+		visible = roofs_visible
+		return
+	modulate = Color(1.0, 1.0, 1.0, 1.0)
 
 func take_damage(amount: float) -> bool:
 	if amount <= 0 or health <= 0:

@@ -99,6 +99,7 @@ extends Resource
 @export var fuel_profile: FuelProfile = null
 @export var light_profile: LightProfile = null
 @export var appearance_profile: AppearanceProfile = null
+@export var connector_profile: ConnectorProfile = null
 
 ## Derive the placement layer from part_type when the asset leaves
 ## placement_layer blank (legacy compatibility).
@@ -123,7 +124,8 @@ func effective_placement_layer() -> String:
 func has_capabilities() -> bool:
 	return interaction_profile != null or container_profile != null \
 			or station_profile != null or fuel_profile != null \
-			or light_profile != null or appearance_profile != null
+			or light_profile != null or appearance_profile != null \
+			or connector_profile != null
 
 func is_valid() -> bool:
 	return id != ""
@@ -160,6 +162,8 @@ func validate() -> Array[String]:
 		errors.append_array(_prefixed("light_profile", light_profile.validate()))
 	if appearance_profile != null:
 		errors.append_array(_prefixed("appearance_profile", appearance_profile.validate()))
+	if connector_profile != null:
+		errors.append_array(_prefixed("connector_profile", connector_profile.validate()))
 	return errors
 
 func _prefixed(profile_name: String, profile_errors: Array[String]) -> Array[String]:

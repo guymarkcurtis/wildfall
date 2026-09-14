@@ -893,8 +893,13 @@ func _update_world_presentation(_delta: float) -> void:
 				status_effects.apply_effect("frozen")
 	if hud != null and day_night != null and weather_system != null:
 		var extra: String = ""
-		if building_manager != null and building_manager.build_mode:
-			extra = "   Build L%d: %s  (LMB place, wheel cycle, [ / ] story, F demolish, B exit)" % [building_manager.selected_story + 1, building_manager.selected_item_id]
+		if building_manager != null:
+			# The two story values must be impossible to confuse: which floor
+			# the player is ON vs which floor the palette is building on.
+			if building_manager.active_story > 0:
+				extra += "   Floor L%d" % (building_manager.active_story + 1)
+			if building_manager.build_mode:
+				extra += "   Build L%d: %s  (LMB place, wheel cycle, [ / ] story, F demolish, B exit)" % [building_manager.selected_story + 1, building_manager.selected_item_id]
 		hud.set_world_info(day_night.get_time_of_day(), weather_system.get_weather_name(),
 				status_effects.get_effect_names() if status_effects else PackedStringArray(),
 				extra, GameSession.mode_label())

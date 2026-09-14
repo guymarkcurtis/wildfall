@@ -43,6 +43,7 @@ func _write_profiles() -> void:
 	_save_profile("station_furnace.tres", _profile(StationProfile, {"recipe_group": "furnace", "input_slot_count": 1, "output_slot_count": 1, "requires_power": true}))
 	_save_profile("station_anvil.tres", _profile(StationProfile, {"recipe_group": "anvil", "input_slot_count": 2, "output_slot_count": 1}))
 	_save_profile("fuel_burnable.tres", _profile(FuelProfile, {"accepted_tags": PackedStringArray(["fuel"]), "seconds_per_unit": 300.0, "fuel_slot_count": 1, "consume_cadence_seconds": 1.0, "manual_toggle": true}))
+	_save_profile("stair_connector.tres", _profile(ConnectorProfile, {"upper_story_offset": 1, "reserve_stairwell": true, "trigger_radius_px": 14.0}))
 	_save_profile("light_campfire.tres", _profile(LightProfile, {"radius_px": 96.0, "color": Color(1.0, 0.72, 0.42), "energy": 1.1, "flicker": true, "daylight_policy": "night_only", "requires_power": true}))
 	_save_profile("light_furnace.tres", _profile(LightProfile, {"radius_px": 64.0, "color": Color(1.0, 0.62, 0.35), "energy": 0.9, "flicker": false, "daylight_policy": "night_only", "requires_power": true}))
 	_save_profile("light_torch.tres", _profile(LightProfile, {"radius_px": 80.0, "color": Color(1.0, 0.8, 0.5), "energy": 1.0, "flicker": true, "daylight_policy": "night_only", "requires_power": true}))
@@ -105,6 +106,8 @@ func _write_buildings() -> void:
 		_attach(fuelled, "res://data/interactables/interaction_use.tres", "interaction_profile")
 		_attach(fuelled, "res://data/interactables/fuel_burnable.tres", "fuel_profile")
 		_attach(fuelled, "res://data/interactables/light_%s.tres" % fuelled, "light_profile")
+	for stairs in ["wooden_stairs", "stone_stairs"]:
+		_attach(stairs, "res://data/interactables/stair_connector.tres", "connector_profile")
 
 func _attach(item_id: String, profile_path: String, property: String) -> void:
 	var path := "%s/%s.tres" % [BUILDINGS_DIR, item_id]

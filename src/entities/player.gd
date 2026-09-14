@@ -60,8 +60,8 @@ signal resource_interacted(resource_type: String, item_id: String, quantity: int
 
 func _ready() -> void:
 	motion_mode = MOTION_MODE_FLOATING
-	event_bus = get_parent().get_node("GameEventBus")
-	item_database = get_parent().get_node("ItemDatabase")
+	event_bus = get_parent().get_node_or_null("GameEventBus")
+	item_database = get_parent().get_node_or_null("ItemDatabase")
 	status_effects = get_parent().get_node_or_null("StatusEffectSystem")
 	_init_components()
 	_setup_collision()
@@ -214,6 +214,11 @@ func _handle_interaction() -> void:
 	if world != null and world.has_method("is_in_cave") and world.is_in_cave():
 		_fire_cooldown = FIRE_COOLDOWN
 		world.call("interact_with_active_cave")
+		return
+	if manager != null and manager.active_story != 0:
+		# On an upper story the ground-floor world is unreachable: resources,
+		# creatures, and cave entrances belong to story 0 (placed-object
+		# interaction on the active story arrives with the router, M4).
 		return
 	var entrances := _get_nearby_cave_entrances()
 	if not entrances.is_empty():
@@ -453,7 +458,20 @@ func _setup_collision() -> void:
 	shape.shape = circle
 	add_child(shape)
 	collision_layer = 1
-	collision_mask = 1
+	# Story-0 mask: terrain bit (1) plus the story-0 building bit. Building
+	# stories live on dedicated bits so an inactive story can never block.
+	collision_mask = 1 | BuildingRecord.STORY_COLLISION_BASE
+	z_index = BuildingRecord.STORY_Z_STRIDE / 2
+
+## Called by the BuildingManager (the active-story owner) when the player
+## changes story via a vertical connector. Switches collision filtering to
+## the new story's bodies, moves the player into that story's render band,
+## and clears velocity so no momentum carries across the transition.
+func set_active_story(story: int) -> void:
+	var clamped := clampi(story, 0, BuildingRecord.MAX_STORIES - 1)
+	collision_mask = 1 | (BuildingRecord.STORY_COLLISION_BASE << clamped)
+	z_index = BuildingRecord.STORY_Z_STRIDE / 2 + clamped * BuildingRecord.STORY_Z_STRIDE
+	velocity = Vector2.ZERO
 
 func _setup_facing() -> void:
 	_facing = Polygon2D.new()

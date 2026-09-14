@@ -9,8 +9,6 @@ class_name BuildingManager
 extends Node2D
 
 const TILE_SIZE := 32
-const STORY_RISE := 12.0
-const MAX_STORIES := 4
 const CRAFTING_STATION_IDS = ["campfire", "furnace", "workbench", "anvil"]
 const CRAFTING_STATION_RANGE := 72.0
 
@@ -25,6 +23,16 @@ var world_generator: WorldGenerator = null
 var build_mode := false
 var selected_item_id := ""
 var selected_story := 0
+
+## The story the player is actually ON. Shared owner for collision
+## filtering, presentation focus, and interaction gating; the build
+## palette's `selected_story` stays an independent construction value.
+var active_story := 0
+
+## Sandbox-only roof visibility override (R key in Building Sandbox).
+var roofs_visible := true
+
+var _connector_under_player: BuildingRecord = null
 
 var player: Player = null
 var item_database: ItemDatabase = null
@@ -42,7 +50,46 @@ signal building_placed(building_id: String, coords: Vector2i)
 signal building_removed(building_id: String, coords: Vector2i)
 signal build_mode_changed(enabled: bool, selected_item_id: String)
 signal build_story_changed(story: int)
+signal active_story_changed(story: int)
 signal placement_failed(reason: String)
+
+func _physics_process(_delta: float) -> void:
+	_update_connector_traversal()
+
+## Generic vertical-connector traversal: when the player ENTERS a connector's
+## landing zone (edge-triggered, so standing still never re-triggers), the
+## active story moves to the paired landing — up from the lower story, down
+## from the upper one. Traversal pauses in build mode.
+func _update_connector_traversal() -> void:
+	if player == null or not is_instance_valid(player) or build_mode:
+		_connector_under_player = null
+		return
+	var found := _connector_record_at(player.global_position, active_story)
+	if found != null and found != _connector_under_player and found.definition != null \
+			and found.definition.connector_profile != null:
+		var upper: int = found.story + found.definition.connector_profile.upper_story_offset
+		if active_story == found.story:
+			set_active_story(upper)
+		elif active_story == upper:
+			set_active_story(found.story)
+	_connector_under_player = found
+
+## The connector record whose landing zone contains `world_position` on the
+## given story (a stair record spans its own story and the upper landing).
+func _connector_record_at(world_position: Vector2, story: int) -> BuildingRecord:
+	for record in _record_list:
+		if record.layer != "connector" or record.definition == null \
+				or record.definition.connector_profile == null:
+			continue
+		var profile := record.definition.connector_profile
+		if story < record.story or story > record.story + profile.upper_story_offset:
+			continue
+		if record.node == null or not is_instance_valid(record.node):
+			continue
+		var center := record.node.global_position + Vector2(TILE_SIZE, TILE_SIZE) * 0.5
+		if center.distance_to(world_position) <= profile.trigger_radius_px:
+			return record
+	return null
 
 func _ready() -> void:
 	_load_definitions()
@@ -69,7 +116,9 @@ func _process(_delta: float) -> void:
 		selected_item_id = _owned[0]
 		build_mode_changed.emit(true, selected_item_id)
 	var tile := _mouse_tile()
-	_ghost.position = Vector2(tile * TILE_SIZE) + Vector2(0.0, -selected_story * STORY_RISE)
+	_ghost.position = Vector2(tile * TILE_SIZE)
+	# The ghost floats just above the construction story's band.
+	_ghost.z_index = selected_story * BuildingRecord.STORY_Z_STRIDE + int(BuildingRecord.LAYER_Z.get("edge", 4)) + 1
 	_ghost.visible = true
 	_ghost.color = Color(0.3, 0.85, 0.35, 0.4) if can_place(tile) else Color(0.85, 0.25, 0.2, 0.4)
 
@@ -80,6 +129,23 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("demolish"):
 		_demolish_near_player()
+		get_viewport().set_input_as_handled()
+		return
+	# Building Sandbox debug controls: the [ / ] keys move the ACTIVE story
+	# when the build palette is closed, and R toggles roof visibility. Never
+	# available in survival — a normal player must not phase through floors.
+	if GameSession.is_building_sandbox() and not build_mode:
+		if event.is_action_pressed("build_level_up"):
+			set_active_story(active_story + 1)
+			get_viewport().set_input_as_handled()
+			return
+		if event.is_action_pressed("build_level_down"):
+			set_active_story(active_story - 1)
+			get_viewport().set_input_as_handled()
+			return
+	if event.is_action_pressed("toggle_roofs") and GameSession.is_building_sandbox():
+		roofs_visible = not roofs_visible
+		_apply_presentation()
 		get_viewport().set_input_as_handled()
 		return
 	if not build_mode:
@@ -122,15 +188,31 @@ func set_build_mode(enabled: bool) -> void:
 		selected_item_id = ""
 		if _ghost:
 			_ghost.visible = false
+	# Build mode switches the presentation focus between the construction
+	# story (blueprint view) and the active story.
+	_apply_presentation()
 	build_mode_changed.emit(build_mode, selected_item_id)
 
 func set_selected_story(story: int) -> void:
-	var next_story := clampi(story, 0, MAX_STORIES - 1)
+	var next_story := clampi(story, 0, BuildingRecord.MAX_STORIES - 1)
 	if selected_story == next_story:
 		return
 	selected_story = next_story
-	_apply_cutaway()
+	_apply_presentation()
 	build_story_changed.emit(selected_story)
+
+## Move the player between stories (connector traversal or the sandbox
+## selector). Updates the player's collision mask/render band, republishes
+## the cutaway focus, and emits for the HUD.
+func set_active_story(story: int) -> void:
+	var next_story := clampi(story, 0, BuildingRecord.MAX_STORIES - 1)
+	if active_story == next_story:
+		return
+	active_story = next_story
+	if player != null and is_instance_valid(player):
+		player.set_active_story(active_story)
+	_apply_presentation()
+	active_story_changed.emit(active_story)
 
 func cycle_selection(step: int) -> void:
 	_refresh_owned()
@@ -254,7 +336,7 @@ func place_record(item_id: String, tile: Vector2i, inventory: InventoryComponent
 	if replaced != null:
 		_remove_record(replaced, true, inv)
 	_spawn_node(record)
-	_apply_cutaway()
+	_apply_presentation()
 	building_placed.emit(item_id, tile)
 	return true
 
@@ -333,7 +415,7 @@ func restore_building(item_id: String, tile: Vector2i, health: int = 50, story: 
 		records[key] = record
 	_record_list.append(record)
 	_spawn_node(record)
-	_apply_cutaway()
+	_apply_presentation()
 	building_placed.emit(item_id, tile)
 	return true
 
@@ -343,6 +425,7 @@ func clear_all() -> void:
 			record.node.queue_free()
 	records.clear()
 	_record_list.clear()
+	_connector_under_player = null
 	set_build_mode(false)
 
 # --- Transaction internals ---
@@ -356,7 +439,7 @@ func _placement_failure(item_id: String, tile: Vector2i, story: int, orientation
 func _placement_failure_for(item_id: String, tile: Vector2i, story: int, orientation: String, inv: InventoryComponent) -> String:
 	if item_id == "":
 		return "No building part selected"
-	if story < 0 or story >= MAX_STORIES:
+	if story < 0 or story >= BuildingRecord.MAX_STORIES:
 		return "That story is out of range"
 	var definition := get_definition(item_id) as BuildingDefinition
 	if definition == null:
@@ -371,6 +454,9 @@ func _placement_failure_for(item_id: String, tile: Vector2i, story: int, orienta
 			if technology != null:
 				technology_name = technology.display_name
 		return "Research %s before building this" % technology_name
+	if definition.connector_profile != null \
+			and story + definition.connector_profile.upper_story_offset >= BuildingRecord.MAX_STORIES:
+		return "There is no story above for this stairwell"
 	var resolved_orientation := _resolve_orientation(definition, orientation)
 	var probe := _make_record(definition, item_id, tile, story, resolved_orientation)
 	var keys := probe.reserved_keys()
@@ -454,10 +540,13 @@ func _remove_record(record: BuildingRecord, refund: bool, refund_to: InventoryCo
 		target = refund_inventory
 	if refund and target != null and record.item_id != "":
 		target.add_item(record.item_id, 1)
+	if _connector_under_player == record:
+		_connector_under_player = null
 	building_removed.emit(record.item_id, record.tile)
 	if record.node != null and is_instance_valid(record.node):
 		record.node.queue_free()
 	record.node = null
+	_apply_presentation()
 
 func _demolish_near_player() -> void:
 	if player == null:
@@ -486,15 +575,16 @@ func _orientation_for_mouse(tile: Vector2i) -> String:
 		return "east" if center_offset.x > 0.0 else "west"
 	return "south" if center_offset.y > 0.0 else "north"
 
-func _apply_cutaway() -> void:
+## Republish the cutaway policy: build mode focuses the construction story
+## (blueprints above), normal play focuses the player's active story.
+func _apply_presentation() -> void:
+	var focus := selected_story if build_mode else active_story
 	for record in _record_list:
 		if record.node != null and is_instance_valid(record.node):
-			record.node.set_cutaway_story(selected_story)
+			record.node.set_presentation(focus, build_mode, roofs_visible)
 
 func _mouse_tile() -> Vector2i:
 	var world := player.get_global_mouse_position() if player != null else Vector2.ZERO
-	# Undo the visual rise of the active construction plane before snapping.
-	world.y += selected_story * STORY_RISE
 	return Vector2i(int(floor(world.x / float(TILE_SIZE))), int(floor(world.y / float(TILE_SIZE))))
 
 func _refresh_owned() -> void:
