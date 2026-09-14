@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AppearanceProfile" format=3]
+
+[ext_resource type="Script" path="res://resources/appearance_profile.gd" id="1"]
+
+[resource]
+resource_name = "fuelled_appearance"
+script = ExtResource("1")
+states = {"unlit": {"first_frame": 0, "frame_count": 1, "fps": 1.0, "loop": false}, "lit": {"first_frame": 0, "frame_count": 1, "fps": 4.0, "loop": true}}
+initial_state = "unlit"
+powered_state = "lit"
+unpowered_state = "unlit"

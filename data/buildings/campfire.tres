@@ -4,6 +4,7 @@
 [ext_resource type="Resource" path="res://data/interactables/interaction_use.tres" id="1_d47ti"]
 [ext_resource type="Script" path="res://resources/building_definition.gd" id="1_utnrg"]
 [ext_resource type="Resource" path="res://data/interactables/light_campfire.tres" id="3_34ejw"]
+[ext_resource type="Resource" path="res://data/interactables/fuelled_appearance.tres" id="4_app"]
 [ext_resource type="Resource" path="res://data/interactables/station_campfire.tres" id="3_ksu8k"]
 
 [resource]
@@ -23,3 +24,4 @@ interaction_profile = ExtResource("1_d47ti")
 station_profile = ExtResource("3_ksu8k")
 fuel_profile = ExtResource("1_5vfap")
 light_profile = ExtResource("3_34ejw")
+appearance_profile = ExtResource("4_app")

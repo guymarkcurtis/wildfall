@@ -187,6 +187,9 @@ func _update_light() -> void:
 	var allowed_by_daylight := profile.daylight_policy == "always" or (cycle != null and cycle.is_nighttime())
 	var powered := not profile.requires_power or bool(capability_state.get("enabled", false))
 	_light.visible = in_light_budget and allowed_by_daylight and powered
+	if definition.appearance_profile != null:
+		var appearance: AppearanceProfile = definition.appearance_profile
+		set_appearance_state(appearance.powered_state if powered else appearance.unpowered_state)
 	if _light.visible:
 		_light.energy = profile.energy * (1.0 + sin(Time.get_ticks_msec() * 0.008) * 0.08 if profile.flicker else 1.0)
 
