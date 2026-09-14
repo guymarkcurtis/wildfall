@@ -1,5 +1,10 @@
 # Development Roadmap
 
+**Active work:** the buildings + interactables pass (layered multilevel
+building, storage, stations, fuel, lighting) is tracked milestone-by-milestone
+in [`docs/ACTIVE_BUILD_PLAN.md`](ACTIVE_BUILD_PLAN.md). The phases below stay
+high-level; the active plan owns the current checklist.
+
 ## Phase 1: Foundation
 - [x] Project structure
 - [x] Core systems (EventBus, ChunkSystem, GameManager)

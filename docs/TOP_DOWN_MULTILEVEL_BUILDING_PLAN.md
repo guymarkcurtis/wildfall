@@ -1,5 +1,12 @@
 # Top-Down Multi-Level Building Plan
 
+> **Superseded as the active schedule.** Work order, merged checklist, and
+> progress tracking now live in [`docs/ACTIVE_BUILD_PLAN.md`](ACTIVE_BUILD_PLAN.md)
+> (this plan's Phases 0–6 map to milestones M0–M3, M8–M10). This document
+> remains the detailed design reference for placement layers, canonical edge
+> keys, stairs/connectors, the top-down presentation contract, and the
+> building content catalogue and art contracts.
+
 ## Purpose
 
 Turn the current proof-of-concept building placement into the first playable

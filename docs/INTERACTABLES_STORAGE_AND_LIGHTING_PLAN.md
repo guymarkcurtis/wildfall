@@ -1,5 +1,13 @@
 # Interactables, Storage, Stations, Fuel, and Lighting Plan
 
+> **Superseded as the active schedule.** Work order, merged checklist, and
+> progress tracking now live in [`docs/ACTIVE_BUILD_PLAN.md`](ACTIVE_BUILD_PLAN.md)
+> (this plan's Phases 1–6 map to milestones M1, M4–M7, M9, M10). This
+> document remains the detailed design reference for capability profiles, the
+> interaction router, transfer semantics, the PixelLab art brief, and the
+> building `state` save payload. Note: its "bump to v6" predates save v6/v7;
+> the combined plan bumps to v8 (see the combined plan's decision log).
+
 ## Purpose and current state
 
 This is the implementation handoff for the next Riftwake development pass.

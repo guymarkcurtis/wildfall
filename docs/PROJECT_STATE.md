@@ -521,15 +521,19 @@ A 30-second headless run of the actual game also completed with 0 errors,
 
 ## NEXT TASKS
 
-(Sprite polish is done — all four generated-art requests in
-`docs/ART_REQUESTS.md` are landed and wired, 239/239 harness checks
-green. Durability and the mission system are done too — see
-RECENTLY COMPLETED below.)
+**Active build: `docs/ACTIVE_BUILD_PLAN.md`** — the combined
+buildings/interactables deployment plan (layered multilevel building system +
+interaction, storage, stations, fuel, and lighting). It supersedes the
+schedules of `TOP_DOWN_MULTILEVEL_BUILDING_PLAN.md` and
+`INTERACTABLES_STORAGE_AND_LIGHTING_PLAN.md`, which remain as design
+references. Current milestone: M1 (content foundation). Track progress in
+that plan's progress log.
 
-1. **World-generation refactor — next card WG-07** (replace costly spawn
-   attempts with density fields) per
-   `docs/WORLD_GENERATION_REFACTOR_PLAN.md`. WG-01–WG-06 are complete,
-   and WG-08 and later remain unblocked.
+Queued after the active build:
+
+1. **World-generation refactor** — remaining cards per
+   `docs/WORLD_GENERATION_REFACTOR_PLAN.md` (WG-01–WG-06 and the cave
+   presence/coverage card are complete).
 2. **Sound effects** (next open Phase 4 item in `docs/ROADMAP.md`) —
    the game currently has no audio: UI clicks, harvesting, combat
    hits, creature deaths, building placement/demolition, mission
