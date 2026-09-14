@@ -85,11 +85,15 @@ extends Resource
 ## Visual family grouping material variants (e.g. "wood", "stone").
 @export var visual_family_id: String = ""
 
-## Atlas sheet this part renders from; empty uses the legacy defaults.
+## Atlas sheet this part renders from; empty keeps the family placeholder.
 @export var atlas_path: String = ""
 
 ## [column, row] cell on atlas_path; (-1, -1) = no atlas cell.
 @export var atlas_cell: Vector2i = Vector2i(-1, -1)
+
+## Optional per-part placeholder tint; alpha 0 uses the visual family's
+## default tint instead.
+@export var placeholder_color: Color = Color(0.0, 0.0, 0.0, 0.0)
 
 # --- Generic capability references (never selected by item id in code) ---
 

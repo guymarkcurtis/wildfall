@@ -19,3 +19,5 @@ allowed_orientations = PackedStringArray("north", "east", "south", "west")
 support_tags = PackedStringArray()
 required_support_tags = PackedStringArray()
 visual_family_id = "wood"
+atlas_path = "res://assets/tiles/wildfall-building-utilities.png"
+atlas_cell = Vector2i(4, 0)

@@ -3,15 +3,17 @@ class_name Building
 extends StaticBody2D
 
 const TILE_SIZE: float = 32.0
-const STATION_TEXTURE_PATH := "res://assets/tiles/wildfall-crafting-stations.png"
-const STATION_CELL_INDEX := {"campfire": 0, "furnace": 1, "workbench": 2, "anvil": 3}
-const PARTS_TEXTURE_PATH := "res://assets/tiles/wildfall-building-parts.png"
-const UTILITIES_TEXTURE_PATH := "res://assets/tiles/wildfall-building-utilities.png"
-## Row order of the parts atlas: 2 columns (wood, stone) x 9 rows of 32px cells.
-const PARTS_ROW_ORDER := ["foundation", "floor", "wall", "window", "door", "roof", "stair", "ramp", "pillar"]
-const PARTS_MATERIAL_COLUMN := {"wood": 0, "stone": 1}
-## Cell order of the utilities sheet: 5 columns x 1 row of 32px cells.
-const UTILITY_CELL_INDEX := {"torch": 0, "bed": 1, "chest": 2, "farm_soil": 3, "fence": 4}
+## Placeholder tints for parts whose authored atlas art has not landed yet.
+## Keyed by visual family — structural material vocabulary, like the layer
+## names, never content: adding a new part or tier needs a data asset with a
+## family (and an optional per-part override color), not a code branch.
+const PLACEHOLDER_FAMILY_COLORS := {
+	"wood": Color(0.55, 0.35, 0.18, 0.95),
+	"stone": Color(0.55, 0.55, 0.58, 0.95),
+	"metal": Color(0.45, 0.48, 0.55, 0.95),
+	"primitive": Color(0.5, 0.55, 0.4, 0.95),
+}
+const PLACEHOLDER_DEFAULT_COLOR := Color(0.5, 0.55, 0.4, 0.95)
 
 var building_id: String = ""
 var display_name: String = "Building"
@@ -49,7 +51,6 @@ const EDGE_VISUAL_OFFSET: float = 6.0
 const LIGHT_CULL_RADIUS_PX: float = 960.0
 
 var _body: Polygon2D = null
-var _station_sprite: Sprite2D = null
 var _part_sprite: Sprite2D = null
 var _appearance_sprite: Sprite2D = null
 var _appearance_state: String = ""
@@ -104,31 +105,25 @@ func _setup_visuals() -> void:
 		Vector2(TILE_SIZE - inset, TILE_SIZE - inset),
 		Vector2(inset, TILE_SIZE - inset)
 	])
-	_body.color = _color_for(building_id)
+	_body.color = _placeholder_color()
 	_body.position = edge_offset
 	add_child(_body)
 	_setup_appearance_visual(edge_offset)
-	if STATION_CELL_INDEX.has(building_id):
-		# Station artwork always comes through the texture-pack manager. The
-		# matching 4x1 sheet is exported with every reference/refinement pack.
-		_body.color = Color(0.0, 0.0, 0.0, 0.0)
-		_station_sprite = Sprite2D.new()
-		_station_sprite.position = Vector2(TILE_SIZE, TILE_SIZE) * 0.5 + edge_offset
-		_station_sprite.region_enabled = true
-		_station_sprite.region_rect = Rect2(float(STATION_CELL_INDEX[building_id]) * TILE_SIZE, 0.0, TILE_SIZE, TILE_SIZE)
-		_station_sprite.texture = TexturePackManager.get_texture(STATION_TEXTURE_PATH)
-		add_child(_station_sprite)
-	var atlas_cell := _atlas_cell(building_id)
-	if _appearance_sprite == null and atlas_cell.x >= 0:
-		# Structural parts and the small utilities render from their atlas
-		# cell; the flat color placeholder stays as a fallback when the art
-		# sheet is missing or the part has no atlas cell.
+	var atlas := _definition_atlas()
+	if not atlas.is_empty():
+		# Every placed part renders from the atlas reference its own
+		# BuildingDefinition carries (sheet path + cell); the flat color
+		# placeholder stays as the fallback when a part has no reference
+		# yet or its sheet is missing. No per-item-id lookups anywhere.
+		# Parts with a state-sheet appearance get their base atlas sprite on
+		# top of the appearance sprite (the appearance sheet carries the
+		# animated states; the atlas cell keeps the static base art underneath).
 		_body.color = Color(0.0, 0.0, 0.0, 0.0)
 		_part_sprite = Sprite2D.new()
 		_part_sprite.position = Vector2(TILE_SIZE, TILE_SIZE) * 0.5 + edge_offset
 		_part_sprite.region_enabled = true
-		_part_sprite.region_rect = Rect2(float(atlas_cell.x) * TILE_SIZE, float(atlas_cell.y) * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-		_part_sprite.texture = TexturePackManager.get_texture(UTILITIES_TEXTURE_PATH if UTILITY_CELL_INDEX.has(building_id) else PARTS_TEXTURE_PATH)
+		_part_sprite.region_rect = Rect2(float(atlas["cell"].x) * TILE_SIZE, float(atlas["cell"].y) * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+		_part_sprite.texture = TexturePackManager.get_texture(atlas["path"])
 		add_child(_part_sprite)
 
 	_label = Label.new()
@@ -147,10 +142,10 @@ func _setup_visuals() -> void:
 	add_child(_health_bar)
 
 func reload_visual_texture() -> void:
-	if _station_sprite != null:
-		_station_sprite.texture = TexturePackManager.get_texture(STATION_TEXTURE_PATH)
-	if _part_sprite != null:
-		_part_sprite.texture = TexturePackManager.get_texture(UTILITIES_TEXTURE_PATH if UTILITY_CELL_INDEX.has(building_id) else PARTS_TEXTURE_PATH)
+	if _part_sprite != null and definition != null:
+		var atlas := _definition_atlas()
+		if not atlas.is_empty():
+			_part_sprite.texture = TexturePackManager.get_texture(atlas["path"])
 	if _appearance_sprite != null and definition != null and definition.appearance_profile != null:
 		_appearance_sprite.texture = TexturePackManager.get_texture(definition.appearance_profile.sheet_path)
 
@@ -265,40 +260,28 @@ func _edge_visual_offset() -> Vector2:
 		_:
 			return Vector2.ZERO
 
-## [column, row] of this building's atlas cell, or (-1, -1) when it keeps the
-## colored placeholder (no atlas cell, or the art sheet is not present yet).
-func _atlas_cell(item_id: String) -> Vector2i:
-	if UTILITY_CELL_INDEX.has(item_id) and not FileAccess.file_exists(UTILITIES_TEXTURE_PATH):
-		return Vector2i(-1, -1)
-	if UTILITY_CELL_INDEX.has(item_id):
-		return Vector2i(int(UTILITY_CELL_INDEX[item_id]), 0)
-	var row := PARTS_ROW_ORDER.find(part_type)
-	if row < 0 or not PARTS_MATERIAL_COLUMN.has(tier):
-		return Vector2i(-1, -1)
-	if not FileAccess.file_exists(PARTS_TEXTURE_PATH):
-		return Vector2i(-1, -1)
-	return Vector2i(int(PARTS_MATERIAL_COLUMN[tier]), row)
+## The authored atlas reference for this part, or {} when it keeps the
+## colored placeholder (no definition, no cell, or the art sheet is not
+## present yet). Presentation is data: the sheet path and cell live on the
+## part's own BuildingDefinition, so new content needs no code change here.
+func _definition_atlas() -> Dictionary:
+	if definition == null:
+		return {}
+	var path := str(definition.get("atlas_path"))
+	var cell: Vector2i = definition.get("atlas_cell")
+	if path.is_empty() or cell == Vector2i(-1, -1) or not FileAccess.file_exists(path):
+		return {}
+	return {"path": path, "cell": cell}
 
-func _color_for(item_id: String) -> Color:
-	match item_id:
-		"wooden_wall", "wooden_door", "fence":
-			return Color(0.55, 0.35, 0.18, 0.95)
-		"stone_wall", "stone_floor":
-			return Color(0.55, 0.55, 0.58, 0.95)
-		"campfire":
-			return Color(0.85, 0.35, 0.1, 0.95)
-		"furnace", "anvil":
-			return Color(0.4, 0.4, 0.45, 0.95)
-		"workbench":
-			return Color(0.6, 0.45, 0.25, 0.95)
-		"chest":
-			return Color(0.7, 0.5, 0.2, 0.95)
-		"bed":
-			return Color(0.45, 0.35, 0.7, 0.95)
-		"torch":
-			return Color(1.0, 0.8, 0.3, 0.95)
-		_:
-			return Color(0.5, 0.55, 0.4, 0.95)
+## Placeholder tint: the part's optional per-part override color when authored,
+## otherwise its visual family's tint, otherwise the neutral default.
+func _placeholder_color() -> Color:
+	if definition == null:
+		return PLACEHOLDER_DEFAULT_COLOR
+	var override: Color = definition.get("placeholder_color")
+	if override.a > 0.0:
+		return override
+	return PLACEHOLDER_FAMILY_COLORS.get(str(definition.get("visual_family_id")), PLACEHOLDER_DEFAULT_COLOR)
 
 func _setup_collision() -> void:
 	var shape := CollisionShape2D.new()

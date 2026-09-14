@@ -2257,7 +2257,7 @@ func _run_checks() -> void:
 		var campfire_tile := Vector2i(1, 0)
 		_check(buildings.place_building_item("campfire", campfire_tile, player_ent.inventory, 0), "Crafted campfire can be placed in the world")
 		var campfire: Building = buildings.get_building_at(campfire_tile, 0)
-		_check(campfire != null and campfire._station_sprite != null and campfire._station_sprite.texture != null,
+		_check(campfire != null and campfire._part_sprite != null and campfire._part_sprite.texture != null,
 			"Placed campfire uses the exported texture-pack atlas")
 		_check(buildings.has_station_near("campfire", player_ent.global_position),
 			"Nearby station discovery exposes its authored recipe group")
