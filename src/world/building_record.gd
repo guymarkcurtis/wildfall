@@ -49,6 +49,7 @@ var container_storage: InventoryStorage = null
 ## M7 will add the fuel surface beside them without changing this shape.
 var station_input_storage: InventoryStorage = null
 var station_output_storage: InventoryStorage = null
+var fuel_storage: InventoryStorage = null
 
 ## Seed (or return) the record's indexed container storage from its authored
 ## ContainerProfile. Returns null when the definition has no container.
@@ -103,6 +104,19 @@ func get_station_input_storage() -> InventoryStorage:
 
 func get_station_output_storage() -> InventoryStorage:
 	return _get_station_storage("outputs", false)
+
+func get_fuel_storage() -> InventoryStorage:
+	if fuel_storage != null:
+		return fuel_storage
+	if definition == null or definition.fuel_profile == null:
+		return null
+	var profile: FuelProfile = definition.fuel_profile
+	fuel_storage = InventoryStorage.new(profile.fuel_slot_count, 200.0)
+	var saved: Variant = capability_state.get("fuel", null)
+	if typeof(saved) == TYPE_DICTIONARY and typeof(saved.get("slots", null)) == TYPE_ARRAY \
+			and saved.slots.size() == profile.fuel_slot_count:
+		fuel_storage.deserialize({"slots": saved.slots, "max_weight": 200.0})
+	return fuel_storage
 
 func _get_station_storage(state_key: String, inputs: bool) -> InventoryStorage:
 	if definition == null or definition.station_profile == null:
@@ -161,6 +175,14 @@ func _sync_station_state() -> void:
 	else:
 		capability_state["station"] = station
 
+func _sync_fuel_state() -> void:
+	if fuel_storage == null:
+		return
+	if fuel_storage.occupied_count() > 0:
+		capability_state["fuel"] = fuel_storage.serialize()
+	else:
+		capability_state.erase("fuel")
+
 static func canonical_edge_key(tile: Vector2i, story: int, orientation: String) -> String:
 	match orientation:
 		"north":
@@ -217,6 +239,7 @@ func blocks_movement() -> bool:
 func serialize() -> Dictionary:
 	_sync_container_state()
 	_sync_station_state()
+	_sync_fuel_state()
 	var entry: Dictionary = {
 		"item_id": item_id,
 		"x": tile.x,

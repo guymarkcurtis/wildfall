@@ -53,8 +53,11 @@ signal active_story_changed(story: int)
 signal placement_failed(reason: String)
 signal demolition_blocked(record: BuildingRecord, reason: String)
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	_update_connector_traversal()
+	if item_database != null:
+		for record in _record_list:
+			FuelConsumer.tick(record, delta, item_database)
 
 ## Generic vertical-connector traversal: when the player ENTERS a connector's
 ## landing zone (edge-triggered, so standing still never re-triggers), the

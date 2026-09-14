@@ -11,6 +11,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	_test_station_panel_interaction()
+	_test_fuel_tick()
 	var database := ItemDatabase.new()
 	database.initialize()
 	var inventory := InventoryComponent.new()
@@ -58,6 +59,24 @@ func _run() -> void:
 	restored_manager.queue_free()
 	manager.queue_free()
 	quit(_failures)
+
+func _test_fuel_tick() -> void:
+	var database := ItemDatabase.new()
+	database.initialize()
+	var record := BuildingRecord.new()
+	record.definition = load("res://data/buildings/campfire.tres") as BuildingDefinition
+	var storage := record.get_fuel_storage()
+	storage.stack_sizes = {"wood": 64}
+	storage.add_item("wood", 1)
+	record.capability_state["enabled"] = true
+	FuelConsumer.tick(record, 1.0, database)
+	_check(record.capability_state.get("fuel_seconds_remaining", 0.0) > 0.0
+			and storage.quantity_of("wood") == 0,
+			"FuelConsumer consumes only an item accepted by the profile's fuel tags")
+	FuelConsumer.tick(record, 301.0, database)
+	_check(not bool(record.capability_state.get("enabled", true))
+			and is_zero_approx(float(record.capability_state.get("fuel_seconds_remaining", -1.0))),
+			"Fuel depletion disables the object without consuming time while off")
 
 func _test_station_panel_interaction() -> void:
 	var world := Node.new()
