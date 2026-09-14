@@ -27,8 +27,8 @@ source plans conflict, this plan and its decision log at the bottom win.
    that violates one needs a dated decision-log entry.
 
 **Plan status:** `ACTIVE`
-**Current milestone:** M8 — Build catalogue expansion
-**Last updated:** 2026-09-14 (M8 timber homestead checkpoint)
+**Current milestone:** M9 — Art, UX, and presentation
+**Last updated:** 2026-09-14 (M8 complete: full catalogue + furniture pass)
 
 ## Groundwork already in place
 
@@ -413,27 +413,38 @@ fuel cannot be duplicated; night lighting is readable and responsive.
 
 ## M8 — Build catalogue expansion
 
-*In progress. The first timber homestead checkpoint adds edge-correct fences,
+*Complete. The first timber homestead checkpoint added edge-correct fences,
 fence gates, railings, porch/deck/path surfaces, planter boxes, tables, and a
 fuelled yard lantern as ordinary content assets. The matching stone gate,
-railing, patio/path, and planter now form the first Tier 2 yard slice.
-The first Tier 3 reinforced floor/wall/roof, gate, railing, and grate are
-gated behind `metalworking`; their sandbox balance, remaining furniture
-catalogue, and final art remain below.*
+railing, patio/path, and planter formed the first Tier 2 yard slice.
+The Tier 3 reinforced floor/wall/roof, gate, railing, and grate are gated
+behind `metalworking`, and the closing pass adds the remaining 19 furniture
+pieces across all three tiers — pickup icons, hand-crafted recipes,
+texture-pack entries, and sandbox-verified metal costs. Building visuals
+resolve from per-definition `atlas_path`/`atlas_cell` data with family
+placeholder tints as the fallback; dedicated family atlases are M9.*
 
-- [ ] Tier 1 timber complete: structural, stair/rail, boundary, exterior, and
+- [x] Tier 1 timber complete: structural, stair/rail, boundary, exterior, and
       initial interior sets per the catalogue table in the building plan.
-- [ ] Tier 2 stone equivalents and upgrades; stable item IDs preserved for
+- [x] Tier 2 stone equivalents and upgrades; stable item IDs preserved for
       existing stone pieces.
-- [ ] Tier 3 reinforced/metal as data + a technology gate following
+- [x] Tier 3 reinforced/metal as data + a technology gate following
       `metalworking`; costs sandbox-tested before balance approval.
-- [ ] Migrate stations, chest, torch, and bed onto the generic capability
+- [x] Migrate stations, chest, torch, and bed onto the generic capability
       references (no parallel storage/fuel/light behaviour).
-- [ ] Paths, gates, fences, planters, yard lights, porch/deck pieces, and
+- [x] Paths, gates, fences, planters, yard lights, porch/deck pieces, and
       non-functional furniture for homestead layout testing.
-- [ ] Recipe, item icon, pickup art, research, tooltip, texture-pack, and
+- [x] Recipe, item icon, pickup art, research, tooltip, texture-pack, and
       sandbox-supply coverage for **every** new placeable; every survival
       recipe has an obtainable ingredient chain.
+
+*Closeout note: the bed ships M8 without an interaction profile — its sleep
+interaction is deferred by the interactables plan, so the bed carries no
+capability at all and there is no parallel behaviour to migrate; stations,
+chest, and torch already run entirely on generic profile references. Metal
+furniture costs (1–4 ingots) match the reinforced structural family and the
+iron chain is sandbox-reachable, so no balance tuning was needed; final
+human playtesting remains M10.*
 
 **Exit:** Building Sandbox can build distinct cabins, stone houses, fenced
 yards, workshops, and furnished two-story homes without starvation.
@@ -547,6 +558,7 @@ Append one row per completed milestone. Do not rewrite history.
 | 2026-09-14 | M6 | Complete | C-key now lists hand recipes only; profile-matched recipes open from E-interaction station panels. `StationProfile` replaces ID-based station discovery, and persistent input/output surfaces serialize in v8 `state.station`. `StationCrafting` visibly fills inputs then transactionally writes read-only output; output-full/research rejection preserves inputs. `wooden_hammer` is the first workbench recipe. Verified: station 10/10, placement 61/61, interaction 26/26, content 70/70, editor/parser exit 0. |
 | 2026-09-14 | M7 | Complete | `FuelConsumer` consumes only data-authored fuel tags while enabled, persists `enabled` + `fuel_seconds_remaining` + indexed fuel storage in v8 state, and disables cleanly when depleted. The shared interaction panel has filtered fuel slots, explicit status/remaining-time/accepted-tag hints, and a generic toggle. `Building` owns profile-driven `PointLight2D` instances using one radial `GradientTexture2D`; daytime/power/range policy and deterministic nearest-first cap (32 lights) keep dense builds bounded. Fuelled assets select data-authored unlit/lit appearance states; M9 supplies the dedicated multi-frame sheets. Verified: station/fuel/light 22/22, content 70/70, editor/parser exit 0. |
 | 2026-09-14 | Plan | Created | This combined deployment plan created; source plans retained as design references; scheduling conflicts resolved in the decision log below. |
+| 2026-09-14 | M8 | Complete | Full catalogue: the timber homestead checkpoint (edge-correct fences, gates, railings, porch/deck/path, planter boxes, tables, fuelled yard lantern), the stone yard slice (gate, railing, patio/path, planter), the first reinforced family (floor/wall/roof, gate, railing, grate), and the closing furniture pass — 19 pieces as data-only assets (timber chair/shelf/rug/wardrobe/steps/awning/corner post; stone hearth/cabinet/bookcase/well/brazier, the hearth and brazier reusing the yard-lantern profile set; metal shuttered window/metal stair/metal fence/signal pole/metal lantern/workshop cabinet/metal locker) with stable item ids, hand-crafted recipes, 32×32 PixelLab pickup icons, and automatic Supply Store coverage. Building visuals migrated to per-definition `atlas_path`/`atlas_cell` data with family placeholder tints as the fallback; dedicated per-family atlases are M9. Metal furniture costs sandbox-verified inside the reinforced family's 1–4 ingot range (iron chain 2:1 at the pre-placed sandbox furnace; no tuning needed). The bed stays profile-less — its sleep interaction is deferred by the interactables plan. Verified: content 93/93 (65 definitions), placement 61/61, station/fuel/light 22/22, sandbox 0 failures, ground pack 0 failures, full harness 438/0, editor/parser exit 0. |
 
 ## Decision log
 
@@ -565,3 +577,7 @@ Dated entries for deliberate deviations from the source plans.
 | 2026-09-14 | `BuildingManager` refund target falls back to `refund_inventory` when no player is attached. | API/test placements draw from an explicit inventory; the replacement/demolition refund must pay back into that same inventory, not only `player.inventory`. |
 | 2026-09-14 | Railings and stairwell trim content deferred to the M8 catalogue; the connector save model carries them today. | M3's scope is the traversal mechanism; rail families are catalogue authoring and would duplicate M8 work. |
 | 2026-09-14 | In Building Sandbox only, `[` / `]` outside build mode move the ACTIVE story and `R` toggles roofs. | The plan's anti-strand debug selector: a demolished stair can leave the player upstairs in tests; survival never offers the escape so no player can phase through floors. |
+| 2026-09-14 | Building visuals resolve from per-definition `atlas_path`/`atlas_cell` data with family placeholder tints as the fallback. | Keeps content additions asset-only: a new part either points at an atlas cell or inherits its family's tint, so no code branch names a part. `visual_family_id` (wood/stone/metal/primitive) is treated as structural vocabulary, so the family→colour map in code is acceptable; the only remaining name-based branch in `building.gd` is the documented null-definition `_id_blocks` fallback. The one-shot `tools/generate_building_definitions.gd` authoring tool still references the pre-migration constants and is left as-is. |
+| 2026-09-14 | The bed ships M8 with no interaction profile. | The interactables plan defers bed/farm/door interactions to later profile assets, so M8's "migrate the bed onto capability references" box is satisfied by the bed being a profile-less decorative part — there is no parallel storage/fuel/light behaviour to remove. |
+| 2026-09-14 | Station atlas sprites intentionally stack on top of appearance sprites rather than replacing them. | The data migration keeps pre-migration rendering pixel-identical; M9 may fold the two into dedicated per-station sheets. |
+| 2026-09-14 | The sandbox test contract for the C panel is "every hand-crafted recipe is exposed", not a full recipe count. | M6 design: the C-key panel lists hand recipes only; station recipes are exposed through E-interaction station panels. The 19 new furniture recipes are all hand-crafted, so the existing count-based contract covers them without test edits. |

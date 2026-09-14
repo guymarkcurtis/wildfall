@@ -526,9 +526,12 @@ buildings/interactables deployment plan (layered multilevel building system +
 interaction, storage, stations, fuel, and lighting). It supersedes the
 schedules of `TOP_DOWN_MULTILEVEL_BUILDING_PLAN.md` and
 `INTERACTABLES_STORAGE_AND_LIGHTING_PLAN.md`, which remain as design
-references. Current milestone: M8 (build catalogue expansion); M1–M7 are
-complete, including persistent storage, station crafting, and profile-driven
-fuel/local lighting. Track progress in
+references. Current milestone: M9 (art, UX, and presentation); M1–M8 are
+complete, including persistent storage, station crafting, profile-driven
+fuel/local lighting, and the full build catalogue: 65 data-defined building
+parts across the timber/stone/metal tiers, the 19-piece furniture set with
+pickup icons and sandbox-verified metal costs, and per-definition atlas
+visuals with family placeholder tints. Track progress in
 that plan's progress log.
 
 Queued after the active build:

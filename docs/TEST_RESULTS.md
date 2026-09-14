@@ -1,15 +1,32 @@
 # Wildfall Test Results
 
 ## Test Run Summary
-- **Active Build Plan M8 checkpoint (2026-09-14, homestead catalogue data)**:
-  `tests/test_building_content.gd` **93/93 checks**, placement **61/61**, and
-  editor/parser exit 0. The registry now discovers 40 definitions. Timber and
-  stone boundary/exterior/interior assets have stable item IDs, reachable
-  research-gated recipes, and sandbox coverage through the database-driven
-  Supply Store. Fences and railings occupy canonical edge slots; their gates
-  use the generic edge-fixture replacement rule. The first reinforced family
-  is gated behind `metalworking`. M8 remains in progress pending sandbox
-  balance, remaining furniture, and final art.
+- **Active Build Plan M8 complete (2026-09-14, full catalogue + furniture
+  pass)**: `tests/test_building_content.gd` **93/93 checks**,
+  `tests/test_building_placement.gd` **61/61**,
+  `tests/test_station_crafting.gd` **22/22**,
+  `tests/test_building_sandbox.gd` **0 failures**,
+  `tests/test_ground_pack.gd` **0 failures** (stock manifest regenerates from
+  the grown `PACK_ASSETS`), editor/parser check exit 0, and the full
+  `tests/test_game.gd` **438 passed / 0 failed** — including the
+  "every currently droppable item has a native 32px PixelLab pickup sprite"
+  check over all 38 new pickup icons. The registry now discovers **65**
+  building definitions (46 homestead-checkpoint + 19 furniture). The furniture
+  pass adds the timber interior set (chair, shelf, rug, wardrobe, steps,
+  awning, corner post), the stone interior set (hearth, cabinet, bookcase,
+  well, brazier — hearth and brazier reuse the yard-lantern
+  interaction/fuel/light/appearance profile set), and the metal furniture set
+  (shuttered window on the shared edge-fixture contract, metal stair reusing
+  the stair connector profile, metal fence, signal pole, metal lantern,
+  workshop cabinet, metal locker) — all data-only `.tres` assets with stable
+  item IDs, hand-crafted C-panel recipes, research gates, pickup icons in
+  `TexturePackManager.PACK_ASSETS`, and automatic Supply Store grants.
+  `Building` now resolves visuals from per-definition `atlas_path`/`atlas_cell`
+  data with family placeholder tints as the fallback; dedicated per-family
+  atlases are M9. Metal furniture costs (1–4 ingots) sit inside the reinforced
+  family's sandbox-verified range and the 2 ore → 1 ingot chain is pre-placed
+  in the sandbox yard, so no balance tuning was needed. All six M8 boxes are
+  closed; the plan advances to M9 (art, UX, presentation).
 - **Active Build Plan M7 (2026-09-14, fuel/on-off/local lighting)**: focused
   `tests/test_station_crafting.gd` **22/22 checks**, content **70/70**, and
   editor/parser exit 0. `FuelConsumer` accepts only profile-tagged fuel while
