@@ -105,6 +105,14 @@ func _test_fuel_tick() -> void:
 	torch._update_light()
 	_check(not torch._light.visible,
 			"Powering an authored light off hides it without an item-id branch")
+	torch.capability_state["enabled"] = true
+	var distant_player := Node2D.new()
+	distant_player.name = "Player"
+	distant_player.global_position = Vector2(2000, 2000)
+	main.add_child(distant_player)
+	torch._update_light()
+	_check(not torch._light.visible,
+			"Lights outside the player-radius budget are culled deterministically")
 	main.queue_free()
 
 func _test_station_panel_interaction() -> void:
