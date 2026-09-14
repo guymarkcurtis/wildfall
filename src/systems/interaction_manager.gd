@@ -240,8 +240,11 @@ func _build_station_view(building: Building, record: BuildingRecord, panel: Inte
 	if database == null:
 		return false
 	var recipes := database.get_recipes_for_station(building.definition.station_profile.recipe_group)
+	var power_note := ""
+	if building.definition.station_profile.requires_power:
+		power_note = " Powered: %s." % ("yes" if bool(record.capability_state.get("enabled", false)) else "no")
 	panel.open_station(building.get_interaction_prompt().capitalize(),
-			"Move ingredients into input slots, then choose a recipe. Output is read-only.",
+			"Move ingredients into input slots, then choose a recipe. Output is read-only." + power_note,
 			inputs, outputs, player.inventory.get_storage(), recipes)
 	panel.station_craft_requested.connect(_on_station_craft_requested.bind(record))
 	for storage in [inputs, outputs]:

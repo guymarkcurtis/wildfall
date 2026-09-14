@@ -216,8 +216,14 @@ capability design must not preclude any of these later.
       utility atlas used until content supplies a dedicated state sheet.
       Player demolition is generically blocked for any non-empty container,
       with a toast and panel close, so contents are never silently lost.
-- [ ] **Phase 4** — author a station (workbench/campfire/furnace) and route its
-      recipes through the `StationProfile` (removing `CRAFTING_STATION_IDS`).
+- [x] **Phase 4** — stations use `StationProfile.recipe_group` to expose only
+      matching recipes from their E-interaction panel; C remains hand-crafting
+      only. Input/output surfaces are persistent indexed storage under
+      `state.station`; autofill uses normal transfers, and immediate craft
+      consumes only visible inputs after output can accept the result.
+      `wooden_hammer` is the representative workbench recipe. Powered status
+      is profile-driven; fuel capacity and timed queues arrive in Phase 5 on
+      the same surfaces.
 - [ ] **Phase 5** — author fuel and light (`FuelProfile`, `LightProfile`,
       animated state sheets); the shared light mask and the light budget.
 - [ ] **Phase 6** — art contract (PixelLab state sheets + shared

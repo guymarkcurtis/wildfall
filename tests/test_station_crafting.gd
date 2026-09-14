@@ -10,6 +10,7 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
+	_test_station_panel_interaction()
 	var database := ItemDatabase.new()
 	database.initialize()
 	var inventory := InventoryComponent.new()
@@ -57,6 +58,40 @@ func _run() -> void:
 	restored_manager.queue_free()
 	manager.queue_free()
 	quit(_failures)
+
+func _test_station_panel_interaction() -> void:
+	var world := Node.new()
+	root.add_child(world)
+	var database := ItemDatabase.new()
+	database.name = "ItemDatabase"
+	world.add_child(database)
+	database.initialize()
+	var buildings := BuildingManager.new()
+	buildings.name = "BuildingManager"
+	world.add_child(buildings)
+	var player := Player.new()
+	player.name = "Player"
+	world.add_child(player)
+	var manager := InteractionManager.new()
+	manager.name = "InteractionManager"
+	world.add_child(manager)
+	var stack_sizes: Dictionary = {}
+	for item_id in database.items:
+		stack_sizes[item_id] = int(database.items[item_id].stack_size)
+	player.inventory.set_stack_sizes(stack_sizes)
+	player.inventory.add_item("workbench", 1)
+	player.inventory.add_item("plank", 4)
+	player.inventory.add_item("stone", 2)
+	buildings.place_record("workbench", Vector2i(4, 4), player.inventory, 0)
+	var bench := buildings.get_record_at(Vector2i(4, 4), 0, "object").node
+	player.global_position = Vector2(144, 144)
+	_check(manager.open(bench) and manager.open_panel != null and manager.open_panel.output_grid != null,
+			"E-interaction opens a station panel with persistent input, output, and player surfaces")
+	manager.open_panel.station_craft_requested.emit("wooden_hammer")
+	_check(manager.open_record.get_station_output_storage().quantity_of("wooden_hammer") == 1,
+			"Station panel recipe action fills inputs and crafts into visible output")
+	manager.close("test")
+	world.queue_free()
 
 func _check(condition: bool, label: String) -> void:
 	_checks += 1

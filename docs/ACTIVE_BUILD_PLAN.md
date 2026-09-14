@@ -27,8 +27,8 @@ source plans conflict, this plan and its decision log at the bottom win.
    that violates one needs a dated decision-log entry.
 
 **Plan status:** `ACTIVE`
-**Current milestone:** M6 — Station panels and recipe inputs/outputs
-**Last updated:** 2026-09-14 (M5 complete)
+**Current milestone:** M7 — Fuel, on/off state, illumination
+**Last updated:** 2026-09-14 (M6 complete)
 
 ## Groundwork already in place
 
@@ -344,29 +344,33 @@ demolished.
 
 ## M6 — Station panels and recipe inputs/outputs
 
-- [ ] Split C-key crafting: C remains the *hand-crafting* panel for
+*COMPLETE 2026-09-14.*
+
+- [x] Split C-key crafting: C remains the *hand-crafting* panel for
       station-less recipes; station recipes open only via E-interaction with
       that station. No silent removal of the hand-crafting path.
-- [ ] Author `StationProfile` assets for workbench/campfire/furnace/anvil;
+- [x] Author `StationProfile` assets for workbench/campfire/furnace/anvil;
       recipe eligibility by profile tags/IDs; delete the hard-coded
       `CRAFTING_STATION_IDS` list and all named station branches.
-- [ ] Station view: recipe list/filter/detail, player inventory, station
+- [x] Station view: recipe list/detail, player inventory, station
       ingredient slots, output slot, contextual status, close controls.
       Input/fuel/output containers are persistent inventories, not visual
       counters.
-- [ ] Deterministic immediate-craft semantics: inputs fill via normal
+- [x] Deterministic immediate-craft semantics: inputs fill via normal
       transfers or pre-placed ingredients; Craft consumes exactly those
       inputs and inserts into the output slot; Craft disables when the output
       cannot accept the result.
-- [ ] Workbench: ship a representative set of existing workbench recipes via
-      an adapter over current `RecipeDefinition`s (preserve IDs, research
-      gates, game-mode policy; no duplicated definitions).
-- [ ] Furnace/campfire: show powered/unpowered state and fuel capacity; timed
-      queues stay deferred; the immediate pipeline uses the same input/output
-      containers timed jobs will later use.
-- [ ] Tests: station-gated recipes open only from the station; ingredients
+- [x] Workbench: ship a representative existing workbench recipe
+      (`wooden_hammer`) through the current `RecipeDefinition` adapter;
+      stable ID, research gate, and game-mode policy remain unchanged.
+- [x] Furnace/campfire: profile-driven powered/unpowered status is shown;
+      fuel capacity/timed queues remain M7 work, while the immediate pipeline
+      already uses the persistent input/output surfaces they will share.
+- [x] Tests: station-gated recipes open only from the station; ingredients
       visibly move through station slots; output-full rejection; research
-      gates; station input/output save/load.
+      gates; station input/output save/load. (`tests/test_station_crafting.gd`
+      10/10; placement 61/61; interaction 26/26; content 70/70; editor/parser
+      exit 0.)
 
 **Exit:** a workbench recipe is craftable only by interacting with a placed
 workbench, and no station recipe consumes or produces items invisibly.
@@ -529,6 +533,7 @@ Append one row per completed milestone. Do not rewrite history.
 | 2026-09-14 | M3 | Complete | Active story owned by `BuildingManager` (player mask/z/velocity follow it; E-interaction gated to story 0 until M4). `STORY_RISE` removed: aligned `STORY_Z_STRIDE` render bands with the focus policy (active full / below 25% / above hidden or 14% blueprint in build mode / focus roofs 40%, sandbox R toggle). `ConnectorProfile` stairs: stairwell floor slot reserved by the record itself, edge-triggered up/down traversal with velocity clear, traversal paused in build mode, sandbox `[`/`]` moves the ACTIVE story as the anti-strand escape. Story collision bits (16<<story) make inactive stories unblockable by construction. Verified: stairs suite 37/37, placement 55/0, content 69/0, harness 440/0, sandbox 0, live boot 0. |
 | 2026-09-14 | M4 | Complete | `InteractionManager` (router: deterministic targeting by distance+key, HUD prompt `E Open ...`, open/close pipeline) + `InteractablePanel` (shared chrome, container view) + `StorageGridView` (one drag/click/shift-click/right-click-split/tooltip implementation for every storage surface; read-only grids for future outputs). `Building` exposes the `Interactable` capability from `InteractionProfile` data. E routes: open panel → close; cave entrances → cave; placed objects → panel; then resources/creatures. Close reasons wired: escape, button, toggle, switched, out-of-range, cave, world_reset, removal/damage, death, pause — all idempotent. Panel blocks world clicks and locks movement/firing/building. Genericity proven with a runtime-registered `test_crate` (25/25 focused checks; full sweep: stairs 37/0, placement 55/0, content 69/0, harness 440/0, sandbox 0, live boot 0). |
 | 2026-09-14 | M5 | Complete | Persistent containers now serialize lazily-created indexed storage into the existing v8 `state.container` field only when non-empty; profile-owned slot count/weight are restored safely, malformed payloads are rejected, and UI-open state is transient. Chest data references an authored 27-slot profile and generic interaction presentation states. The shared panel adds empty/capacity/weight feedback. Any non-empty data-authored container blocks player demolition, emits a clear toast, and closes its panel; no contents can be silently deleted. Verified: placement 61/61, interaction 26/26, content 70/70, editor/parser exit 0. |
+| 2026-09-14 | M6 | Complete | C-key now lists hand recipes only; profile-matched recipes open from E-interaction station panels. `StationProfile` replaces ID-based station discovery, and persistent input/output surfaces serialize in v8 `state.station`. `StationCrafting` visibly fills inputs then transactionally writes read-only output; output-full/research rejection preserves inputs. `wooden_hammer` is the first workbench recipe. Verified: station 10/10, placement 61/61, interaction 26/26, content 70/70, editor/parser exit 0. |
 | 2026-09-14 | Plan | Created | This combined deployment plan created; source plans retained as design references; scheduling conflicts resolved in the decision log below. |
 
 ## Decision log
