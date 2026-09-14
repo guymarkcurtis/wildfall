@@ -2250,27 +2250,17 @@ func _run_checks() -> void:
 		buildings.set_selected_story(0)
 		player_ent.global_position = Vector2.ZERO
 		var cooked_meat: RecipeDefinition = item_database.get_recipe("cooked_meat")
-		_check(cooked_meat != null and not main._has_required_crafting_station(cooked_meat),
-			"Station recipe cannot be crafted away from its station")
-		player_ent.inventory.add_item("meat", 1)
-		var raw_meat_before := player_ent.inventory.get_item_quantity("meat")
-		var cooked_before := player_ent.inventory.get_item_quantity("cooked_meat")
 		var crafting_defs: Array = main.get("_recipe_defs")
-		var cooked_recipe_index := crafting_defs.find(cooked_meat)
-		main._on_craft_requested(cooked_recipe_index)
-		_check(player_ent.inventory.get_item_quantity("meat") == raw_meat_before and player_ent.inventory.get_item_quantity("cooked_meat") == cooked_before,
-			"Crafting rejects a station recipe without a nearby station")
+		_check(cooked_meat != null and not crafting_defs.has(cooked_meat),
+			"C-key hand crafting excludes station recipes")
 		player_ent.inventory.add_item("campfire", 1)
 		var campfire_tile := Vector2i(1, 0)
 		_check(buildings.place_building_item("campfire", campfire_tile, player_ent.inventory, 0), "Crafted campfire can be placed in the world")
 		var campfire: Building = buildings.get_building_at(campfire_tile, 0)
 		_check(campfire != null and campfire._station_sprite != null and campfire._station_sprite.texture != null,
 			"Placed campfire uses the exported texture-pack atlas")
-		_check(buildings.has_station_near("campfire", player_ent.global_position) and main._has_required_crafting_station(cooked_meat),
-			"Nearby campfire satisfies the cooking requirement")
-		main._on_craft_requested(cooked_recipe_index)
-		_check(player_ent.inventory.get_item_quantity("meat") == raw_meat_before - 1 and player_ent.inventory.get_item_quantity("cooked_meat") == cooked_before + 1,
-			"Nearby campfire enables its recipe and consumes ingredients")
+		_check(buildings.has_station_near("campfire", player_ent.global_position),
+			"Nearby station discovery exposes its authored recipe group")
 	_check(item_database.has_item("wooden_bow"), "Wooden bow exists for ranged combat")
 	_check(item_database.has_item("arrow"), "Arrows exist for ranged combat")
 

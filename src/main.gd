@@ -991,12 +991,15 @@ func _refresh_crafting_ui() -> void:
 			continue
 		if not _is_recipe_unlocked(def):
 			continue
+		# C is deliberately hand-crafting only. Station recipes are available
+		# from the profile-matched E-interaction panel, never by proximity.
+		if not def.crafting_station.is_empty():
+			continue
 		_recipe_defs.append(def)
 		recipe_dicts.append(_recipe_to_dict(def))
 
-	var nearby_stations := _get_nearby_station_ids()
-	_last_crafting_station_signature = ",".join(nearby_stations)
-	crafting_panel.refresh(recipe_dicts, inv_data, nearby_stations)
+	_last_crafting_station_signature = ""
+	crafting_panel.refresh(recipe_dicts, inv_data)
 
 func _get_nearby_station_ids() -> PackedStringArray:
 	if GameSession.is_creative() or building_manager == null or player == null:

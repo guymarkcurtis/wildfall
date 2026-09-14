@@ -9,9 +9,11 @@ extends Control
 ## Emitted for EVERY close path (Escape, button, manager reasons); the
 ## InteractionManager owns the actual close pipeline and stays idempotent.
 signal close_requested(reason: String)
+signal station_craft_requested(recipe_id: String)
 
 var object_grid: StorageGridView = null
 var player_grid: StorageGridView = null
+var output_grid: StorageGridView = null
 var is_open: bool = false
 
 var _dim: ColorRect = null
@@ -23,6 +25,8 @@ var _object_capacity_label: Label = null
 var _player_capacity_label: Label = null
 var _player_storage: InventoryStorage = null
 var _object_storage: InventoryStorage = null
+var _output_storage: InventoryStorage = null
+var _station_recipe_box: VBoxContainer = null
 var _selected: Dictionary = {} # {grid: String, index: int} or empty
 
 const SLOT_COLUMNS := 9
@@ -130,6 +134,38 @@ func open_for(title: String, help: String, object_storage: InventoryStorage,
 	visible = true
 	_refresh()
 
+## M6's station form deliberately reuses the same chrome, player inventory,
+## and input-grid transfer implementation as containers. Output is read-only;
+## recipes are supplied by the station profile group, never an object id.
+func open_station(title: String, help: String, input_storage: InventoryStorage,
+		output_storage: InventoryStorage, player_storage: InventoryStorage,
+		recipes: Array[RecipeDefinition]) -> void:
+	open_for(title, help, input_storage, player_storage)
+	_output_storage = output_storage
+	if output_grid != null:
+		output_grid.queue_free()
+	output_grid = StorageGridView.new()
+	_content_box.add_child(output_grid)
+	output_grid.setup(output_storage, "output", 1, true)
+	if _station_recipe_box != null:
+		_station_recipe_box.queue_free()
+	_station_recipe_box = VBoxContainer.new()
+	_station_recipe_box.position = Vector2(24, 250)
+	_station_recipe_box.size = Vector2(612, 54)
+	_station_recipe_box.add_theme_constant_override("separation", 4)
+	_window.add_child(_station_recipe_box)
+	var recipes_label := Label.new()
+	recipes_label.text = "Station recipes"
+	recipes_label.add_theme_font_size_override("font_size", 12)
+	_station_recipe_box.add_child(recipes_label)
+	for recipe in recipes:
+		var button := Button.new()
+		button.text = "Craft %dx %s" % [recipe.result_quantity, recipe.result_item_id.replace("_", " ").capitalize()]
+		button.tooltip_text = recipe.get_cost_string()
+		button.pressed.connect(func(): station_craft_requested.emit(recipe.recipe_id))
+		_station_recipe_box.add_child(button)
+	_refresh()
+
 func close_panel() -> void:
 	is_open = false
 	visible = false
@@ -214,6 +250,8 @@ func _storage_for(grid_id: String) -> InventoryStorage:
 		return _object_storage
 	if grid_id == "player":
 		return _player_storage
+	if grid_id == "output":
+		return _output_storage
 	return null
 
 func _other_storage(grid_id: String) -> InventoryStorage:
@@ -226,6 +264,8 @@ func _refresh() -> void:
 	if player_grid != null:
 		player_grid.refresh()
 		player_grid.highlight_selected(int(_selected.get("index", -1)) if str(_selected.get("grid", "")) == "player" else -1)
+	if output_grid != null:
+		output_grid.refresh()
 	if _object_capacity_label != null:
 		_object_capacity_label.text = _storage_summary("Container", _object_storage)
 	if _player_capacity_label != null:

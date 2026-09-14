@@ -32,6 +32,7 @@ func _ready() -> void:
 		pass # HUD prompt publishes directly; keep the lookup local per frame.
 	# M4 ships the container view; the station view registers in M6.
 	register_view_builder("container", Callable(self, "_build_container_view"))
+	register_view_builder("station", Callable(self, "_build_station_view"))
 	_ensure_building_manager_binding()
 
 ## A view builder returns true when it opened content for the panel.
@@ -124,6 +125,12 @@ func close(reason: String) -> void:
 		open_panel.queue_free()
 	if open_record != null and open_record.container_storage != null:
 		open_record.container_storage.changed.disconnect(_on_open_storage_changed)
+	if open_record != null and open_record.station_input_storage != null \
+			and open_record.station_input_storage.changed.is_connected(_on_open_storage_changed):
+		open_record.station_input_storage.changed.disconnect(_on_open_storage_changed)
+	if open_record != null and open_record.station_output_storage != null \
+			and open_record.station_output_storage.changed.is_connected(_on_open_storage_changed):
+		open_record.station_output_storage.changed.disconnect(_on_open_storage_changed)
 	open_panel = null
 	open_building = null
 	open_record = null
@@ -216,3 +223,44 @@ func _build_container_view(building: Building, record: BuildingRecord, panel: In
 	if not storage.changed.is_connected(changed):
 		storage.changed.connect(changed)
 	return true
+
+func _build_station_view(building: Building, record: BuildingRecord, panel: InteractablePanel) -> bool:
+	if player == null or player.inventory == null or building.definition == null \
+			or building.definition.station_profile == null:
+		return false
+	var inputs := record.get_station_input_storage()
+	var outputs := record.get_station_output_storage()
+	if inputs == null or outputs == null:
+		return false
+	inputs.stack_sizes = player.inventory.get_stack_sizes()
+	outputs.stack_sizes = player.inventory.get_stack_sizes()
+	inputs.max_durations = player.inventory.get_duration_caps()
+	outputs.max_durations = player.inventory.get_duration_caps()
+	var database := get_parent().get_node_or_null("ItemDatabase") as ItemDatabase
+	if database == null:
+		return false
+	var recipes := database.get_recipes_for_station(building.definition.station_profile.recipe_group)
+	panel.open_station(building.get_interaction_prompt().capitalize(),
+			"Move ingredients into input slots, then choose a recipe. Output is read-only.",
+			inputs, outputs, player.inventory.get_storage(), recipes)
+	panel.station_craft_requested.connect(_on_station_craft_requested.bind(record))
+	for storage in [inputs, outputs]:
+		if not storage.changed.is_connected(_on_open_storage_changed):
+			storage.changed.connect(_on_open_storage_changed)
+	return true
+
+func _on_station_craft_requested(recipe_id: String, record: BuildingRecord) -> void:
+	if open_record != record or player == null or player.inventory == null:
+		return
+	var database := get_parent().get_node_or_null("ItemDatabase") as ItemDatabase
+	var recipe := database.get_recipe(recipe_id) if database != null else null
+	if recipe == null:
+		return
+	var technology := get_parent().get_node_or_null("TechnologySystem")
+	var unlocked: bool = GameSession.is_creative() or technology == null or technology.is_unlocked(recipe.technology_id)
+	StationCrafting.fill_inputs(record, player.inventory.get_storage(), recipe)
+	var result := StationCrafting.craft(record, player.inventory.get_storage(), recipe, unlocked)
+	var hud := get_parent().get_node_or_null("HUD")
+	if hud != null and hud.has_method("show_toast"):
+		hud.show_toast("Crafted %s" % recipe.result_item_id.replace("_", " ") if bool(result.success) else "Crafting: %s" % str(result.reason).replace("_", " "))
+	_on_open_storage_changed()
