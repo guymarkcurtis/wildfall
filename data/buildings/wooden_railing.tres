@@ -1,21 +1,19 @@
 [gd_resource type="Resource" script_class="BuildingDefinition" format=3]
 
-[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_87thc"]
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_def"]
 
 [resource]
-script = ExtResource("1_87thc")
-id = "fence"
-display_name = "Fence"
+script = ExtResource("1_def")
+id = "wooden_railing"
+display_name = "Wood Railing"
 part_type = "wall"
 technology_id = "wood_building"
 requires_lower_support = false
-blocks_movement = true
+blocks_movement = false
 build_cost = Array[Dictionary]([{
 "item_id": "plank",
-"quantity": 2
+"quantity": 1
 }])
-max_health = 50
+max_health = 55
 allowed_orientations = PackedStringArray("north", "east", "south", "west")
-support_tags = PackedStringArray()
-required_support_tags = PackedStringArray()
 visual_family_id = "wood"

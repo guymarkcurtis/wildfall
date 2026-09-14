@@ -53,3 +53,12 @@ errors are logged loudly. See `BuildingContentRegistry`.
 The shipped definitions were generated once from the former hard-coded table
 by `tools/generate_building_definitions.gd`, which is retained as a reference
 for the exact field usage.
+
+## M8 timber homestead examples
+
+`fence`, `fence_gate`, and `wooden_railing` are all edge-layer assets; the gate
+uses the generic `edge_fixture` replacement policy rather than a fence-specific
+placement path. `wooden_porch`, `wooden_deck`, and `wooden_path` demonstrate
+ground/floor surfaces, while `planter_box` and `wooden_table` are ordinary
+object-layer props. `yard_lantern` composes the existing interaction, fuel,
+light, and appearance profiles entirely through Resource references.

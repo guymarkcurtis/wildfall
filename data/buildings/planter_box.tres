@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_def"]
+
+[resource]
+script = ExtResource("1_def")
+id = "planter_box"
+display_name = "Planter Box"
+technology_id = "wood_building"
+requires_lower_support = false
+build_cost = Array[Dictionary]([{
+"item_id": "plank",
+"quantity": 4
+}, {
+"item_id": "clay",
+"quantity": 1
+}])
+max_health = 60
+visual_family_id = "wood"

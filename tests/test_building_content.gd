@@ -8,7 +8,9 @@ const BUILDINGS := ["wooden_foundation", "wooden_floor", "wooden_wall", "wooden_
 	"wooden_door", "wooden_roof", "wooden_stairs", "wooden_ramp", "wooden_pillar",
 	"stone_foundation", "stone_floor", "stone_wall", "stone_window", "stone_door",
 	"stone_roof", "stone_stairs", "stone_ramp", "stone_pillar",
-	"torch", "campfire", "furnace", "workbench", "anvil", "chest", "bed", "farm_soil", "fence"]
+	"torch", "campfire", "furnace", "workbench", "anvil", "chest", "bed", "farm_soil", "fence",
+	"fence_gate", "wooden_railing", "wooden_porch", "wooden_deck", "wooden_path", "planter_box",
+	"wooden_table", "yard_lantern"]
 
 var _failures := 0
 var _checks := 0
@@ -42,8 +44,8 @@ func _test_registry_discovery() -> void:
 	registry.discover()
 	_check(not registry.has_validation_errors(),
 			"Shipped building content validates with zero errors" + _first_error(registry))
-	_check(registry.definitions.size() == 27,
-			"Registry discovers all 27 building definitions (got %d)" % registry.definitions.size())
+	_check(registry.definitions.size() == 35,
+			"Registry discovers all 35 building definitions (got %d)" % registry.definitions.size())
 	var ids := registry.definitions.keys()
 	ids.sort()
 	var expected := BUILDINGS.duplicate()
@@ -73,8 +75,9 @@ func _test_pinned_definition_values() -> void:
 			and not campfire.blocks_movement and not campfire.requires_lower_support,
 			"campfire keeps its exact prior gameplay values")
 	var fence := registry.get_definition("fence")
-	_check(fence != null and fence.display_name == "Fence" and fence.blocks_movement,
-			"fence keeps its display name and movement block")
+	_check(fence != null and fence.display_name == "Fence" and fence.blocks_movement
+			and fence.effective_placement_layer() == "edge",
+			"fence is an edge-boundary with its stable name and collision")
 
 func _test_capability_profiles() -> void:
 	var registry := BuildingContentRegistry.new()
@@ -107,6 +110,9 @@ func _test_capability_profiles() -> void:
 	var fence := registry.get_definition("fence")
 	_check(fence != null and not fence.has_capabilities(),
 			"decorative parts carry no capability profiles")
+	var lantern := registry.get_definition("yard_lantern")
+	_check(lantern != null and lantern.fuel_profile != null and lantern.light_profile != null,
+			"yard lantern reuses generic fuel and local-light capabilities through data")
 
 func _test_placement_metadata() -> void:
 	var registry := BuildingContentRegistry.new()
@@ -126,6 +132,10 @@ func _test_placement_metadata() -> void:
 	var roof := registry.get_definition("wooden_roof")
 	_check(roof != null and roof.support_tags.has("cover"),
 			"roofs provide the 'cover' support tag")
+	var gate := registry.get_definition("fence_gate")
+	_check(gate != null and gate.effective_placement_layer() == "edge"
+			and gate.occupancy_replacement == "edge_fixture",
+			"fence gates use the generic edge-fixture replacement contract")
 
 func _test_registry_validation_failures() -> void:
 	var registry := BuildingContentRegistry.new()
@@ -156,6 +166,11 @@ func _test_item_tags() -> void:
 	_check(tagged.size() == 3 and tagged[0] == "charcoal" and tagged[1] == "coal"
 			and tagged[2] == "wood",
 			"get_items_with_tag is a sorted data query")
+	for building_id in ["fence_gate", "wooden_railing", "wooden_porch", "wooden_deck",
+			"wooden_path", "planter_box", "wooden_table", "yard_lantern"]:
+		_check(database.get_item(building_id) != null and database.get_recipe(building_id) != null
+				and database.get_recipe(building_id).technology_id == "wood_building",
+				"%s has a placeable item, reachable recipe, and wood research gate" % building_id)
 
 # --- InventoryStorage ---
 

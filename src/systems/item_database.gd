@@ -95,6 +95,14 @@ func _load_items() -> void:
 	items["bed"] = _create_item("bed", "Bed", "building", 1, 5.0)
 	items["farm_soil"] = _create_item("farm_soil", "Farm Soil", "building", 32, 0.5)
 	items["fence"] = _create_item("fence", "Fence", "building", 32, 1.0)
+	items["fence_gate"] = _create_item("fence_gate", "Fence Gate", "building", 16, 1.5)
+	items["wooden_railing"] = _create_item("wooden_railing", "Wood Railing", "building", 32, 1.0)
+	items["wooden_porch"] = _create_item("wooden_porch", "Wood Porch", "building", 32, 2.0)
+	items["wooden_deck"] = _create_item("wooden_deck", "Wood Deck", "building", 32, 1.5)
+	items["wooden_path"] = _create_item("wooden_path", "Wood Path", "building", 32, 1.0)
+	items["planter_box"] = _create_item("planter_box", "Planter Box", "building", 16, 2.0)
+	items["wooden_table"] = _create_item("wooden_table", "Wood Table", "building", 8, 3.0)
+	items["yard_lantern"] = _create_item("yard_lantern", "Yard Lantern", "building", 8, 1.5)
 	
 	# Special
 	items["seed_wheat"] = _create_item("seed_wheat", "Wheat Seed", "resource", 64, 0.1)
@@ -317,7 +325,33 @@ func _load_recipes() -> void:
 		"clay": 1
 	})
 	recipes["fence"] = _create_recipe("fence", "fence", 1, "", {
+		"plank": 2
+	})
+	recipes["fence_gate"] = _create_recipe("fence_gate", "fence_gate", 1, "", {
 		"plank": 3
+	})
+	recipes["wooden_railing"] = _create_recipe("wooden_railing", "wooden_railing", 1, "", {
+		"plank": 1
+	})
+	recipes["wooden_porch"] = _create_recipe("wooden_porch", "wooden_porch", 1, "", {
+		"plank": 3
+	})
+	recipes["wooden_deck"] = _create_recipe("wooden_deck", "wooden_deck", 1, "", {
+		"plank": 2
+	})
+	recipes["wooden_path"] = _create_recipe("wooden_path", "wooden_path", 1, "", {
+		"plank": 1
+	})
+	recipes["planter_box"] = _create_recipe("planter_box", "planter_box", 1, "", {
+		"plank": 4,
+		"clay": 1
+	})
+	recipes["wooden_table"] = _create_recipe("wooden_table", "wooden_table", 1, "", {
+		"plank": 4
+	})
+	recipes["yard_lantern"] = _create_recipe("yard_lantern", "yard_lantern", 1, "", {
+		"plank": 2,
+		"charcoal": 1
 	})
 	
 	# Advanced
@@ -348,7 +382,9 @@ func _load_recipes() -> void:
 	# stone and metal work are earned through the technology panel.
 	_set_recipe_technology([
 		"wooden_foundation", "wooden_floor", "wooden_wall", "wooden_window",
-		"wooden_door", "wooden_roof", "wooden_stairs", "wooden_ramp", "wooden_pillar"
+		"wooden_door", "wooden_roof", "wooden_stairs", "wooden_ramp", "wooden_pillar",
+		"fence", "fence_gate", "wooden_railing", "wooden_porch", "wooden_deck",
+		"wooden_path", "planter_box", "wooden_table", "yard_lantern"
 	], "wood_building")
 	_set_recipe_technology([
 		"stone_brick", "stone_axe", "stone_pickaxe", "stone_sword", "stone_hoe", "stone_hammer",

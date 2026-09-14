@@ -1,6 +1,14 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **Active Build Plan M8 checkpoint (2026-09-14, timber homestead data)**:
+  `tests/test_building_content.gd` **80/80 checks**, placement **61/61**, and
+  editor/parser exit 0. The registry now discovers 35 definitions. The new
+  timber boundary/exterior/interior assets have stable item IDs, reachable
+  wood-gated recipes, and sandbox coverage through the database-driven Supply
+  Store. `fence` now occupies a canonical edge slot; `fence_gate` uses the
+  generic edge-fixture replacement rule. M8 remains in progress pending the
+  stone/reinforced families, remaining catalogue, and final art.
 - **Active Build Plan M7 (2026-09-14, fuel/on-off/local lighting)**: focused
   `tests/test_station_crafting.gd` **22/22 checks**, content **70/70**, and
   editor/parser exit 0. `FuelConsumer` accepts only profile-tagged fuel while

@@ -28,7 +28,7 @@ source plans conflict, this plan and its decision log at the bottom win.
 
 **Plan status:** `ACTIVE`
 **Current milestone:** M8 — Build catalogue expansion
-**Last updated:** 2026-09-14 (M7 complete)
+**Last updated:** 2026-09-14 (M8 timber homestead checkpoint)
 
 ## Groundwork already in place
 
@@ -412,6 +412,11 @@ workbench, and no station recipe consumes or produces items invisibly.
 fuel cannot be duplicated; night lighting is readable and responsive.
 
 ## M8 — Build catalogue expansion
+
+*In progress. The first timber homestead checkpoint adds edge-correct fences,
+fence gates, railings, porch/deck/path surfaces, planter boxes, tables, and a
+fuelled yard lantern as ordinary content assets. Stone and reinforced families,
+the remaining furniture catalogue, and final art remain below.*
 
 - [ ] Tier 1 timber complete: structural, stair/rail, boundary, exterior, and
       initial interior sets per the catalogue table in the building plan.

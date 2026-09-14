@@ -24,7 +24,7 @@ func _load_technologies() -> void:
 	_define("wood_building", "Wood Construction",
 		"A dependable first structural kit: foundations, floors, walls, roofs, and access pieces.",
 		[], [], true,
-		["wooden_foundation", "wooden_floor", "wooden_wall", "wooden_window", "wooden_door", "wooden_roof", "wooden_stairs", "wooden_ramp", "wooden_pillar"])
+		["wooden_foundation", "wooden_floor", "wooden_wall", "wooden_window", "wooden_door", "wooden_roof", "wooden_stairs", "wooden_ramp", "wooden_pillar", "fence", "fence_gate", "wooden_railing", "wooden_porch", "wooden_deck", "wooden_path", "planter_box", "wooden_table", "yard_lantern"])
 	_define("stone_building", "Stone Construction",
 		"Shape harvested stone into durable, multi-level stone structures and stone tools.",
 		["wood_building"], [{"item_id": "wood", "quantity": 20}, {"item_id": "stone", "quantity": 30}], false,
