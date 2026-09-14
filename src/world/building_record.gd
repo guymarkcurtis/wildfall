@@ -44,6 +44,12 @@ var node: Building = null # the visual/physical node; null between scenes
 ## deliberately never lives here: it is transient InteractionManager state.
 var container_storage: InventoryStorage = null
 
+## Persistent station surfaces, owned by StationProfile rather than a station
+## name. M6's panel and immediate craft service use these real inventories;
+## M7 will add the fuel surface beside them without changing this shape.
+var station_input_storage: InventoryStorage = null
+var station_output_storage: InventoryStorage = null
+
 ## Seed (or return) the record's indexed container storage from its authored
 ## ContainerProfile. Returns null when the definition has no container.
 func get_container_storage() -> InventoryStorage:
@@ -85,7 +91,44 @@ func get_container_storage() -> InventoryStorage:
 ## demolition, not a named chest branch.
 func has_nonempty_container() -> bool:
 	var storage := get_container_storage()
-	return storage != null and storage.occupied_count() > 0
+	if storage != null and storage.occupied_count() > 0:
+		return true
+	var inputs := get_station_input_storage()
+	var outputs := get_station_output_storage()
+	return (inputs != null and inputs.occupied_count() > 0) \
+			or (outputs != null and outputs.occupied_count() > 0)
+
+func get_station_input_storage() -> InventoryStorage:
+	return _get_station_storage("inputs", true)
+
+func get_station_output_storage() -> InventoryStorage:
+	return _get_station_storage("outputs", false)
+
+func _get_station_storage(state_key: String, inputs: bool) -> InventoryStorage:
+	if definition == null or definition.station_profile == null:
+		return null
+	if inputs and station_input_storage != null:
+		return station_input_storage
+	if not inputs and station_output_storage != null:
+		return station_output_storage
+	var profile: StationProfile = definition.station_profile
+	var slot_count := profile.input_slot_count if inputs else profile.output_slot_count
+	var storage := InventoryStorage.new(slot_count, profile.max_weight)
+	var station_state: Variant = capability_state.get("station", null)
+	var saved_storage: Variant = station_state.get(state_key, null) if typeof(station_state) == TYPE_DICTIONARY else null
+	if typeof(saved_storage) == TYPE_DICTIONARY:
+		var slots: Variant = saved_storage.get("slots", null)
+		if typeof(slots) == TYPE_ARRAY and slots.size() == slot_count:
+			storage.deserialize({"slots": slots, "max_weight": profile.max_weight})
+		else:
+			# Preserve unrelated station state while rejecting only the malformed
+			# indexed surface.
+			(station_state as Dictionary).erase(state_key)
+	if inputs:
+		station_input_storage = storage
+	else:
+		station_output_storage = storage
+	return storage
 
 ## Bring the runtime container into the JSON-safe capability payload just
 ## before serialization. Empty containers are omitted, but non-empty ones can
@@ -98,6 +141,25 @@ func _sync_container_state() -> void:
 		capability_state["container"] = container_storage.serialize()
 	else:
 		capability_state.erase("container")
+
+func _sync_station_state() -> void:
+	if station_input_storage == null and station_output_storage == null:
+		return
+	var station: Dictionary = capability_state.get("station", {}).duplicate(true) if typeof(capability_state.get("station", {})) == TYPE_DICTIONARY else {}
+	if station_input_storage != null:
+		if station_input_storage.occupied_count() > 0:
+			station["inputs"] = station_input_storage.serialize()
+		else:
+			station.erase("inputs")
+	if station_output_storage != null:
+		if station_output_storage.occupied_count() > 0:
+			station["outputs"] = station_output_storage.serialize()
+		else:
+			station.erase("outputs")
+	if station.is_empty():
+		capability_state.erase("station")
+	else:
+		capability_state["station"] = station
 
 static func canonical_edge_key(tile: Vector2i, story: int, orientation: String) -> String:
 	match orientation:
@@ -154,6 +216,7 @@ func blocks_movement() -> bool:
 ## callers keep it JSON-safe).
 func serialize() -> Dictionary:
 	_sync_container_state()
+	_sync_station_state()
 	var entry: Dictionary = {
 		"item_id": item_id,
 		"x": tile.x,

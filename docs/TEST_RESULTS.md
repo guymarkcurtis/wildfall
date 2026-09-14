@@ -1,6 +1,16 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **Active Build Plan M6 foundation (2026-09-14, station state + immediate
+  crafting)**: focused `tests/test_station_crafting.gd` **8/8 checks**;
+  placement 61/61, interaction 26/26, content 70/70, and editor/parser exit
+  0. `StationProfile` now owns input/output capacity, `BuildingRecord`
+  persists non-empty `state.station.inputs` / `outputs` indexed surfaces, and
+  `StationCrafting` moves required ingredients visibly into inputs before
+  transactionally consuming them into output. Full-output and research-gate
+  rejection leave inputs unchanged. Station discovery now reads authored
+  recipe groups rather than a hard-coded building-ID list. M6's station panel
+  and the C-key hand-crafting split remain active work.
 - **Active Build Plan M5 (2026-09-14, persistent containers)**: focused
   placement suite **61/61 checks**, interaction suite **26/26**, and content
   suite **70/70**; editor/parser exit 0. M5 verifies the data-authored chest

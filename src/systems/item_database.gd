@@ -197,7 +197,7 @@ func _load_recipes() -> void:
 		"stone": 3,
 		"fibre": 2
 	})
-	recipes["wooden_hammer"] = _create_recipe("wooden_hammer", "wooden_hammer", 1, "", {
+	recipes["wooden_hammer"] = _create_recipe("wooden_hammer", "wooden_hammer", 1, "workbench", {
 		"plank": 4,
 		"stone": 2
 	})

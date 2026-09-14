@@ -15,6 +15,10 @@ extends Resource
 ## Persistent output slots; the craft result lands here (usually 1).
 @export var output_slot_count: int = 1
 
+## Shared capacity across each persistent station surface. Kept on the
+## profile so saves cannot inflate a station by editing max_weight.
+@export var max_weight: float = 200.0
+
 ## When true the station only crafts while its fuel/toggle state is enabled.
 @export var requires_power: bool = false
 
@@ -29,6 +33,8 @@ func validate() -> Array[String]:
 		errors.append("input_slot_count (%d) must be zero or positive" % input_slot_count)
 	if output_slot_count < 0:
 		errors.append("output_slot_count (%d) must be zero or positive" % output_slot_count)
+	if max_weight < 0.0:
+		errors.append("max_weight (%.1f) must be zero or positive" % max_weight)
 	if queue_policy != "immediate":
 		errors.append("queue_policy '%s' is not supported (supported: immediate)" % queue_policy)
 	return errors

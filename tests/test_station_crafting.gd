@@ -1,0 +1,67 @@
+## Focused M6 coverage for profile-driven station groups, persistent input /
+## output inventories, and transactional immediate crafting.
+## Run: godot --headless --path . --script tests/test_station_crafting.gd
+extends SceneTree
+
+var _failures := 0
+var _checks := 0
+
+func _initialize() -> void:
+	call_deferred("_run")
+
+func _run() -> void:
+	var database := ItemDatabase.new()
+	database.initialize()
+	var inventory := InventoryComponent.new()
+	var stack_sizes: Dictionary = {}
+	for item_id in database.items:
+		stack_sizes[item_id] = int(database.items[item_id].stack_size)
+	inventory.set_stack_sizes(stack_sizes)
+	inventory.add_item("workbench", 1)
+	inventory.add_item("plank", 8)
+	inventory.add_item("stone", 4)
+	var manager := BuildingManager.new()
+	root.add_child(manager)
+	_check(manager.place_record("workbench", Vector2i(10, 10), inventory, 0),
+			"A data-authored workbench places through the normal record path")
+	var record := manager.get_record_at(Vector2i(10, 10), 0, "object")
+	var recipe := database.get_recipe("wooden_hammer")
+	_check(record != null and recipe != null and record.definition.station_profile.recipe_group == recipe.crafting_station,
+			"Recipe eligibility matches the authored StationProfile group")
+	var filled := StationCrafting.fill_inputs(record, inventory.get_storage(), recipe)
+	_check(int(filled.moved) == 6 and record.get_station_input_storage().quantity_of("plank") == 4
+			and record.get_station_input_storage().quantity_of("stone") == 2,
+			"Required ingredients move visibly into persistent station input slots")
+	var crafted := StationCrafting.craft(record, inventory.get_storage(), recipe)
+	_check(bool(crafted.success) and record.get_station_input_storage().occupied_count() == 0
+			and record.get_station_output_storage().quantity_of("wooden_hammer") == 1,
+			"Craft consumes only station inputs and writes its result to station output")
+	var payload := manager.serialize()
+	var restored_manager := BuildingManager.new()
+	root.add_child(restored_manager)
+	restored_manager.deserialize(payload)
+	var restored := restored_manager.get_record_at(Vector2i(10, 10), 0, "object")
+	_check(restored != null and restored.get_station_output_storage().quantity_of("wooden_hammer") == 1,
+			"Station output survives save/load in the building's v8 state payload")
+	StationCrafting.fill_inputs(record, inventory.get_storage(), recipe)
+	var full := StationCrafting.craft(record, inventory.get_storage(), recipe)
+	_check(not bool(full.success) and str(full.reason) == "output_full"
+			and record.get_station_input_storage().quantity_of("plank") == 4,
+			"A full output rejects crafting without consuming visible inputs")
+	var locked := StationCrafting.craft(record, inventory.get_storage(), recipe, false)
+	_check(not bool(locked.success) and str(locked.reason) == "technology_locked",
+			"Research gates are enforced before any station mutation")
+	_check(manager.get_nearby_station_ids(Vector2(336, 336)).has("workbench"),
+			"Nearby station discovery reads StationProfile recipe groups, not building ids")
+	print("Station crafting failures: %d (%d checks)" % [_failures, _checks])
+	restored_manager.queue_free()
+	manager.queue_free()
+	quit(_failures)
+
+func _check(condition: bool, label: String) -> void:
+	_checks += 1
+	if condition:
+		print("[PASS] %s" % label)
+	else:
+		_failures += 1
+		push_error("[FAIL] %s" % label)

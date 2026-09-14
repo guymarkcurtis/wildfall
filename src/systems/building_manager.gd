@@ -9,7 +9,6 @@ class_name BuildingManager
 extends Node2D
 
 const TILE_SIZE := 32
-const CRAFTING_STATION_IDS = ["campfire", "furnace", "workbench", "anvil"]
 const CRAFTING_STATION_RANGE := 72.0
 
 ## Deterministic lookup priority for the ambiguous tile+story query.
@@ -365,13 +364,14 @@ func demolish_at(tile: Vector2i, story: int = selected_story) -> bool:
 func get_nearby_station_ids(world_position: Vector2, interaction_range: float = CRAFTING_STATION_RANGE) -> PackedStringArray:
 	var nearby := PackedStringArray()
 	for record in _record_list:
-		if record.story != 0 or not CRAFTING_STATION_IDS.has(record.item_id):
+		if record.definition == null or record.definition.station_profile == null:
 			continue
 		if record.node == null or not is_instance_valid(record.node):
 			continue
 		var station_center: Vector2 = record.node.global_position + Vector2(TILE_SIZE, TILE_SIZE) * 0.5
-		if station_center.distance_to(world_position) <= interaction_range and not nearby.has(record.item_id):
-			nearby.append(record.item_id)
+		var group: String = record.definition.station_profile.recipe_group
+		if station_center.distance_to(world_position) <= interaction_range and not nearby.has(group):
+			nearby.append(group)
 	nearby.sort()
 	return nearby
 
