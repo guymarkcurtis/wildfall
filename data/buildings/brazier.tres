@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Resource" path="res://data/interactables/fuel_burnable.tres" id="1_fuel"]
+[ext_resource type="Resource" path="res://data/interactables/interaction_use.tres" id="2_interaction"]
+[ext_resource type="Resource" path="res://data/interactables/light_torch.tres" id="3_light"]
+[ext_resource type="Resource" path="res://data/interactables/fuelled_appearance.tres" id="4_appearance"]
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="5_def"]
+
+[resource]
+script = ExtResource("5_def")
+id = "brazier"
+display_name = "Iron Brazier"
+technology_id = "stone_building"
+requires_lower_support = false
+blocks_movement = true
+build_cost = Array[Dictionary]([{
+"item_id": "stone_brick",
+"quantity": 2
+}, {
+"item_id": "iron_ingot",
+"quantity": 1
+}])
+max_health = 60
+visual_family_id = "stone"
+interaction_profile = ExtResource("2_interaction")
+fuel_profile = ExtResource("1_fuel")
+light_profile = ExtResource("3_light")
+appearance_profile = ExtResource("4_appearance")

@@ -24,15 +24,15 @@ func _load_technologies() -> void:
 	_define("wood_building", "Wood Construction",
 		"A dependable first structural kit: foundations, floors, walls, roofs, and access pieces.",
 		[], [], true,
-		["wooden_foundation", "wooden_floor", "wooden_wall", "wooden_window", "wooden_door", "wooden_roof", "wooden_stairs", "wooden_ramp", "wooden_pillar", "fence", "fence_gate", "wooden_railing", "wooden_porch", "wooden_deck", "wooden_path", "planter_box", "wooden_table", "yard_lantern"])
+		["wooden_foundation", "wooden_floor", "wooden_wall", "wooden_window", "wooden_door", "wooden_roof", "wooden_stairs", "wooden_ramp", "wooden_pillar", "fence", "fence_gate", "wooden_railing", "wooden_porch", "wooden_deck", "wooden_path", "planter_box", "wooden_table", "yard_lantern", "chair", "shelf", "rug", "wardrobe", "steps", "awning", "corner_post"])
 	_define("stone_building", "Stone Construction",
 		"Shape harvested stone into durable, multi-level stone structures and stone tools.",
 		["wood_building"], [{"item_id": "wood", "quantity": 20}, {"item_id": "stone", "quantity": 30}], false,
-		["stone_brick", "stone_foundation", "stone_floor", "stone_wall", "stone_window", "stone_door", "stone_roof", "stone_stairs", "stone_ramp", "stone_pillar", "stone_gate", "stone_railing", "stone_patio", "stone_path", "stone_planter"])
+		["stone_brick", "stone_foundation", "stone_floor", "stone_wall", "stone_window", "stone_door", "stone_roof", "stone_stairs", "stone_ramp", "stone_pillar", "stone_gate", "stone_railing", "stone_patio", "stone_path", "stone_planter", "hearth", "cabinet", "bookcase", "well", "brazier"])
 	_define("metalworking", "Metalworking",
 		"Smelt and forge iron, copper, and bronze equipment for the next survival tier.",
 		["stone_building"], [{"item_id": "stone", "quantity": 25}, {"item_id": "coal", "quantity": 8}, {"item_id": "iron_ore", "quantity": 12}], false,
-		["iron_ingot", "copper_ingot", "bronze_ingot", "iron_axe", "iron_pickaxe", "iron_sword", "anvil", "reinforced_floor", "reinforced_wall", "metal_roof", "metal_gate", "metal_railing", "metal_grate"])
+		["iron_ingot", "copper_ingot", "bronze_ingot", "iron_axe", "iron_pickaxe", "iron_sword", "anvil", "reinforced_floor", "reinforced_wall", "metal_roof", "metal_gate", "metal_railing", "metal_grate", "shuttered_window", "metal_stair", "metal_fence", "signal_pole", "metal_lantern", "workshop_cabinet", "metal_locker"])
 
 func _define(id: String, display_name: String, description: String, prerequisites: Array[String], cost: Array[Dictionary], unlocked_by_default: bool, recipe_ids: Array[String]) -> void:
 	var definition := TechnologyDefinition.new()

@@ -12,7 +12,9 @@ const BUILDINGS := ["wooden_foundation", "wooden_floor", "wooden_wall", "wooden_
 	"fence_gate", "wooden_railing", "wooden_porch", "wooden_deck", "wooden_path", "planter_box",
 	"wooden_table", "yard_lantern", "stone_gate", "stone_railing", "stone_patio", "stone_path",
 	"stone_planter", "reinforced_floor", "reinforced_wall", "metal_roof", "metal_gate", "metal_railing",
-	"metal_grate"]
+	"metal_grate", "chair", "shelf", "rug", "wardrobe", "steps", "awning", "corner_post",
+	"hearth", "cabinet", "bookcase", "well", "brazier", "shuttered_window", "metal_stair",
+	"metal_fence", "signal_pole", "metal_lantern", "workshop_cabinet", "metal_locker"]
 
 var _failures := 0
 var _checks := 0
@@ -46,8 +48,8 @@ func _test_registry_discovery() -> void:
 	registry.discover()
 	_check(not registry.has_validation_errors(),
 			"Shipped building content validates with zero errors" + _first_error(registry))
-	_check(registry.definitions.size() == 46,
-			"Registry discovers all 46 building definitions (got %d)" % registry.definitions.size())
+	_check(registry.definitions.size() == 65,
+			"Registry discovers all 65 building definitions (got %d)" % registry.definitions.size())
 	var ids := registry.definitions.keys()
 	ids.sort()
 	var expected := BUILDINGS.duplicate()

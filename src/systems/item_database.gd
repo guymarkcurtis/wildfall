@@ -114,7 +114,28 @@ func _load_items() -> void:
 	items["metal_gate"] = _create_item("metal_gate", "Metal Gate", "building", 16, 4.5)
 	items["metal_railing"] = _create_item("metal_railing", "Metal Railing", "building", 32, 3.0)
 	items["metal_grate"] = _create_item("metal_grate", "Metal Grate", "building", 32, 4.0)
-	
+	# M8 furniture: interior/yard pieces beyond the structural kit. Recipes and
+	# placement rules live in data/buildings/<id>.tres (see its README).
+	items["chair"] = _create_item("chair", "Wooden Chair", "building", 8, 3.0)
+	items["shelf"] = _create_item("shelf", "Wood Shelf", "building", 8, 2.5)
+	items["rug"] = _create_item("rug", "Woven Rug", "building", 16, 1.5)
+	items["wardrobe"] = _create_item("wardrobe", "Wardrobe", "building", 4, 6.0)
+	items["steps"] = _create_item("steps", "Wood Steps", "building", 16, 2.0)
+	items["awning"] = _create_item("awning", "Canvas Awning", "building", 16, 2.0)
+	items["corner_post"] = _create_item("corner_post", "Corner Post", "building", 16, 1.5)
+	items["hearth"] = _create_item("hearth", "Stone Hearth", "building", 4, 8.0)
+	items["cabinet"] = _create_item("cabinet", "Stone Cabinet", "building", 4, 5.0)
+	items["bookcase"] = _create_item("bookcase", "Stone Bookcase", "building", 4, 4.5)
+	items["well"] = _create_item("well", "Stone Well", "building", 1, 8.0)
+	items["brazier"] = _create_item("brazier", "Iron Brazier", "building", 4, 4.0)
+	items["shuttered_window"] = _create_item("shuttered_window", "Shuttered Window", "building", 16, 3.0)
+	items["metal_stair"] = _create_item("metal_stair", "Metal Stair", "building", 16, 4.0)
+	items["metal_fence"] = _create_item("metal_fence", "Metal Fence", "building", 32, 3.0)
+	items["signal_pole"] = _create_item("signal_pole", "Signal Pole", "building", 16, 2.0)
+	items["metal_lantern"] = _create_item("metal_lantern", "Metal Lantern", "building", 8, 1.5)
+	items["workshop_cabinet"] = _create_item("workshop_cabinet", "Workshop Cabinet", "building", 4, 5.0)
+	items["metal_locker"] = _create_item("metal_locker", "Metal Locker", "building", 8, 3.0)
+
 	# Special
 	items["seed_wheat"] = _create_item("seed_wheat", "Wheat Seed", "resource", 64, 0.1)
 	items["wheat"] = _create_item("wheat", "Wheat", "resource", 64, 0.2)
@@ -385,7 +406,27 @@ func _load_recipes() -> void:
 	recipes["metal_gate"] = _create_recipe("metal_gate", "metal_gate", 1, "", {"iron_ingot": 3})
 	recipes["metal_railing"] = _create_recipe("metal_railing", "metal_railing", 1, "", {"iron_ingot": 1})
 	recipes["metal_grate"] = _create_recipe("metal_grate", "metal_grate", 1, "", {"iron_ingot": 2})
-	
+	# M8 furniture recipes: costs mirror each definition's build_cost exactly.
+	recipes["chair"] = _create_recipe("chair", "chair", 1, "", {"plank": 3})
+	recipes["shelf"] = _create_recipe("shelf", "shelf", 1, "", {"plank": 4})
+	recipes["rug"] = _create_recipe("rug", "rug", 1, "", {"plank": 2, "hide": 1})
+	recipes["wardrobe"] = _create_recipe("wardrobe", "wardrobe", 1, "", {"plank": 6})
+	recipes["steps"] = _create_recipe("steps", "steps", 1, "", {"plank": 3})
+	recipes["awning"] = _create_recipe("awning", "awning", 1, "", {"plank": 4, "hide": 1})
+	recipes["corner_post"] = _create_recipe("corner_post", "corner_post", 1, "", {"plank": 2})
+	recipes["hearth"] = _create_recipe("hearth", "hearth", 1, "", {"stone_brick": 4})
+	recipes["cabinet"] = _create_recipe("cabinet", "cabinet", 1, "", {"stone_brick": 4})
+	recipes["bookcase"] = _create_recipe("bookcase", "bookcase", 1, "", {"stone_brick": 3, "plank": 2})
+	recipes["well"] = _create_recipe("well", "well", 1, "", {"stone_brick": 8})
+	recipes["brazier"] = _create_recipe("brazier", "brazier", 1, "", {"stone_brick": 2, "iron_ingot": 1})
+	recipes["shuttered_window"] = _create_recipe("shuttered_window", "shuttered_window", 1, "", {"iron_ingot": 2, "plank": 2})
+	recipes["metal_stair"] = _create_recipe("metal_stair", "metal_stair", 1, "", {"iron_ingot": 3})
+	recipes["metal_fence"] = _create_recipe("metal_fence", "metal_fence", 1, "", {"iron_ingot": 2})
+	recipes["signal_pole"] = _create_recipe("signal_pole", "signal_pole", 1, "", {"plank": 2, "iron_ingot": 1})
+	recipes["metal_lantern"] = _create_recipe("metal_lantern", "metal_lantern", 1, "", {"iron_ingot": 2})
+	recipes["workshop_cabinet"] = _create_recipe("workshop_cabinet", "workshop_cabinet", 1, "", {"iron_ingot": 4, "plank": 2})
+	recipes["metal_locker"] = _create_recipe("metal_locker", "metal_locker", 1, "", {"iron_ingot": 3})
+
 	# Advanced
 	recipes["potion_health"] = _create_recipe("potion_health", "potion_health", 1, "furnace", {
 		"herb": 3,
@@ -416,18 +457,22 @@ func _load_recipes() -> void:
 		"wooden_foundation", "wooden_floor", "wooden_wall", "wooden_window",
 		"wooden_door", "wooden_roof", "wooden_stairs", "wooden_ramp", "wooden_pillar",
 		"fence", "fence_gate", "wooden_railing", "wooden_porch", "wooden_deck",
-		"wooden_path", "planter_box", "wooden_table", "yard_lantern"
+		"wooden_path", "planter_box", "wooden_table", "yard_lantern",
+		"chair", "shelf", "rug", "wardrobe", "steps", "awning", "corner_post"
 	], "wood_building")
 	_set_recipe_technology([
 		"stone_brick", "stone_axe", "stone_pickaxe", "stone_sword", "stone_hoe", "stone_hammer",
 		"stone_foundation", "stone_floor", "stone_wall", "stone_window", "stone_door",
 		"stone_roof", "stone_stairs", "stone_ramp", "stone_pillar", "furnace", "workbench",
-		"stone_gate", "stone_railing", "stone_patio", "stone_path", "stone_planter"
+		"stone_gate", "stone_railing", "stone_patio", "stone_path", "stone_planter",
+		"hearth", "cabinet", "bookcase", "well", "brazier"
 	], "stone_building")
 	_set_recipe_technology([
 		"iron_ingot", "copper_ingot", "bronze_ingot", "iron_axe", "iron_pickaxe",
 		"iron_sword", "anvil", "reinforced_floor", "reinforced_wall", "metal_roof",
-		"metal_gate", "metal_railing", "metal_grate"
+		"metal_gate", "metal_railing", "metal_grate",
+		"shuttered_window", "metal_stair", "metal_fence", "signal_pole",
+		"metal_lantern", "workshop_cabinet", "metal_locker"
 	], "metalworking")
 
 ## Create a basic item.

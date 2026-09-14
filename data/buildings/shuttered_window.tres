@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_def"]
+
+[resource]
+script = ExtResource("1_def")
+id = "shuttered_window"
+display_name = "Shuttered Window"
+part_type = "window"
+tier = "metal"
+technology_id = "metalworking"
+blocks_movement = true
+build_cost = Array[Dictionary]([{
+"item_id": "iron_ingot",
+"quantity": 2
+}, {
+"item_id": "plank",
+"quantity": 2
+}])
+max_health = 140
+allowed_orientations = PackedStringArray("north", "east", "south", "west")
+support_tags = PackedStringArray("structure")
+required_support_tags = PackedStringArray("structure")
+occupancy_replacement = "edge_fixture"
+visual_family_id = "metal"

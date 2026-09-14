@@ -19,7 +19,8 @@ generic fields; it never branches on an id such as `if building_id ==
 | `technology_id` | Research gate; empty = always available. |
 | `support_tags` | What this part PROVIDES to parts above it (`structure`, `cover`). |
 | `allowed_orientations` | Orientations offered at placement; empty = single default. |
-| `visual_family_id`, `atlas_path`, `atlas_cell` | Presentation metadata (column,row) on the atlas sheet. |
+| `visual_family_id`, `atlas_path`, `atlas_cell` | Presentation metadata: the (column,row) cell on the atlas sheet. `visual_family_id` (wood/stone/metal/primitive) also selects the family placeholder tint while no atlas cell is assigned. |
+| `placeholder_color` | Optional per-definition override of the family placeholder tint (clear = use the family colour). |
 | `*_profile` references | Capability data: `interaction_profile`, `container_profile`, `station_profile`, `fuel_profile`, `light_profile`, `appearance_profile`, `connector_profile` (vertical traversal — stairs; later ladders/hatches/portals). |
 
 ## Capability profiles
@@ -45,7 +46,8 @@ errors are logged loudly. See `BuildingContentRegistry`.
 2. Set `display_name`, `part_type`/`placement_layer`, health, costs, tier,
    and technology gate.
 3. Point `atlas_path`/`atlas_cell` at real art (or leave the atlas fields
-   empty to use the legacy colour placeholder).
+   empty to use the family placeholder tint, optionally overridden by
+    `placeholder_color`).
 4. Reference shared profiles from `data/interactables/` if the object should
    store, craft, burn, glow, or open.
 5. Run the headless harness; validation problems name your file.
@@ -72,3 +74,35 @@ The first reinforced family (`reinforced_floor`, `reinforced_wall`,
 existing `metalworking` gate and placement vocabulary. It is content, not a
 parallel metal-building system; balance values remain subject to M8 sandbox
 playtesting.
+
+## M8 furniture catalogue
+
+Nineteen homestead pieces complete the catalogue, authored as data against the
+finished capability system.
+
+The `wood_building` interior set: `chair`, `shelf`, `wardrobe`, and `steps`
+are ordinary object-layer props; `rug` is the one walkable piece — placed on
+the ground layer with movement left unblocked; `awning` is a roof-part
+overhead cover keeping the default below-support rule; `corner_post` is a
+pillar that provides the `structure` support tag.
+
+The `stone_building` interior set: `hearth` and `brazier` compose the same
+interaction/fuel/light/appearance profile set as `yard_lantern` (the brazier
+takes a secondary iron ingredient but keeps the stone research gate);
+`cabinet`, `bookcase`, and `well` are decorative object-layer props.
+
+The `metalworking` furniture set: `shuttered_window` uses the same
+edge-layer + `edge_fixture` replacement contract as the wood/stone windows;
+`metal_stair` reuses the existing stair `connector_profile`; `metal_fence`
+is an oriented edge boundary with no lower-support requirement;
+`signal_pole`, `metal_lantern` (walkable), `workshop_cabinet`, and
+`metal_locker` are object-layer props — the cabinet and locker get no
+container profile in M8; storage expansion is a later milestone.
+
+Every new part carries a native 32×32 pickup icon in
+`TexturePackManager.PACK_ASSETS` and a hand-crafted recipe, so each is
+placeable from the C-key panel and grantable from the Building Sandbox supply
+store with no further wiring. Metal costs were sandbox-verified against the
+reinforced family's 1–4 ingot range (iron chain: 2 ore → 1 ingot at the
+furnace, pre-placed in the sandbox yard; the store grants ingots directly)
+and needed no tuning.

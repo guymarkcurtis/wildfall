@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_def"]
+
+[resource]
+script = ExtResource("1_def")
+id = "well"
+display_name = "Stone Well"
+technology_id = "stone_building"
+requires_lower_support = false
+blocks_movement = true
+build_cost = Array[Dictionary]([{
+"item_id": "stone_brick",
+"quantity": 8
+}])
+max_health = 150
+visual_family_id = "stone"

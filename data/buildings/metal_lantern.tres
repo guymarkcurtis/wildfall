@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Resource" path="res://data/interactables/fuel_burnable.tres" id="1_fuel"]
+[ext_resource type="Resource" path="res://data/interactables/interaction_use.tres" id="2_interaction"]
+[ext_resource type="Resource" path="res://data/interactables/light_torch.tres" id="3_light"]
+[ext_resource type="Resource" path="res://data/interactables/fuelled_appearance.tres" id="4_appearance"]
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="5_def"]
+
+[resource]
+script = ExtResource("5_def")
+id = "metal_lantern"
+display_name = "Metal Lantern"
+tier = "metal"
+technology_id = "metalworking"
+requires_lower_support = false
+build_cost = Array[Dictionary]([{
+"item_id": "iron_ingot",
+"quantity": 2
+}])
+max_health = 55
+visual_family_id = "metal"
+interaction_profile = ExtResource("2_interaction")
+fuel_profile = ExtResource("1_fuel")
+light_profile = ExtResource("3_light")
+appearance_profile = ExtResource("4_appearance")
