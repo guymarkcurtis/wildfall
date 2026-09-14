@@ -9,10 +9,10 @@ const STORY_RISE := 12.0
 const MAX_STORIES := 4
 const CRAFTING_STATION_IDS = ["campfire", "furnace", "workbench", "anvil"]
 const CRAFTING_STATION_RANGE := 72.0
-const BUILDING_DEFINITION_SCRIPT = preload("res://resources/building_definition.gd")
 
 var buildings: Dictionary = {} # Vector3i(x, y, story) -> Building
 var definitions: Dictionary = {} # item_id -> BuildingDefinition resource
+var content_registry: BuildingContentRegistry = null
 var build_mode := false
 var selected_item_id := ""
 var selected_story := 0
@@ -32,7 +32,7 @@ signal build_story_changed(story: int)
 signal placement_failed(reason: String)
 
 func _ready() -> void:
-	_init_definitions()
+	_load_definitions()
 	_ghost = Polygon2D.new()
 	_ghost.polygon = PackedVector2Array([
 		Vector2(2, 2), Vector2(30, 2), Vector2(30, 30), Vector2(2, 30)
@@ -365,39 +365,12 @@ func _is_item_unlocked(item_id: String) -> bool:
 	var technology_id := str(definition.get("technology_id"))
 	return technology_id.is_empty() or technology_system == null or technology_system.is_unlocked(technology_id)
 
-func _init_definitions() -> void:
-	# Wood is intentionally complete and easy to understand: every part has a
-	# single-tile footprint, so players can freely compose rooms and stories.
-	_define("wooden_foundation", "Wood Foundation", "foundation", "wood", "wood_building", 90, false, false, [{"item_id": "plank", "quantity": 2}])
-	_define("wooden_floor", "Wood Floor", "floor", "wood", "wood_building", 70, false, true, [{"item_id": "plank", "quantity": 1}])
-	_define("wooden_wall", "Wood Wall", "wall", "wood", "wood_building", 100, true, true, [{"item_id": "plank", "quantity": 3}])
-	_define("wooden_window", "Wood Window", "window", "wood", "wood_building", 80, true, true, [{"item_id": "plank", "quantity": 2}, {"item_id": "glass", "quantity": 1}])
-	_define("wooden_door", "Wood Door", "door", "wood", "wood_building", 90, true, true, [{"item_id": "plank", "quantity": 3}])
-	_define("wooden_roof", "Wood Roof", "roof", "wood", "wood_building", 75, false, true, [{"item_id": "plank", "quantity": 2}])
-	_define("wooden_stairs", "Wood Stairs", "stair", "wood", "wood_building", 80, false, true, [{"item_id": "plank", "quantity": 3}])
-	_define("wooden_ramp", "Wood Ramp", "ramp", "wood", "wood_building", 80, false, true, [{"item_id": "plank", "quantity": 2}])
-	_define("wooden_pillar", "Wood Pillar", "pillar", "wood", "wood_building", 120, true, true, [{"item_id": "plank", "quantity": 2}])
-	_define("stone_foundation", "Stone Foundation", "foundation", "stone", "stone_building", 180, false, false, [{"item_id": "stone_brick", "quantity": 2}])
-	_define("stone_floor", "Stone Floor", "floor", "stone", "stone_building", 150, false, true, [{"item_id": "stone_brick", "quantity": 1}])
-	_define("stone_wall", "Stone Wall", "wall", "stone", "stone_building", 220, true, true, [{"item_id": "stone_brick", "quantity": 3}])
-	_define("stone_window", "Stone Window", "window", "stone", "stone_building", 180, true, true, [{"item_id": "stone_brick", "quantity": 2}, {"item_id": "glass", "quantity": 1}])
-	_define("stone_door", "Stone Door", "door", "stone", "stone_building", 190, true, true, [{"item_id": "stone_brick", "quantity": 3}])
-	_define("stone_roof", "Stone Roof", "roof", "stone", "stone_building", 160, false, true, [{"item_id": "stone_brick", "quantity": 2}])
-	_define("stone_stairs", "Stone Stairs", "stair", "stone", "stone_building", 180, false, true, [{"item_id": "stone_brick", "quantity": 3}])
-	_define("stone_ramp", "Stone Ramp", "ramp", "stone", "stone_building", 170, false, true, [{"item_id": "stone_brick", "quantity": 2}])
-	_define("stone_pillar", "Stone Pillar", "pillar", "stone", "stone_building", 260, true, true, [{"item_id": "stone_brick", "quantity": 2}])
-	for item_id in ["torch", "campfire", "furnace", "workbench", "anvil", "chest", "bed", "farm_soil", "fence"]:
-		_define(item_id, item_database.get_item_display_name(item_id) if item_database != null else item_id.capitalize(), "utility", "primitive", "", 50, item_id == "fence", false, [])
-
-func _define(item_id: String, display_name: String, part_type: String, tier: String, technology_id: String, max_health: int, blocks_movement: bool, requires_lower_support: bool, cost: Array) -> void:
-	var definition: Variant = BUILDING_DEFINITION_SCRIPT.new()
-	definition.set("id", item_id)
-	definition.set("display_name", display_name)
-	definition.set("part_type", part_type)
-	definition.set("tier", tier)
-	definition.set("technology_id", technology_id)
-	definition.set("max_health", max_health)
-	definition.set("blocks_movement", blocks_movement)
-	definition.set("requires_lower_support", requires_lower_support)
-	definition.set("build_cost", cost)
-	definitions[item_id] = definition
+## Discover and validate data-authored building definitions. One bad asset
+## removes only itself from the palette; every problem is logged with the
+## asset path so the author can fix it without a restart hint.
+func _load_definitions() -> void:
+	content_registry = BuildingContentRegistry.new()
+	content_registry.discover()
+	definitions = content_registry.definitions
+	for message in content_registry.validation_errors:
+		push_error("Building content: %s" % message)

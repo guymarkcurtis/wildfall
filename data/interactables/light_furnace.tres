@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="LightProfile" format=3]
+
+[ext_resource type="Script" path="res://resources/light_profile.gd" id="1_jjmw3"]
+
+[resource]
+resource_name = "light_furnace"
+script = ExtResource("1_jjmw3")
+radius_px = 64.0
+color = Color(1, 0.62, 0.35, 1)
+energy = 0.9

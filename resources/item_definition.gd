@@ -16,6 +16,14 @@ extends Resource
 @export var durability: int = 0
 @export var tool_type: String = ""  # axe, pickaxe, sword, etc.
 
+## Generic vocabulary other systems query by data, never by item name.
+## Shipped tags: "fuel" (burnable in fuelled stations/lights). Add new tags
+## in data; consumers own their vocabulary and interpret it generically.
+@export var tags: PackedStringArray = PackedStringArray()
+
+func has_tag(tag: String) -> bool:
+	return tags.has(tag)
+
 ## Create a basic item definition.
 static func create_basic(item_id: String, display_name: String, category: String) -> ItemDefinition:
 	var item := ItemDefinition.new()

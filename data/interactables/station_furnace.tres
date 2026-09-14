@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="StationProfile" format=3]
+
+[ext_resource type="Script" path="res://resources/station_profile.gd" id="1_33w3h"]
+
+[resource]
+resource_name = "station_furnace"
+script = ExtResource("1_33w3h")
+recipe_group = "furnace"
+input_slot_count = 1
+requires_power = true

@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_7071r"]
+
+[resource]
+script = ExtResource("1_7071r")
+id = "wooden_foundation"
+display_name = "Wood Foundation"
+part_type = "foundation"
+technology_id = "wood_building"
+requires_lower_support = false
+build_cost = Array[Dictionary]([{
+"item_id": "plank",
+"quantity": 2
+}])
+max_health = 90
+allowed_orientations = PackedStringArray()
+support_tags = PackedStringArray("structure")
+visual_family_id = "wood"
+atlas_path = "res://assets/tiles/wildfall-building-parts.png"
+atlas_cell = Vector2i(0, 0)

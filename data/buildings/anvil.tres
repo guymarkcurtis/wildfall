@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_3bj6s"]
+[ext_resource type="Resource" path="res://data/interactables/interaction_use.tres" id="1_ehhtd"]
+[ext_resource type="Resource" path="res://data/interactables/station_anvil.tres" id="3_cblb1"]
+
+[resource]
+script = ExtResource("1_3bj6s")
+id = "anvil"
+display_name = "Anvil"
+tier = "primitive"
+requires_lower_support = false
+max_health = 50
+allowed_orientations = PackedStringArray()
+support_tags = PackedStringArray()
+visual_family_id = "primitive"
+atlas_path = "res://assets/tiles/wildfall-crafting-stations.png"
+atlas_cell = Vector2i(3, 0)
+interaction_profile = ExtResource("1_ehhtd")
+station_profile = ExtResource("3_cblb1")

@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_a7tyn"]
+
+[resource]
+script = ExtResource("1_a7tyn")
+id = "farm_soil"
+display_name = "Farm Soil"
+tier = "primitive"
+requires_lower_support = false
+max_health = 50
+allowed_orientations = PackedStringArray()
+support_tags = PackedStringArray()
+visual_family_id = "primitive"
+atlas_path = "res://assets/tiles/wildfall-building-utilities.png"
+atlas_cell = Vector2i(3, 0)

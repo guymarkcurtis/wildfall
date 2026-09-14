@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_32m10"]
+[ext_resource type="Resource" path="res://data/interactables/interaction_open.tres" id="1_hwcfk"]
+[ext_resource type="Resource" path="res://data/interactables/chest_container.tres" id="1_mmqc3"]
+
+[resource]
+script = ExtResource("1_32m10")
+id = "chest"
+display_name = "Chest"
+tier = "primitive"
+requires_lower_support = false
+max_health = 50
+allowed_orientations = PackedStringArray()
+support_tags = PackedStringArray()
+visual_family_id = "primitive"
+atlas_path = "res://assets/tiles/wildfall-building-utilities.png"
+atlas_cell = Vector2i(2, 0)
+interaction_profile = ExtResource("1_hwcfk")
+container_profile = ExtResource("1_mmqc3")

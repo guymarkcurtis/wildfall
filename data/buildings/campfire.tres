@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Resource" path="res://data/interactables/fuel_burnable.tres" id="1_5vfap"]
+[ext_resource type="Resource" path="res://data/interactables/interaction_use.tres" id="1_d47ti"]
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_utnrg"]
+[ext_resource type="Resource" path="res://data/interactables/light_campfire.tres" id="3_34ejw"]
+[ext_resource type="Resource" path="res://data/interactables/station_campfire.tres" id="3_ksu8k"]
+
+[resource]
+script = ExtResource("1_utnrg")
+id = "campfire"
+display_name = "Campfire"
+tier = "primitive"
+requires_lower_support = false
+max_health = 50
+allowed_orientations = PackedStringArray()
+support_tags = PackedStringArray()
+visual_family_id = "primitive"
+atlas_path = "res://assets/tiles/wildfall-crafting-stations.png"
+atlas_cell = Vector2i(0, 0)
+interaction_profile = ExtResource("1_d47ti")
+station_profile = ExtResource("3_ksu8k")
+fuel_profile = ExtResource("1_5vfap")
+light_profile = ExtResource("3_34ejw")

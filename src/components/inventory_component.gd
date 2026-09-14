@@ -1,5 +1,12 @@
 ## Manages a collection of items with stack support.
 ## All item operations go through this component — no direct dictionary access.
+##
+## The player-facing inventory keeps its historical compact display model
+## (one slot per item type, 50 types, weight-capped) while its contents now
+## live in a fixed indexed-slot [InventoryStorage]. The public API, signal
+## order, and save format are unchanged for callers; new container surfaces
+## (chests, stations, fuel — M5+) host their own independent InventoryStorage
+## and move items exclusively through InventoryTransfer.
 class_name InventoryComponent
 extends RefCounted
 
@@ -10,30 +17,35 @@ signal inventory_full
 signal durability_changed(item_id: String, current: int, max: int)
 signal tool_broken(item_id: String)
 
-var _slots: Dictionary = {}  # item_id -> Dictionary {quantity, max_stack, durability?}
-var _max_weight: float = 100.0
-var _max_slots: int = 50
-var _stack_sizes: Dictionary = {}  # item_id -> max stack size (from ItemDatabase)
+## Indexed-slot backing store. One display slot per item type (the compact
+## model) is expressed as merge_to_single_slot_per_item on the storage.
+var _storage: InventoryStorage = InventoryStorage.new(50, 100.0)
 var _max_durations: Dictionary = {}  # item_id -> max durability (from ItemDatabase)
 
-## Total weight of all items.
-var total_weight: float = 0.0
+func _init() -> void:
+	_storage.merge_to_single_slot_per_item = true
+	_storage.changed.connect(func(): inventory_changed.emit())
 
-## Get the number of distinct item types.
+## Total weight of all items.
+var total_weight: float:
+	get:
+		return _storage.total_weight()
+
+## Number of distinct item types currently held.
 var slot_count: int:
 	get:
-		return _slots.size()
+		return _storage.occupied_count()
 
 ## Check if inventory is full.
 var is_full: bool:
 	get:
-		return _slots.size() >= _max_slots
+		return _storage.occupied_count() >= _storage.slot_count()
 
 ## Apply per-item stack sizes (typically from the ItemDatabase, so the
 ## inventory honours each item's defined stack size instead of a flat 64).
 func set_stack_sizes(sizes: Dictionary) -> void:
 	for item_id in sizes:
-		_stack_sizes[str(item_id)] = int(sizes[item_id])
+		_storage.stack_sizes[str(item_id)] = int(sizes[item_id])
 
 ## Apply per-item max durabilities (typically from the ItemDatabase).
 ## Durable items (tools/weapons) are stack-size-1, so each one occupies
@@ -43,18 +55,25 @@ func set_stack_sizes(sizes: Dictionary) -> void:
 func set_item_durations(durations: Dictionary) -> void:
 	for item_id in durations:
 		_max_durations[str(item_id)] = int(durations[item_id])
-	for item_id in _slots:
-		var max_dur: int = _get_max_durability(str(item_id))
-		if max_dur > 0 and not _slots[item_id].has("durability"):
-			_slots[item_id]["durability"] = max_dur
+		_storage.max_durations[str(item_id)] = int(durations[item_id])
+	for index in range(_storage.slot_count()):
+		var item_id := _storage.item_id_at(index)
+		if item_id == "":
+			continue
+		var max_dur := _get_max_durability(item_id)
+		if max_dur > 0 and _storage.durability_at(index) <= 0:
+			_storage.set_durability_at(index, max_dur)
 
 ## Set maximum weight capacity.
 func set_max_weight(weight: float) -> void:
-	_max_weight = max(weight, 0.0)
+	_storage.max_weight = max(weight, 0.0)
 
-## Set maximum slot count.
+## Set maximum slot count (distinct item types).
 func set_max_slots(count: int) -> void:
-	_max_slots = max(count, 1)
+	var target := maxi(count, 1)
+	var current := _storage.slots.duplicate()
+	current.resize(target)
+	_storage.load_slots(current)
 
 ## Add items to inventory. Returns the quantity that could NOT be added
 ## (0 when everything fit; the remainder when the inventory is full, the
@@ -62,49 +81,13 @@ func set_max_slots(count: int) -> void:
 func add_item(item_id: String, quantity: int) -> int:
 	if item_id == "" or quantity <= 0:
 		return quantity
-
-	var max_stack: int = _get_max_stack(item_id)
-	var added: int = 0
-
-	# 1. Stack into the item's existing slot.
-	if _slots.has(item_id):
-		var existing: int = _slots[item_id]["quantity"]
-		var to_add: int = min(quantity, max(0, max_stack - existing))
-		if to_add > 0:
-			_slots[item_id]["quantity"] = existing + to_add
-			added += to_add
-			quantity -= to_add
-
-	# 2. No slot yet: open one if there is room. Never overwrite an
-	# existing (full) slot — that would silently discard the old stack.
-	# (and a durable tool in the old slot is never silently replaced).
-	if quantity > 0 and not _slots.has(item_id) and _slots.size() < _max_slots:
-		var new_qty: int = min(quantity, max_stack)
-		var slot: Dictionary = {"quantity": new_qty, "max_stack": max_stack}
-		var max_dur: int = _get_max_durability(item_id)
-		if max_dur > 0:
-			slot["durability"] = max_dur
-		_slots[item_id] = slot
-		added += new_qty
-		quantity -= new_qty
-
-	# 3. Weight check: roll back exactly what we just added if over capacity.
+	var remainder := _storage.add_item(item_id, quantity)
+	var added := quantity - remainder
 	if added > 0:
-		_calculate_weight()
-		if total_weight > _max_weight:
-			_remove_item(item_id, added)
-			inventory_full.emit()
-			return quantity + added
-
-	if quantity > 0:
-		# A slot for this item exists but is full: the display model keeps
-		# one slot per item, so there is no room for more of it.
-		inventory_full.emit()
-
-	if added > 0:
-		inventory_changed.emit()
 		item_added.emit(item_id, added)
-	return quantity
+	if remainder > 0:
+		inventory_full.emit()
+	return remainder
 
 ## Damage a tool in the inventory by `amount` durability.
 ## Tools are one-per-slot (stack size 1), so the slot's "durability" key
@@ -113,162 +96,199 @@ func add_item(item_id: String, quantity: int) -> int:
 ## expected to fall back to bare hands and craft a replacement.
 ## There is no repair feature yet: a broken tool is simply gone.
 func damage_tool(item_id: String, amount: int) -> bool:
-	if amount <= 0 or not _slots.has(item_id):
+	if amount <= 0:
 		return false
-	var max_dur: int = _get_max_durability(item_id)
+	var max_dur := _get_max_durability(item_id)
 	if max_dur <= 0:
 		return false
-	var slot: Dictionary = _slots[item_id]
-	slot["durability"] = int(slot.get("durability", max_dur)) - amount
-	if int(slot["durability"]) <= 0:
-		var qty: int = int(slot.get("quantity", 1))
-		_slots.erase(item_id)
-		_calculate_weight()
-		inventory_changed.emit()
-		item_removed.emit(item_id, qty)
+	var index := _storage.first_index_of(item_id)
+	if index < 0:
+		return false
+	var updated := _storage.durability_at(index) - amount
+	if updated <= 0:
+		remove_item(item_id, _storage.quantity_at(index))
 		tool_broken.emit(item_id)
 		return true
-	inventory_changed.emit()
-	durability_changed.emit(item_id, int(slot["durability"]), max_dur)
+	_storage.set_durability_at(index, updated)
+	durability_changed.emit(item_id, updated, max_dur)
 	return false
 
 ## {current, max} durability for a tool the player carries (max = 0 if
 ## the item is not durable or is not in the inventory).
 func get_tool_durability(item_id: String) -> Dictionary:
-	var max_dur: int = _get_max_durability(item_id)
-	if max_dur <= 0 or not _slots.has(item_id):
+	var max_dur := _get_max_durability(item_id)
+	if max_dur <= 0:
 		return {"current": 0, "max": 0}
-	return {"current": int(_slots[item_id].get("durability", max_dur)), "max": max_dur}
+	var index := _storage.first_index_of(item_id)
+	if index < 0:
+		return {"current": 0, "max": 0}
+	return {"current": _storage.durability_at(index), "max": max_dur}
 
 ## Current durability of every durable tool in the inventory
 ## (item_id -> current). The UI combines this with the ItemDatabase's
 ## max values for display.
 func get_all_durations() -> Dictionary:
 	var result: Dictionary = {}
-	for item_id in _slots:
-		var max_dur: int = _get_max_durability(str(item_id))
+	for index in range(_storage.slot_count()):
+		var item_id := _storage.item_id_at(index)
+		if item_id == "":
+			continue
+		var max_dur := _get_max_durability(item_id)
 		if max_dur > 0:
-			result[str(item_id)] = int(_slots[item_id].get("durability", max_dur))
+			result[item_id] = _storage.durability_at(index)
 	return result
 
 ## Remove items from inventory. Returns actual quantity removed.
 func remove_item(item_id: String, quantity: int) -> int:
 	if quantity <= 0:
 		return 0
-
-	var current: int = _slots.get(item_id, {}).get("quantity", 0)
-	var to_remove: int = min(quantity, current)
-	if to_remove == 0:
-		return 0
-
-	_slots[item_id]["quantity"] -= to_remove
-	if _slots[item_id]["quantity"] <= 0:
-		_slots.erase(item_id)
-
-	_calculate_weight()
-	inventory_changed.emit()
-	item_removed.emit(item_id, to_remove)
-	return to_remove
-
-## Internal: remove up to `quantity` of an item without emitting signals.
-## Used for rollback inside add_item() so a failed add emits nothing.
-func _remove_item(item_id: String, quantity: int) -> void:
-	if quantity <= 0:
-		return
-	var current: int = _slots.get(item_id, {}).get("quantity", 0)
-	var to_remove: int = min(quantity, current)
-	if to_remove <= 0:
-		return
-	if current - to_remove <= 0:
-		_slots.erase(item_id)
-	else:
-		_slots[item_id]["quantity"] = current - to_remove
-	_calculate_weight()
+	var removed := _storage.remove_item(item_id, quantity)
+	if removed > 0:
+		item_removed.emit(item_id, removed)
+	return removed
 
 ## Get quantity of a specific item.
 func get_item_quantity(item_id: String) -> int:
-	return _slots.get(item_id, {}).get("quantity", 0)
+	return _storage.quantity_of(item_id)
 
 ## Check if inventory contains at least `quantity` of an item.
 func has_item(item_id: String, quantity: int = 1) -> bool:
-	return _slots.get(item_id, {}).get("quantity", 0) >= quantity
+	return _storage.has_item(item_id, quantity)
 
 ## Get all items as a dictionary {item_id: quantity}.
 func get_all_items() -> Dictionary:
-	var result: Dictionary = {}
-	for item_id in _slots:
-		result[item_id] = _slots[item_id]["quantity"]
-	return result
+	return _storage.all_items()
 
 ## Clear all items.
 func clear() -> void:
-	_slots.clear()
-	total_weight = 0.0
-	inventory_changed.emit()
+	_storage.clear()
 
-## Get item slots with metadata.
+## Get item slots with metadata (compact projection: one entry per item
+## type, exactly the shape the UI and legacy code expect).
 func get_slots() -> Dictionary:
-	return _slots.duplicate()
+	var result: Dictionary = {}
+	for index in range(_storage.slot_count()):
+		var stack := _storage.stack_at(index)
+		if stack.is_empty():
+			continue
+		var entry: Dictionary = {
+			"quantity": int(stack["quantity"]),
+			"max_stack": int(stack["max_stack"]),
+		}
+		if stack.has("durability"):
+			entry["durability"] = int(stack["durability"])
+		result[str(stack["item_id"])] = entry
+	return result
 
-## Transfer items to another inventory.
+## Transfer items to another inventory. Transactional: only the quantity the
+## target actually accepts leaves the source (the remainder is never lost).
 func transfer_to(target: InventoryComponent, item_id: String, quantity: int) -> int:
-	var available: int = get_item_quantity(item_id)
-	var to_transfer: int = min(quantity, available)
-	if to_transfer <= 0:
+	if target == null:
 		return 0
-	remove_item(item_id, to_transfer)
-	target.add_item(item_id, to_transfer)
-	return to_transfer
+	var outcome := InventoryTransfer.transfer_between(_storage, target._storage, item_id, quantity)
+	var moved := int(outcome[InventoryTransfer.RESULT_MOVED])
+	if moved > 0:
+		item_removed.emit(item_id, moved)
+		target.item_added.emit(item_id, moved)
+	return moved
 
-## Split a stack: move `quantity` from source to target.
+## Split a stack: move up to `quantity` from this item to the target,
+## optionally under a different item id. Overflow is refunded to the source.
 func split_to(source_item_id: String, target: InventoryComponent, target_item_id: String, quantity: int) -> int:
-	var available: int = get_item_quantity(source_item_id)
-	var to_split: int = min(quantity, available)
-	if to_split <= 0:
+	if target == null or quantity <= 0:
 		return 0
-	remove_item(source_item_id, to_split)
-	target.add_item(target_item_id, to_split)
-	return to_split
+	var wanted := mini(quantity, get_item_quantity(source_item_id))
+	if wanted <= 0:
+		return 0
+	var accepted := 0
+	var remaining := wanted
+	for index in range(target._storage.slot_count()):
+		if remaining <= 0:
+			break
+		var can := target._storage.acceptance_at(index, target_item_id, remaining)
+		accepted += can
+		remaining -= can
+	if accepted <= 0:
+		return 0
+	remove_item(source_item_id, accepted)
+	var leftover := target.add_item(target_item_id, accepted)
+	if leftover > 0:
+		add_item(source_item_id, leftover)
+		accepted -= leftover
+	return accepted
 
 ## Get total weight of inventory.
 func get_total_weight() -> float:
 	return total_weight
 
-## Serialize inventory to a saveable dictionary.
+## Serialize inventory to a saveable dictionary. Format is UNCHANGED from
+## the pre-M1 compact shape, so v7 (and older) saves keep loading; the
+## indexed form is written by the v8 milestone, not here.
 func serialize() -> Dictionary:
+	var compact: Dictionary = {}
+	for index in range(_storage.slot_count()):
+		var stack := _storage.stack_at(index)
+		if stack.is_empty():
+			continue
+		var entry: Dictionary = {
+			"quantity": int(stack["quantity"]),
+			"max_stack": int(stack["max_stack"]),
+		}
+		if stack.has("durability"):
+			entry["durability"] = int(stack["durability"])
+		compact[str(stack["item_id"])] = entry
 	return {
-		"slots": _slots.duplicate(),
-		"max_weight": _max_weight,
-		"max_slots": _max_slots
+		"slots": compact,
+		"max_weight": _storage.max_weight,
+		"max_slots": _storage.slot_count()
 	}
 
-## Deserialize inventory from a saved dictionary.
-## (Explicit coercions: JSON round-trips can deliver ints as floats.)
+## Deserialize inventory from a saved dictionary. Accepts BOTH the legacy
+## compact shape ({slots: {item_id: {...}}}) — migrating it into
+## deterministic indexed slots, with full durability backfilled for pre-v5
+## durable tools — and the future indexed shape. Explicit coercions guard
+## against JSON round-trips delivering ints as floats.
 func deserialize(data: Dictionary) -> void:
-	_slots = data.get("slots", {})
-	_max_weight = float(data.get("max_weight", 100.0))
-	_max_slots = int(data.get("max_slots", 50))
-	# Backfill durability for tool slots from pre-v5 saves (they predate
-	# the "durability" key); they start at full durability.
-	for item_id in _slots:
-		var max_dur: int = _get_max_durability(str(item_id))
-		if max_dur > 0 and not _slots[item_id].has("durability"):
-			_slots[item_id]["durability"] = max_dur
-	_calculate_weight()
-	inventory_changed.emit()
-
-## Internal: calculate total weight.
-func _calculate_weight() -> void:
-	total_weight = 0.0
-	for item_id in _slots:
-		var qty: int = _slots[item_id]["quantity"]
-		# Weight would come from ItemDefinition in a full implementation
-		total_weight += qty * 1.0  # placeholder weight
+	var incoming: Variant = data.get("slots", {})
+	var max_weight := maxf(float(data.get("max_weight", 100.0)), 0.0)
+	if typeof(incoming) == TYPE_ARRAY:
+		# Indexed form (v8+): the storage validates each entry itself.
+		var indexed: Dictionary = {"slots": incoming, "max_weight": max_weight}
+		_storage.deserialize(indexed)
+	else:
+		# Legacy compact form: sorted item ids make the slot order
+		# deterministic, and durable tools start at full durability when the
+		# payload predates the durability key.
+		if typeof(incoming) != TYPE_DICTIONARY:
+			incoming = {}
+		var ordered: Array = []
+		var item_ids: Array = incoming.keys()
+		item_ids.sort()
+		for item_id in item_ids:
+			var entry: Variant = incoming[item_id]
+			if typeof(entry) != TYPE_DICTIONARY:
+				continue
+			var stack: Dictionary = {
+				"item_id": str(item_id),
+				"quantity": int(entry.get("quantity", 0)),
+				"max_stack": int(entry.get("max_stack", _get_max_stack(str(item_id)))),
+			}
+			var max_dur := _get_max_durability(str(item_id))
+			if max_dur > 0:
+				stack["durability"] = int(entry.get("durability", max_dur))
+			ordered.append(stack)
+		_storage.load_slots(ordered, max_weight)
+		var max_slots := int(data.get("max_slots", 0))
+		if max_slots > _storage.slot_count():
+			var resized := _storage.slots.duplicate()
+			resized.resize(max_slots)
+			_storage.load_slots(resized, max_weight)
+	# inventory_changed fires from the storage signal.
 
 ## Internal: get max stack size for an item (ItemDatabase size if known,
 ## otherwise the default of 64).
 func _get_max_stack(item_id: String) -> int:
-	return int(_stack_sizes.get(item_id, 64))
+	return _storage.max_stack_for(item_id)
 
 ## Internal: max durability of an item (0 = not durable).
 func _get_max_durability(item_id: String) -> int:

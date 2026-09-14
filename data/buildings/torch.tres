@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Resource" path="res://data/interactables/fuel_burnable.tres" id="1_h3pnr"]
+[ext_resource type="Resource" path="res://data/interactables/interaction_use.tres" id="1_kh1qe"]
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_ysbuq"]
+[ext_resource type="Resource" path="res://data/interactables/light_torch.tres" id="3_te2uq"]
+
+[resource]
+script = ExtResource("1_ysbuq")
+id = "torch"
+display_name = "Torch"
+tier = "primitive"
+requires_lower_support = false
+max_health = 50
+allowed_orientations = PackedStringArray()
+support_tags = PackedStringArray()
+visual_family_id = "primitive"
+atlas_path = "res://assets/tiles/wildfall-building-utilities.png"
+atlas_cell = Vector2i(0, 0)
+interaction_profile = ExtResource("1_kh1qe")
+fuel_profile = ExtResource("1_h3pnr")
+light_profile = ExtResource("3_te2uq")

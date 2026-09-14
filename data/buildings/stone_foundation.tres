@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_pb4ie"]
+
+[resource]
+script = ExtResource("1_pb4ie")
+id = "stone_foundation"
+display_name = "Stone Foundation"
+part_type = "foundation"
+tier = "stone"
+technology_id = "stone_building"
+requires_lower_support = false
+build_cost = Array[Dictionary]([{
+"item_id": "stone_brick",
+"quantity": 2
+}])
+max_health = 180
+allowed_orientations = PackedStringArray()
+support_tags = PackedStringArray("structure")
+visual_family_id = "stone"
+atlas_path = "res://assets/tiles/wildfall-building-parts.png"
+atlas_cell = Vector2i(1, 0)

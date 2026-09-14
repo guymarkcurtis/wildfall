@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1"]
+[ext_resource type="Script" path="res://resources/container_profile.gd" id="2"]
+
+[sub_resource type="Resource" id="Resource_c1"]
+script = ExtResource("2")
+slot_count = 0
+
+[resource]
+script = ExtResource("1")
+id = "bad_profile"
+display_name = "Broken Profile"
+max_health = 50
+container_profile = SubResource("Resource_c1")

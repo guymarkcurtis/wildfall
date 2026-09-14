@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="LightProfile" format=3]
+
+[ext_resource type="Script" path="res://resources/light_profile.gd" id="1_nvq5l"]
+
+[resource]
+resource_name = "light_campfire"
+script = ExtResource("1_nvq5l")
+color = Color(1, 0.72, 0.42, 1)
+energy = 1.1
+flicker = true

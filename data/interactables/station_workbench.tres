@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="StationProfile" format=3]
+
+[ext_resource type="Script" path="res://resources/station_profile.gd" id="1_287s0"]
+
+[resource]
+resource_name = "station_workbench"
+script = ExtResource("1_287s0")
+recipe_group = "workbench"
+input_slot_count = 2

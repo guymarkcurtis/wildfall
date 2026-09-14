@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_ciq0h"]
+[ext_resource type="Resource" path="res://data/interactables/interaction_use.tres" id="1_h2dly"]
+[ext_resource type="Resource" path="res://data/interactables/fuel_burnable.tres" id="1_rkrnh"]
+[ext_resource type="Resource" path="res://data/interactables/light_furnace.tres" id="3_cv0d4"]
+[ext_resource type="Resource" path="res://data/interactables/station_furnace.tres" id="3_nt6ty"]
+
+[resource]
+script = ExtResource("1_ciq0h")
+id = "furnace"
+display_name = "Furnace"
+tier = "primitive"
+requires_lower_support = false
+max_health = 50
+allowed_orientations = PackedStringArray()
+support_tags = PackedStringArray()
+visual_family_id = "primitive"
+atlas_path = "res://assets/tiles/wildfall-crafting-stations.png"
+atlas_cell = Vector2i(1, 0)
+interaction_profile = ExtResource("1_h2dly")
+station_profile = ExtResource("3_nt6ty")
+fuel_profile = ExtResource("1_rkrnh")
+light_profile = ExtResource("3_cv0d4")

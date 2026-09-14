@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="StationProfile" format=3]
+
+[ext_resource type="Script" path="res://resources/station_profile.gd" id="1_b62y3"]
+
+[resource]
+resource_name = "station_campfire"
+script = ExtResource("1_b62y3")
+recipe_group = "campfire"
+input_slot_count = 1
+requires_power = true

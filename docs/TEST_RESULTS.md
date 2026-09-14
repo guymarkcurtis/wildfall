@@ -1,6 +1,23 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **Active Build Plan M1 (2026-09-14, content foundation)**: full harness
+  436 passed / 0 failed / 0 script errors; new focused suite
+  `tests/test_building_content.gd` **69/69 checks** (registry discovery +
+  determinism, pinned legacy values, capability profiles, placement-layer
+  derivation, invalid-fixture validation, `fuel` tags, InventoryStorage
+  add/stack/cap/weight/unique/filter/serialize behaviour, InventoryTransfer
+  merge/split/swap/weight-block/filter-refuse/fan-out with conservation,
+  InventoryComponent public API + legacy compact save migration + durability
+  + transactional transfer_to, and Building placement-key identity).
+  `tests/test_building_sandbox.gd` 18 checks 0 failures; 900-frame live
+  headless boot of the real game: 0 script errors. M1 shipped: building
+  definitions + capability profiles moved to `data/buildings/` +
+  `data/interactables/` assets (`BuildingContentRegistry`),
+  `BuildingManager._init_definitions()` deleted, `ItemDefinition.tags`,
+  `InventoryStorage` + `InventoryTransfer` behind the unchanged player
+  inventory API (save format still compact until v8), `Building.placement_key`
+  + `capability_state`.
 - **Latest verification (2026-09-14, sandbox + explored-map follow-up)**: 436
   passed / 0 failed / 0 script errors in `tests/test_game.gd`; the focused
   `tests/test_building_sandbox.gd` also exited 0 with 18 checks. New harness

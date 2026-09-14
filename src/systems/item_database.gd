@@ -106,6 +106,14 @@ func _load_items() -> void:
 	items["potion_health"] = _create_item("potion_health", "Health Potion", "consumable", 16, 0.3, "", 30, 0)
 	items["potion_mana"] = _create_item("potion_mana", "Mana Potion", "consumable", 16, 0.3, "", 0, 5)
 
+	# Item tags: burnables carry the generic "fuel" tag so fuelled profiles can
+	# query acceptance by tag. Never replace this with a named item list in
+	# gameplay code — see docs/INTERACTABLE_AUTHORING.md.
+	for fuel_item_id in ["wood", "coal", "charcoal"]:
+		var fuel_item := get_item(fuel_item_id)
+		if fuel_item != null:
+			fuel_item.tags = PackedStringArray(["fuel"])
+
 ## Load all recipe definitions.
 func _load_recipes() -> void:
 	# Basic crafting
@@ -430,4 +438,15 @@ func get_all_durations() -> Dictionary:
 		var item: ItemDefinition = items[item_id]
 		if item.durability > 0:
 			result[str(item_id)] = int(item.durability)
+	return result
+
+## All item ids carrying a given tag (e.g. "fuel"). Data query — consumers
+## decide what a tag means; the database only reports membership.
+func get_items_with_tag(tag: String) -> Array[String]:
+	var result: Array[String] = []
+	for item_id in items:
+		var item: ItemDefinition = items[item_id]
+		if item != null and item.has_tag(tag):
+			result.append(str(item_id))
+	result.sort()
 	return result

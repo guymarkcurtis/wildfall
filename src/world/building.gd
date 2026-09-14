@@ -24,6 +24,19 @@ var part_type: String = "utility"
 var tier: String = ""
 var blocks_movement: bool = true
 
+## Stable identity derived from the placement (see
+## docs/INTERACTABLE_AUTHORING.md): "%d:%d:%d" % [x, y, story]. UI ownership
+## and saved capability state key on this — never on NodePath, creation
+## order, or a random id. The layered grid (M2) extends this key with the
+## placement layer; the tile/story prefix stays stable.
+var placement_key: String = ""
+
+## Per-placed-object runtime state for the capabilities its definition
+## declares (container contents, fuel remaining, enabled flag, ...). Empty
+## until a capability system (M5+) seeds it; serialized inside the building's
+## save entry as `state`. Generic by design: no item-id keys or branches.
+var capability_state: Dictionary = {}
+
 var _body: Polygon2D = null
 var _station_sprite: Sprite2D = null
 var _part_sprite: Sprite2D = null
@@ -40,6 +53,7 @@ func setup(item_id: String, item_name: String, tile: Vector2i, hp: int = 50, sto
 	story = story_level
 	health = hp
 	max_health = hp
+	placement_key = "%d:%d:%d" % [tile.x, tile.y, story]
 	position = Vector2(tile) * TILE_SIZE + Vector2(0.0, -story * STORY_RISE)
 	part_type = str(definition.get("part_type")) if definition != null else "utility"
 	tier = str(definition.get("tier")) if definition != null else ""

@@ -27,8 +27,8 @@ source plans conflict, this plan and its decision log at the bottom win.
    that violates one needs a dated decision-log entry.
 
 **Plan status:** `ACTIVE`
-**Current milestone:** M1 — Content foundation (not started)
-**Last updated:** 2026-09-14
+**Current milestone:** M2 — Layered grid, atomic placement, save v8 records
+**Last updated:** 2026-09-14 (M1 complete)
 
 ## Groundwork already in place
 
@@ -113,61 +113,69 @@ plans in one PixelLab pass.
       slot, station-defined ingredient slots, 1 output slot.
 - [x] Confirm interactables scope: no generated loot chests, no multiplayer
       locks, no timed production queue, no gameplay effects from light.
-- [ ] Capture three sandbox screenshots of the current four-story prototype
+- [x] Capture three sandbox screenshots of the current four-story prototype
       (ground build, upper-story build, save/load) as regression context.
-- [ ] Freeze first-pass scope: four total stories, adjacent-story stairs, no
+      Done: `docs/sandbox_baseline/` (`ground_build.png`,
+      `upper_story_build.png`, `save_load.png`), captured 2026-09-14 with a
+      15-building save/load round-trip; note they show the current
+      `STORY_RISE`-shifted presentation that M3 replaces.
+- [x] Freeze first-pass scope: four total stories, adjacent-story stairs, no
       structural collapse, no multiplayer permissions, no procedural
-      buildings, no isometric conversion.
+      buildings, no isometric conversion. Frozen 2026-09-14 (recorded here
+      and in the decision log).
 
 **Exit:** clean baseline, scope frozen, no unresolved conflict between the
 two source designs.
 
 ## M1 — Content foundation: registry, definitions, profiles, slot inventory
 
-*No player-facing interaction changes in this milestone.*
+*No player-facing interaction changes in this milestone. COMPLETE 2026-09-14.*
 
-- [ ] Implement `BuildingContentRegistry`: loads `BuildingDefinition` assets
+- [x] Implement `BuildingContentRegistry`: loads `BuildingDefinition` assets
       from `data/buildings/` in deterministic sorted order; validates IDs,
       atlas references, footprints, recipes, and capability cross-references;
       invalid references fail at startup with actionable paths (existing
       content-validation style).
-- [ ] Extend `BuildingDefinition` with generic fields: placement layer,
+- [x] Extend `BuildingDefinition` with generic fields: placement layer,
       allowed orientations, footprint/reservations, multi-story offsets,
       occupancy-replacement policy, support tags, collision/walkability,
       render band, `visual_family_id` + atlas path/cell, ghost/cutaway
       metadata, and optional generic capability references (interaction,
       container, station, fuel, light, appearance, connector, decorative).
-- [ ] Add the capability Resource scripts with validation:
+- [x] Add the capability Resource scripts with validation:
       `InteractionProfile`, `ContainerProfile`, `StationProfile`,
-      `FuelProfile`, `LightProfile`, `AppearanceProfile` (names flexible;
-      keep generic).
-- [ ] Migrate all `BuildingManager._init_definitions()` entries into `.tres`
+      `FuelProfile`, `LightProfile`, `AppearanceProfile` (connector profile
+      arrives with M3's stair work).
+- [x] Migrate all `BuildingManager._init_definitions()` entries into `.tres`
       assets preserving existing item IDs and recipes exactly; delete the
-      hard-coded initializer (short-lived fallback allowed during the
-      milestone, removed before exit).
-- [ ] Add `ItemDefinition.tags: PackedStringArray` (or equivalent); tag
+      hard-coded initializer (done in the same milestone — no fallback
+      shipped).
+- [x] Add `ItemDefinition.tags: PackedStringArray` (or equivalent); tag
       burnables `fuel` in data; no ID-based fuel lookups anywhere.
-- [ ] Add `InventoryStorage` (or refactor `InventoryComponent` behind a
+- [x] Add `InventoryStorage` (or refactor `InventoryComponent` behind a
       compatible interface): fixed indexed slots, per-slot stack limits,
       weight limits, filter predicates, serialize/deserialize, change
       signals. Preserve the public player inventory API used by Player,
       harvesting, crafting, missions, hotbar, and tests.
-- [ ] Migrate the compact `{item_id: {quantity, ...}}` player inventory in
+- [x] Migrate the compact `{item_id: {quantity, ...}}` player inventory in
       old saves into deterministic indexed slots (with full durability for
-      pre-v5 durable tools). No hotbar format change.
-- [ ] Implement `InventoryTransfer.transfer(source, source_slot, target,
+      pre-v5 durable tools). No hotbar format change. (Migration happens at
+      load; `serialize()` still writes the compact format until the v8 bump
+      in M2 — decision log.)
+- [x] Implement `InventoryTransfer.transfer(source, source_slot, target,
       target_slot, requested_quantity)` as the single authoritative transfer
       routine: merge, swap, split, filtered rejection, max stack, max weight,
       partial acceptance.
-- [ ] Extend `Building` with a runtime capability-state dictionary and a
+- [x] Extend `Building` with a runtime capability-state dictionary and a
       stable placement key; keep collision/placement/story behaviour intact.
-- [ ] Author `data/buildings/README.md` (IDs, atlas cell references, support
+- [x] Author `data/buildings/README.md` (IDs, atlas cell references, support
       tags, asset-only variant workflow) and flesh out
       `docs/INTERACTABLE_AUTHORING.md`.
-- [ ] Tests: registry determinism + validation failures; storage
+- [x] Tests: registry determinism + validation failures; storage
       serialization; legacy player-inventory migration; complete/partial/
       rejected transfers; slot filters; definition validation. v5/v6/v7 saves
-      still load.
+      still load. (`tests/test_building_content.gd`, 69 checks; full harness
+      436/0; sandbox harness 18/0; live headless boot 0 script errors.)
 
 **Exit:** data can define a storage or fuelled object; old saves load; no
 live gameplay behaviour change needed yet.
@@ -479,6 +487,8 @@ Append one row per completed milestone. Do not rewrite history.
 | Date | Milestone | Status | Evidence / notes |
 |------|-----------|--------|------------------|
 | 2026-09-14 | M0 | Partially complete | Both source-plan baselines recorded; interactables Phase 0 complete (slot grid fixed, authoring scaffold, scope confirmed); WG-12 resolved the 4 baseline cave-map failures (harness 436/0 on 2026-09-14, commit `5d6cc79` state). Building Sandbox test surface landed in `5d6cc79`. Remaining M0 items: sandbox screenshots, scope-freeze sign-off. |
+| 2026-09-14 | M0 | Complete | Sandbox regression screenshots captured (`docs/sandbox_baseline/`, 15-building save/load round-trip verified during capture). Scope frozen: four stories, adjacent-story stairs, no collapse/multiplayer/procedural buildings/iso. Harness 436/0 at start of M1. |
+| 2026-09-14 | M1 | Complete | Building content moved to assets: 27 `BuildingDefinition` `.tres` under `data/buildings/` + 11 shared capability profiles under `data/interactables/` (generated by `tools/generate_building_definitions.gd`, values pinned to the old table), `BuildingContentRegistry` with startup validation, `BuildingManager._init_definitions()` deleted. `ItemDefinition.tags` + `fuel` tags. `InventoryStorage` (indexed slots, stack/weight/filter/serialize) now backs `InventoryComponent` behind the unchanged compact API and save format; legacy payloads migrate to deterministic slots on load; `InventoryTransfer` is the single transactional routine (fixed the old `transfer_to` overflow destruction). `Building.placement_key` + `capability_state` added. Verified: focused suite 69/69, full harness 436/0, sandbox 18/0, live headless boot 0 script errors. |
 | 2026-09-14 | Plan | Created | This combined deployment plan created; source plans retained as design references; scheduling conflicts resolved in the decision log below. |
 
 ## Decision log
@@ -493,3 +503,4 @@ Dated entries for deliberate deviations from the source plans.
 | 2026-09-14 | One combined art milestone (M9) and one `docs/BUILDING_ART_REQUESTS.md`. | Both plans require the same PixelLab pipeline, pack integration, and verification; one request file prevents duplicated atlas contracts. |
 | 2026-09-14 | `_init_definitions()` migration happens once, in M1. | Both source plans claimed it; doing it twice would conflict. |
 | 2026-09-14 | Catalogue expansion (M8) follows stations/fuel/light (M6–M7). | New parts (lanterns, gates, furniture) are then authored purely as data against the finished capability system. |
+| 2026-09-14 | M1 keeps the player save payload in the compact format; only the in-memory representation moved to `InventoryStorage`. | Changing the payload without a version bump would break the versioned-save contract; the indexed player payload lands with the v8 bump in M2. `InventoryComponent.deserialize` already accepts both shapes, so v8 becomes a writer-side switch. |

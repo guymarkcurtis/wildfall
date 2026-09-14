@@ -1,0 +1,7 @@
+[gd_resource type="Resource" script_class="InteractionProfile" format=3]
+
+[ext_resource type="Script" path="res://resources/interaction_profile.gd" id="1_pnnyl"]
+
+[resource]
+resource_name = "interaction_open"
+script = ExtResource("1_pnnyl")

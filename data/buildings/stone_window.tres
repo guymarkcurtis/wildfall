@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_0co8t"]
+
+[resource]
+script = ExtResource("1_0co8t")
+id = "stone_window"
+display_name = "Stone Window"
+part_type = "window"
+tier = "stone"
+technology_id = "stone_building"
+blocks_movement = true
+build_cost = Array[Dictionary]([{
+"item_id": "stone_brick",
+"quantity": 2
+}, {
+"item_id": "glass",
+"quantity": 1
+}])
+max_health = 180
+allowed_orientations = PackedStringArray()
+support_tags = PackedStringArray("structure")
+visual_family_id = "stone"
+atlas_path = "res://assets/tiles/wildfall-building-parts.png"
+atlas_cell = Vector2i(1, 3)

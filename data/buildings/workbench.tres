@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Resource" path="res://data/interactables/interaction_use.tres" id="1_fcw67"]
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_t3xqy"]
+[ext_resource type="Resource" path="res://data/interactables/station_workbench.tres" id="3_2lge3"]
+
+[resource]
+script = ExtResource("1_t3xqy")
+id = "workbench"
+display_name = "Workbench"
+tier = "primitive"
+requires_lower_support = false
+max_health = 50
+allowed_orientations = PackedStringArray()
+support_tags = PackedStringArray()
+visual_family_id = "primitive"
+atlas_path = "res://assets/tiles/wildfall-crafting-stations.png"
+atlas_cell = Vector2i(2, 0)
+interaction_profile = ExtResource("1_fcw67")
+station_profile = ExtResource("3_2lge3")

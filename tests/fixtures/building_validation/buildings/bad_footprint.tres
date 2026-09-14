@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "bad_footprint"
+display_name = "Broken Footprint"
+width = 0
+height = 1
+max_health = 50

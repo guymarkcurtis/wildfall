@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="ContainerProfile" format=3]
+
+[ext_resource type="Script" path="res://resources/container_profile.gd" id="1_h6wjf"]
+
+[resource]
+resource_name = "chest_container"
+script = ExtResource("1_h6wjf")
+accepted_tags = PackedStringArray()

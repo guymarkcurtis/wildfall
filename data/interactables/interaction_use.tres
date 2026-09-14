@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="InteractionProfile" format=3]
+
+[ext_resource type="Script" path="res://resources/interaction_profile.gd" id="1_pgfud"]
+
+[resource]
+resource_name = "interaction_use"
+script = ExtResource("1_pgfud")
+verb = "Use"
+ui_kind = "station"

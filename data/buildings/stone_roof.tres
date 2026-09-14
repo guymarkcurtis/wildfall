@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_xx61k"]
+
+[resource]
+script = ExtResource("1_xx61k")
+id = "stone_roof"
+display_name = "Stone Roof"
+part_type = "roof"
+tier = "stone"
+technology_id = "stone_building"
+build_cost = Array[Dictionary]([{
+"item_id": "stone_brick",
+"quantity": 2
+}])
+max_health = 160
+allowed_orientations = PackedStringArray()
+support_tags = PackedStringArray("cover")
+visual_family_id = "stone"
+atlas_path = "res://assets/tiles/wildfall-building-parts.png"
+atlas_cell = Vector2i(1, 5)
