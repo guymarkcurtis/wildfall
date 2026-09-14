@@ -14,13 +14,12 @@ selectable time of day; and a collapsed bottom-left Sandbox button that reveals
 sandbox-only save, load, and delete controls. Choosing Building Sandbox
 automatically resumes its latest sandbox save when one exists. Unlike Creative,
 crafting still consumes supplied ingredients, keeping material and station
-requirements testable. Player facing now follows WASD movement by default and
-only follows the pointer after a click; the survival world map opens centred
-and uses saved fog-of-war discovery: only POIs from the five-by-five loaded
-chunk neighbourhood are revealed as the player travels, never a whole-world
-scan.
 checks representative of normal play. Hunger drain is paused and health/hunger
 are restored when a sandbox save loads, so long building tests remain safe.
+Player facing now follows WASD movement by default and only follows the pointer
+after a click. The centred survival map uses saved fog-of-war discovery: only
+POIs from the five-by-five loaded-chunk neighbourhood are revealed as the
+player travels, never a whole-world scan.
 
 The pre-playtest UI refinement pass replaces the old undifferentiated crafting
 list with a searchable, five-discipline workbench whose material counts and
@@ -127,6 +126,7 @@ Automated headless run of the real main scene — **436/436 checks passed,
 | Chunk lifecycle (generate/unload/reload deterministic) + set_seed regen | PASS |
 | Live input: crafting panel hidden at start, C opens it, second C closes it | PASS |
 | Live input: 1050 px walk keeps the chunk loaded + terrain rendered under the player | PASS |
+| Explored map: nearby-chunk POIs only, marker save/load, centred panel | PASS |
 | Inventory (persistent quick bar, expandable storage, uniform slot spacing, click/drag transfers) | PASS |
 | Building (palette selection, station placement, HUD click pass-through, 4-story support/cutaway) | PASS |
 | Resource accessibility (water rejected; rocky ground walkable) | PASS |

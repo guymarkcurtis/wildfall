@@ -126,9 +126,11 @@ Shows development information:
 ### WorldMap
 - Always-visible minimap with the player and selected waypoint
 - M opens the full finite-world map; J opens the mission journal
-- Deterministic POI/cave candidates are shown even before their chunks stream
-- The first finite-world marker scan is evaluated in 2 ms frame slices; the
-  minimap redraws only when its tile-level state changes
+- Saved fog-of-war reveals deterministic POI/cave candidates only from the
+  five-by-five loaded-chunk neighbourhood around the player
+- Discovery reuses streamed chunk payloads rather than scanning the finite
+  world; revealed chunks (including empty ones) and markers persist in the
+  `map_exploration` save module
 - A legend filters POI categories; clicking a marker sets the minimap waypoint
 
 ### ResourceSpawner

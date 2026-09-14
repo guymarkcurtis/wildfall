@@ -109,7 +109,8 @@
   `tests/test_building_sandbox.gd` also exited 0 with 18 checks. New harness
   coverage verifies keyboard-controlled player facing, click-enabled pointer
   facing, a centred map panel, five-by-five loaded-chunk POI discovery, and
-  explored-marker save/load without a whole-world map scan.
+  explored-marker save/load without a whole-world map scan. Save format v8
+  carries the `map_exploration` module; older saves safely start unexplored.
 - **Building Sandbox coverage (2026-09-14)**: `tests/test_building_sandbox.gd`
   boots the real main scene in Building Sandbox mode and checks the compact
   config, no generated actors/content, default four station fixtures, unlocked
