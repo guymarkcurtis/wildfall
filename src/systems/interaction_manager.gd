@@ -99,6 +99,9 @@ func open(building: Building) -> bool:
 	# This marks the start of the data-authored opening transition before the
 	# object is considered open by the manager.
 	building.set_interaction_open(true)
+	# Stations that declare a crafting_state (data) show their in-use
+	# presentation for as long as the panel stays open.
+	building.set_crafting_active(true)
 	open_building = building
 	open_record = record
 	open_panel = panel
@@ -116,6 +119,7 @@ func close(reason: String) -> void:
 		return # already closed: every path is idempotent
 	if open_building != null and is_instance_valid(open_building):
 		open_building.set_interaction_open(false)
+		open_building.set_crafting_active(false)
 		if open_building.building_damaged.is_connected(_on_open_building_damaged):
 			open_building.building_damaged.disconnect(_on_open_building_damaged)
 		if open_building.building_destroyed.is_connected(_on_open_building_destroyed):

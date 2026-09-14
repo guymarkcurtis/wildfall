@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="BuildingDefinition" format=3]
 
 [ext_resource type="Resource" path="res://data/interactables/interaction_use.tres" id="1_fcw67"]
+[ext_resource type="Resource" path="res://data/interactables/workbench_appearance.tres" id="1_hkqvj"]
 [ext_resource type="Script" path="res://resources/building_definition.gd" id="1_t3xqy"]
 [ext_resource type="Resource" path="res://data/interactables/station_workbench.tres" id="3_2lge3"]
 
@@ -19,3 +20,4 @@ atlas_path = "res://assets/tiles/wildfall-crafting-stations.png"
 atlas_cell = Vector2i(2, 0)
 interaction_profile = ExtResource("1_fcw67")
 station_profile = ExtResource("3_2lge3")
+appearance_profile = ExtResource("1_hkqvj")

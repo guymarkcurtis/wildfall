@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Resource" path="res://data/interactables/stair_connector_down.tres" id="1_pwx00"]
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_xmnnl"]
+
+[resource]
+script = ExtResource("1_xmnnl")
+id = "wooden_stairs_down"
+display_name = "Wood Stairs (down)"
+part_type = "stair"
+technology_id = "wood_building"
+build_cost = Array[Dictionary]([{
+"item_id": "plank",
+"quantity": 3
+}])
+max_health = 80
+allowed_orientations = PackedStringArray("north", "east", "south", "west")
+support_tags = PackedStringArray("structure")
+required_support_tags = PackedStringArray("structure")
+visual_family_id = "wood"
+atlas_path = "res://assets/tiles/building/structural_wood.png"
+atlas_cell = Vector2i(4, 4)
+atlas_cells = {
+"east": Vector2i(5, 4),
+"north": Vector2i(4, 4),
+"south": Vector2i(6, 4),
+"west": Vector2i(7, 4)
+}
+connector_profile = ExtResource("1_pwx00")

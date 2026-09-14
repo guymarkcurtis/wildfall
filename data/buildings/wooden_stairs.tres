@@ -14,10 +14,16 @@ build_cost = Array[Dictionary]([{
 "quantity": 3
 }])
 max_health = 80
-allowed_orientations = PackedStringArray()
+allowed_orientations = PackedStringArray("north", "east", "south", "west")
 support_tags = PackedStringArray("structure")
 required_support_tags = PackedStringArray("structure")
 visual_family_id = "wood"
-atlas_path = "res://assets/tiles/wildfall-building-parts.png"
-atlas_cell = Vector2i(0, 6)
+atlas_path = "res://assets/tiles/building/structural_wood.png"
+atlas_cell = Vector2i(0, 4)
+atlas_cells = {
+"east": Vector2i(1, 4),
+"north": Vector2i(0, 4),
+"south": Vector2i(2, 4),
+"west": Vector2i(3, 4)
+}
 connector_profile = ExtResource("1_jc2qp")

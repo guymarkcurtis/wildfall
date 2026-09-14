@@ -244,6 +244,20 @@ func set_interaction_open(is_open: bool) -> void:
 	set_appearance_state(transition)
 	set_appearance_state(resting)
 
+## Toggle the profile's in-use presentation (e.g. a workbench being worked)
+## for as long as the player's station panel stays open. Fully data-driven:
+## profiles opt in with a crafting_state, and resting reverts to the profile's
+## own initial_state, so no object-specific names reach the code.
+func set_crafting_active(is_active: bool) -> void:
+	if definition == null or definition.appearance_profile == null:
+		return
+	var profile: AppearanceProfile = definition.appearance_profile
+	if is_active:
+		if not profile.crafting_state.is_empty():
+			set_appearance_state(profile.crafting_state)
+	elif not profile.initial_state.is_empty():
+		set_appearance_state(profile.initial_state)
+
 ## Nudge direction for edge parts so their oriented side reads from above.
 func _edge_visual_offset() -> Vector2:
 	if layer != "edge":
@@ -264,11 +278,16 @@ func _edge_visual_offset() -> Vector2:
 ## colored placeholder (no definition, no cell, or the art sheet is not
 ## present yet). Presentation is data: the sheet path and cell live on the
 ## part's own BuildingDefinition, so new content needs no code change here.
+## Orientable parts carry an atlas_cells map; the cell for this part's
+## current orientation wins, with the single atlas_cell as the fallback.
 func _definition_atlas() -> Dictionary:
 	if definition == null:
 		return {}
 	var path := str(definition.get("atlas_path"))
 	var cell: Vector2i = definition.get("atlas_cell")
+	var cells: Dictionary = definition.get("atlas_cells")
+	if not orientation.is_empty() and cells.has(orientation):
+		cell = cells[orientation]
 	if path.is_empty() or cell == Vector2i(-1, -1) or not FileAccess.file_exists(path):
 		return {}
 	return {"path": path, "cell": cell}

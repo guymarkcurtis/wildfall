@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_def"]
+[ext_resource type="Resource" path="res://data/interactables/stair_connector_down.tres" id="2_connector"]
+
+[resource]
+script = ExtResource("1_def")
+id = "metal_stair_down"
+display_name = "Metal Stair (down)"
+part_type = "stair"
+tier = "metal"
+technology_id = "metalworking"
+build_cost = Array[Dictionary]([{
+"item_id": "iron_ingot",
+"quantity": 3
+}])
+max_health = 180
+support_tags = PackedStringArray("structure")
+required_support_tags = PackedStringArray("structure")
+visual_family_id = "metal"
+atlas_path = "res://assets/tiles/building/structural_metal.png"
+atlas_cell = Vector2i(4, 4)
+atlas_cells = {"north": Vector2i(4, 4), "east": Vector2i(5, 4), "south": Vector2i(6, 4), "west": Vector2i(7, 4)}
+allowed_orientations = PackedStringArray("north", "east", "south", "west")
+connector_profile = ExtResource("2_connector")

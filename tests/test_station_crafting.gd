@@ -119,9 +119,13 @@ func _test_fuel_tick() -> void:
 	torch._update_light()
 	_check(torch._light != null and torch._light.visible,
 			"A powered LightProfile is visible at night through the shared radial mask")
+	# The torch owns a dedicated appearance profile (M9 6.6) whose powered
+	# state name is authored on the profile, so read it from there rather than
+	# assuming the shared fuelled profile's "lit" vocabulary.
+	var expected_powered := str(torch.definition.appearance_profile.powered_state)
 	var lit_state := torch._appearance_state
 	torch.reload_visual_texture()
-	_check(lit_state == "lit" and torch._appearance_state == lit_state,
+	_check(lit_state == expected_powered and torch._appearance_state == lit_state,
 			"Texture refresh keeps the authored fuelled appearance state without resetting power")
 	torch.capability_state["enabled"] = false
 	torch._update_light()

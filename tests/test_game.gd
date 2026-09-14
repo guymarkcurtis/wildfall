@@ -1788,6 +1788,24 @@ func _run_checks() -> void:
 				if not _atlas_cell_has_art(artreq_parts_img, artreq_col * 32, artreq_row * 32):
 					artreq_parts_full = false
 	_check(artreq_parts_img != null and artreq_parts_full, "Every building parts atlas cell contains artwork")
+	# --- M9 art contract (doc section 8.1): migration is complete ----------
+	# The 2x9 parts atlas ships only as frozen stock reference art. Every
+	# BuildingDefinition must reference a family sheet (or the utilities /
+	# stations sheets for the 10 keep-legacy defs), never this one.
+	var artreq_legacy_parts_refs := true
+	var artreq_defs_scanned := 0
+	var legacy_parts_dir := DirAccess.open("res://data/buildings")
+	if legacy_parts_dir != null:
+		var legacy_parts_files := legacy_parts_dir.get_files()
+		legacy_parts_files.sort()
+		for legacy_parts_file in legacy_parts_files:
+			if str(legacy_parts_file).ends_with(".tres"):
+				artreq_defs_scanned += 1
+				var legacy_parts_def := load("res://data/buildings/%s" % legacy_parts_file) as BuildingDefinition
+				if legacy_parts_def != null and legacy_parts_def.atlas_path == "res://assets/tiles/wildfall-building-parts.png":
+					artreq_legacy_parts_refs = false
+	_check(artreq_defs_scanned > 0, "Legacy 2x9 parts atlas migration scan found building definitions (found %d)" % artreq_defs_scanned)
+	_check(artreq_legacy_parts_refs, "No BuildingDefinition references the legacy 2x9 parts atlas")
 	var artreq_utils_img: Image = TexturePackManager.get_image("res://assets/tiles/wildfall-building-utilities.png")
 	_check(artreq_utils_img != null and artreq_utils_img.get_size() == Vector2i(160, 32), "Building utilities atlas is the 5x1 grid")
 	var artreq_utils_full := true

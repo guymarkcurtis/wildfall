@@ -3,8 +3,8 @@
 [ext_resource type="Script" path="res://resources/building_definition.gd" id="1_ciq0h"]
 [ext_resource type="Resource" path="res://data/interactables/interaction_use.tres" id="1_h2dly"]
 [ext_resource type="Resource" path="res://data/interactables/fuel_burnable.tres" id="1_rkrnh"]
+[ext_resource type="Resource" path="res://data/interactables/furnace_appearance.tres" id="1_vy0b1"]
 [ext_resource type="Resource" path="res://data/interactables/light_furnace.tres" id="3_cv0d4"]
-[ext_resource type="Resource" path="res://data/interactables/fuelled_appearance.tres" id="4_app"]
 [ext_resource type="Resource" path="res://data/interactables/station_furnace.tres" id="3_nt6ty"]
 
 [resource]
@@ -24,4 +24,4 @@ interaction_profile = ExtResource("1_h2dly")
 station_profile = ExtResource("3_nt6ty")
 fuel_profile = ExtResource("1_rkrnh")
 light_profile = ExtResource("3_cv0d4")
-appearance_profile = ExtResource("4_app")
+appearance_profile = ExtResource("1_vy0b1")

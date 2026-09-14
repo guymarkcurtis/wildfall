@@ -17,3 +17,5 @@ build_cost = Array[Dictionary]([{
 }])
 max_health = 35
 visual_family_id = "wood"
+atlas_path = "res://assets/tiles/building/structural_wood.png"
+atlas_cell = Vector2i(1, 5)

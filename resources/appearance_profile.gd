@@ -33,6 +33,11 @@ extends Resource
 @export var powered_state: String = ""
 @export var unpowered_state: String = ""
 
+## Optional in-use presentation for stations: shown while the player has
+## this station's panel open (e.g. a workbench being worked), and cleared
+## back to initial_state when it closes. Empty opts the profile out.
+@export var crafting_state: String = ""
+
 func validate() -> Array[String]:
 	var errors: Array[String] = []
 	if frame_size.x <= 0 or frame_size.y <= 0:
@@ -50,7 +55,7 @@ func validate() -> Array[String]:
 		errors.append("initial_state '%s' is not a named state" % initial_state)
 	for state_name in [interaction_opening_state, interaction_open_state,
 			interaction_closing_state, interaction_closed_state, powered_state,
-			unpowered_state]:
+			unpowered_state, crafting_state]:
 		if not state_name.is_empty() and not states.has(state_name):
 			errors.append("interaction state '%s' is not a named state" % state_name)
 	return errors

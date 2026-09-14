@@ -23,5 +23,11 @@ support_tags = PackedStringArray("structure")
 required_support_tags = PackedStringArray("structure")
 occupancy_replacement = "edge_fixture"
 visual_family_id = "stone"
-atlas_path = "res://assets/tiles/wildfall-building-parts.png"
-atlas_cell = Vector2i(1, 3)
+atlas_path = "res://assets/tiles/building/structural_stone.png"
+atlas_cell = Vector2i(0, 2)
+atlas_cells = {
+"east": Vector2i(1, 2),
+"north": Vector2i(0, 2),
+"south": Vector2i(2, 2),
+"west": Vector2i(3, 2)
+}

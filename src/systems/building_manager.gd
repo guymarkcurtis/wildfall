@@ -97,22 +97,25 @@ func _update_connector_traversal() -> void:
 	var found := _connector_record_at(player.global_position, active_story)
 	if found != null and found != _connector_under_player and found.definition != null \
 			and found.definition.connector_profile != null:
-		var upper: int = found.story + found.definition.connector_profile.upper_story_offset
+		var landing: int = found.story + found.definition.connector_profile.upper_story_offset
 		if active_story == found.story:
-			set_active_story(upper)
-		elif active_story == upper:
+			set_active_story(landing)
+		elif active_story == landing:
 			set_active_story(found.story)
 	_connector_under_player = found
 
 ## The connector record whose landing zone contains `world_position` on the
-## given story (a stair record spans its own story and the upper landing).
+## given story (a stair record spans its own story and its landing story,
+## which may be above or below depending on the connector's offset).
 func _connector_record_at(world_position: Vector2, story: int) -> BuildingRecord:
 	for record in _record_list:
 		if record.layer != "connector" or record.definition == null \
 				or record.definition.connector_profile == null:
 			continue
 		var profile := record.definition.connector_profile
-		if story < record.story or story > record.story + profile.upper_story_offset:
+		var lo := mini(record.story, record.story + profile.upper_story_offset)
+		var hi := maxi(record.story, record.story + profile.upper_story_offset)
+		if story < lo or story > hi:
 			continue
 		if record.node == null or not is_instance_valid(record.node):
 			continue
@@ -497,9 +500,10 @@ func _placement_failure_for(item_id: String, tile: Vector2i, story: int, orienta
 			if technology != null:
 				technology_name = technology.display_name
 		return "Research %s before building this" % technology_name
-	if definition.connector_profile != null \
-			and story + definition.connector_profile.upper_story_offset >= BuildingRecord.MAX_STORIES:
-		return "There is no story above for this stairwell"
+	if definition.connector_profile != null:
+		var landing := story + definition.connector_profile.upper_story_offset
+		if landing < 0 or landing >= BuildingRecord.MAX_STORIES:
+			return "There is no landing story for this stairwell here"
 	var resolved_orientation := _resolve_orientation(definition, orientation)
 	var probe := _make_record(definition, item_id, tile, story, resolved_orientation)
 	var keys := probe.reserved_keys()

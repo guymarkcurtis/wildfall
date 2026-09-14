@@ -16,3 +16,5 @@ max_health = 80
 support_tags = PackedStringArray("structure")
 required_support_tags = PackedStringArray("structure")
 visual_family_id = "wood"
+atlas_path = "res://assets/tiles/building/structural_wood.png"
+atlas_cell = Vector2i(3, 0)

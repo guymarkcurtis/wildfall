@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_7eejs"]
+[ext_resource type="Resource" path="res://data/interactables/stair_connector_down.tres" id="1_e1gqd"]
+
+[resource]
+script = ExtResource("1_7eejs")
+id = "stone_stairs_down"
+display_name = "Stone Stairs (down)"
+part_type = "stair"
+tier = "stone"
+technology_id = "stone_building"
+build_cost = Array[Dictionary]([{
+"item_id": "stone_brick",
+"quantity": 3
+}])
+max_health = 180
+allowed_orientations = PackedStringArray("north", "east", "south", "west")
+support_tags = PackedStringArray("structure")
+required_support_tags = PackedStringArray("structure")
+visual_family_id = "stone"
+atlas_path = "res://assets/tiles/building/structural_stone.png"
+atlas_cell = Vector2i(4, 4)
+atlas_cells = {
+"east": Vector2i(5, 4),
+"north": Vector2i(4, 4),
+"south": Vector2i(6, 4),
+"west": Vector2i(7, 4)
+}
+connector_profile = ExtResource("1_e1gqd")

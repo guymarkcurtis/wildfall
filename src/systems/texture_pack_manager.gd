@@ -157,7 +157,23 @@ const PACK_ASSETS: PackedStringArray = [
 	"assets/items/pickups/yard_lantern.png",
 	"assets/characters/explorer-base-walk.png",
 	"assets/characters/explorer-storm-walk.png",
-	"assets/creatures/alien-creature-roster.png"
+	"assets/creatures/alien-creature-roster.png",
+	"assets/tiles/building/structural_wood.png",
+	"assets/tiles/building/structural_stone.png",
+	"assets/tiles/building/structural_metal.png",
+	"assets/tiles/building/boundaries_wood.png",
+	"assets/tiles/building/boundaries_stone.png",
+	"assets/tiles/building/boundaries_metal.png",
+	"assets/tiles/building/interior_wood.png",
+	"assets/tiles/building/interior_stone.png",
+	"assets/tiles/building/interior_metal.png",
+	"assets/tiles/building/exterior_props.png",
+	"assets/tiles/interactables/wood_chest.png",
+	"assets/tiles/interactables/campfire.png",
+	"assets/tiles/interactables/furnace.png",
+	"assets/tiles/interactables/workbench.png",
+	"assets/tiles/interactables/torch.png",
+	"assets/tiles/interactables/hearth.png"
 ]
 
 static var _instance: TexturePackManager = null
@@ -573,6 +589,142 @@ static func _asset_metadata() -> Array[Dictionary]:
 		})
 	for standalone_index in range(standalone_metadata.size()):
 		assets.insert(16 + standalone_index, standalone_metadata[standalone_index])
+	# M9 building art (docs/BUILDING_ART_REQUESTS.md): three structural family
+	# atlases, three boundary sheets, three interior furniture sheets, one
+	# shared exterior-props sheet, and six interactable state sheets. Family A
+	# slot layouts are data (data/buildings/families/*.tres); the three
+	# interior sheets are documented in the art contract without a map
+	# map resource because no runtime code consumes their cell addresses.
+	assets.append_array([
+		{
+			"path": "assets/tiles/building/structural_wood.png",
+			"name": "Structural atlas - timber",
+			"purpose": "Timber building structure cells: ground fills, wall/window/door edge strips, stairs, roof, supports, and ramp.",
+			"used_for": ["timber building definitions", "building placement sprites"],
+			"layout": {"kind": "atlas", "columns": 8, "rows": 8, "cell_size": 32, "cell_order": "row 0 fills (foundation, floor, porch, deck); row 1 wall strip; row 2 window; row 3 door; row 4 stairs (up cols 0-3, down cols 4-7); row 5 roof/awning fills; row 6 supports; row 7 ramp"},
+			"editor_note": "Row 0/5/7 cells are fully opaque seamless fills. In rows 1-3 col 0 is the north master and cols 1-3 are its east/south/west rotations; all other cells are reserved and must stay fully transparent. Do not add, move, or remove cells."
+		},
+		{
+			"path": "assets/tiles/building/structural_stone.png",
+			"name": "Structural atlas - stone",
+			"purpose": "Stone building structure cells: ground fills, wall/window/door edge strips, stairs, roof, supports, and ramp.",
+			"used_for": ["stone building definitions", "building placement sprites"],
+			"layout": {"kind": "atlas", "columns": 8, "rows": 8, "cell_size": 32, "cell_order": "row 0 fills (foundation, patio, reinforced floor); row 1 wall strip; row 2 window; row 3 door; row 4 stairs (up cols 0-3, down cols 4-7); row 5 roof fill; row 6 supports; row 7 ramp"},
+			"editor_note": "Row 0/5/7 cells are fully opaque seamless fills. In rows 1-3 col 0 is the north master and cols 1-3 are its east/south/west rotations; all other cells are reserved and must stay fully transparent. Do not add, move, or remove cells."
+		},
+		{
+			"path": "assets/tiles/building/structural_metal.png",
+			"name": "Structural atlas - metal",
+			"purpose": "Metal building structure cells: ground fills, wall edge strips, stairs, roof, supports, and ramp.",
+			"used_for": ["metal building definitions", "building placement sprites"],
+			"layout": {"kind": "atlas", "columns": 8, "rows": 8, "cell_size": 32, "cell_order": "row 0 fills (foundation, floor, reinforced floor, metal grate); row 1 wall strip; row 2 reserved; row 3 reserved; row 4 stairs (up cols 0-3, down cols 4-7); row 5 roof fill; row 6 supports; row 7 ramp"},
+			"editor_note": "Row 0/5/7 cells are fully opaque seamless fills. Row 1 col 0 is the north master and cols 1-3 its east/south/west rotations; all other cells are reserved and must stay fully transparent. Do not add, move, or remove cells."
+		},
+		{
+			"path": "assets/tiles/building/boundaries_wood.png",
+			"name": "Boundary atlas - timber",
+			"purpose": "Low timber boundary cells: palisade fence, palisade gate, and thin railing strip.",
+			"used_for": ["fence, fence_gate, and wooden_railing definitions"],
+			"layout": {"kind": "atlas", "columns": 8, "rows": 4, "cell_size": 32, "cell_order": "row 0 fence (master col 0); row 1 gate (master col 0); row 2 railing (master col 0); row 3 reserved"},
+			"editor_note": "Each row is a 4-5 px deep top-edge strip: col 0 is the north master, cols 1-3 are its east/south/west rotations, and col 4 is a reserved corner. Strips must run the full 32 px width. Do not add, move, or remove cells."
+		},
+		{
+			"path": "assets/tiles/building/boundaries_stone.png",
+			"name": "Boundary atlas - stone",
+			"purpose": "Stone boundary cells: dry-stone gate and thin stone railing strip (the plain stone wall is a structural part).",
+			"used_for": ["stone_gate and stone_railing definitions"],
+			"layout": {"kind": "atlas", "columns": 8, "rows": 4, "cell_size": 32, "cell_order": "row 0 reserved (no stone fence); row 1 gate (master col 0); row 2 railing (master col 0); row 3 reserved"},
+			"editor_note": "Each populated row is a 4-5 px deep top-edge strip: col 0 is the north master, cols 1-3 are its east/south/west rotations, and col 4 is a reserved corner. Strips must run the full 32 px width. Do not add, move, or remove cells."
+		},
+		{
+			"path": "assets/tiles/building/boundaries_metal.png",
+			"name": "Boundary atlas - metal",
+			"purpose": "Metal boundary cells: steel palisade fence, steel gate, and thin iron railing strip.",
+			"used_for": ["metal_fence, metal_gate, and metal_railing definitions"],
+			"layout": {"kind": "atlas", "columns": 8, "rows": 4, "cell_size": 32, "cell_order": "row 0 fence (master col 0); row 1 gate (master col 0); row 2 railing (master col 0); row 3 reserved"},
+			"editor_note": "Each row is a 4-5 px deep top-edge strip: col 0 is the north master, cols 1-3 are its east/south/west rotations, and col 4 is a reserved corner. Strips must run the full 32 px width. Do not add, move, or remove cells."
+		},
+		{
+			"path": "assets/tiles/building/interior_wood.png",
+			"name": "Interior furniture - timber",
+			"purpose": "Timber interior furniture cells: bed, wooden table, chair, shelf, rug, and wardrobe.",
+			"used_for": ["wooden interior furniture definitions"],
+			"layout": {"kind": "atlas", "columns": 8, "rows": 4, "cell_size": 32, "cell_order": "row 0: (0) bed, (2) wooden table, (3) chair, (4) shelf, (5) rug, (6) wardrobe; all other cells reserved"},
+			"editor_note": "Furniture cells are centred on transparency; only the rug (5,0) is an opaque ground tile. Interior cells are not orientable. Do not add, move, or remove cells."
+		},
+		{
+			"path": "assets/tiles/building/interior_stone.png",
+			"name": "Interior furniture - stone",
+			"purpose": "Stone interior furniture cells: cabinet and bookcase.",
+			"used_for": ["stone interior furniture definitions"],
+			"layout": {"kind": "atlas", "columns": 8, "rows": 4, "cell_size": 32, "cell_order": "row 0: (1) cabinet, (2) bookcase; all other cells reserved"},
+			"editor_note": "Furniture cells are centred on transparency. Interior cells are not orientable. Do not add, move, or remove cells."
+		},
+		{
+			"path": "assets/tiles/building/interior_metal.png",
+			"name": "Interior furniture - metal",
+			"purpose": "Metal interior furniture cells: workshop cabinet and metal locker.",
+			"used_for": ["metal interior furniture definitions"],
+			"layout": {"kind": "atlas", "columns": 8, "rows": 4, "cell_size": 32, "cell_order": "row 0: (0) workshop cabinet, (1) metal locker; all other cells reserved"},
+			"editor_note": "Furniture cells are centred on transparency. Interior cells are not orientable. Do not add, move, or remove cells."
+		},
+		{
+			"path": "assets/tiles/building/exterior_props.png",
+			"name": "Exterior props (all tiers)",
+			"purpose": "Shared exterior ground and prop cells: per-tier paths, steps, planters, well, signal pole, and crop soil.",
+			"used_for": ["exterior ground fills", "steps, planters, well, and pole definitions"],
+			"layout": {"kind": "atlas", "columns": 8, "rows": 4, "cell_size": 32, "cell_order": "row 0 timber: (0) path, (1) steps, (2) planter; row 1 stone: (0) path, (1) well, (2) planter; row 2 metal: (1) signal pole; row 3 primitive: (0) crop soil; all other cells reserved"},
+			"editor_note": "Path and crop-soil cells are fully opaque seamless ground fills; steps, planters, well, and pole are centred on transparency. Cells are not orientable. Do not add, move, or remove cells."
+		},
+		{
+			"path": "assets/tiles/interactables/wood_chest.png",
+			"name": "Chest state strip",
+			"purpose": "Lid states for the chest interactable.",
+			"used_for": ["chest definition", "chest_appearance profile"],
+			"layout": {"kind": "animation_strip", "columns": 1, "rows": 3, "cell_size": 32, "frame_order": "top to bottom: (0) closed, (1) opening/half-open, (2) open"},
+			"editor_note": "Frames are 32 x 32 and stack vertically. The chest base silhouette must stay pixel-identical across frames; only the lid changes. Keep transparent backgrounds."
+		},
+		{
+			"path": "assets/tiles/interactables/campfire.png",
+			"name": "Campfire state strip",
+			"purpose": "Fuel states for the campfire: unlit, ignition, and a three-frame burn loop.",
+			"used_for": ["campfire definition", "campfire_appearance profile"],
+			"layout": {"kind": "animation_strip", "columns": 1, "rows": 5, "cell_size": 32, "frame_order": "top to bottom: (0) unlit, (1) ignition, (2) burn A, (3) burn B, (4) burn C"},
+			"editor_note": "Frames are 32 x 32 and stack vertically. The stone ring must stay pixel-identical across all frames; only the flame changes. Keep transparent backgrounds."
+		},
+		{
+			"path": "assets/tiles/interactables/furnace.png",
+			"name": "Furnace state strip",
+			"purpose": "Heat states for the furnace: cold, heating, and lit.",
+			"used_for": ["furnace definition", "furnace_appearance profile"],
+			"layout": {"kind": "animation_strip", "columns": 1, "rows": 3, "cell_size": 32, "frame_order": "top to bottom: (0) cold, (1) heating, (2) lit"},
+			"editor_note": "Frames are 32 x 32 and stack vertically. The furnace body must stay pixel-identical across frames; only the mouth glow changes. Keep transparent backgrounds."
+		},
+		{
+			"path": "assets/tiles/interactables/workbench.png",
+			"name": "Workbench state strip",
+			"purpose": "Use states for the workbench: idle and active.",
+			"used_for": ["workbench definition", "workbench_appearance profile"],
+			"layout": {"kind": "animation_strip", "columns": 1, "rows": 2, "cell_size": 32, "frame_order": "top to bottom: (0) idle, (1) active"},
+			"editor_note": "Frames are 32 x 32 and stack vertically. The bench must stay pixel-identical across frames; only the in-use cue changes. Keep transparent backgrounds."
+		},
+		{
+			"path": "assets/tiles/interactables/torch.png",
+			"name": "Torch state strip",
+			"purpose": "Fuel states for wall and ground torches: unlit, ignition, and a two-frame flame loop.",
+			"used_for": ["torch definition", "torch_appearance profile"],
+			"layout": {"kind": "animation_strip", "columns": 1, "rows": 4, "cell_size": 32, "frame_order": "top to bottom: (0) unlit, (1) ignition, (2) flame A, (3) flame B"},
+			"editor_note": "Frames are 32 x 32 and stack vertically. The socket base must stay pixel-identical across all frames; only the head flame changes. Keep transparent backgrounds."
+		},
+		{
+			"path": "assets/tiles/interactables/hearth.png",
+			"name": "Fuelled vessel state strip (shared)",
+			"purpose": "Shared unlit/lit stone vessel presentation for hearth, brazier, yard lantern, and metal lantern.",
+			"used_for": ["hearth, brazier, yard_lantern, metal_lantern definitions", "fuelled_appearance profile"],
+			"layout": {"kind": "animation_strip", "columns": 1, "rows": 2, "cell_size": 32, "frame_order": "top to bottom: (0) unlit, (1) lit"},
+			"editor_note": "As with the other state strips, the vessel silhouette must stay pixel-identical across both frames; only the ember glow changes. Keep transparent backgrounds."
+		}
+	])
 	return assets
 
 static func _write_contact_card() -> void:

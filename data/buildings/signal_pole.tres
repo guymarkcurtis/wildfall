@@ -19,3 +19,5 @@ build_cost = Array[Dictionary]([{
 }])
 max_health = 60
 visual_family_id = "metal"
+atlas_path = "res://assets/tiles/building/exterior_props.png"
+atlas_cell = Vector2i(1, 2)

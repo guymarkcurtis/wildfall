@@ -88,8 +88,15 @@ extends Resource
 ## Atlas sheet this part renders from; empty keeps the family placeholder.
 @export var atlas_path: String = ""
 
-## [column, row] cell on atlas_path; (-1, -1) = no atlas cell.
+## [column, row] cell on atlas_path; (-1, -1) = no atlas cell. For
+## orientable parts this is the default (north/master) orientation.
 @export var atlas_cell: Vector2i = Vector2i(-1, -1)
+
+## Orientation-specific atlas cells for orientable parts (fence, gate,
+## railing, stairs, oriented props). Maps an orientation name ("north",
+## "east", "south", "west") to a [column, row] cell on atlas_path. Empty =
+## the part is not orientable and renders from atlas_cell.
+@export var atlas_cells: Dictionary = {}
 
 ## Optional per-part placeholder tint; alpha 0 uses the visual family's
 ## default tint instead.
@@ -144,6 +151,22 @@ func validate() -> Array[String]:
 		errors.append("max_health (%d) must be positive" % max_health)
 	if not placement_layer.is_empty() and placement_layer not in ["ground", "floor", "edge", "object", "overhead", "connector"]:
 		errors.append("placement_layer '%s' is not a supported layer" % placement_layer)
+	if not atlas_cells.is_empty() and atlas_path.is_empty():
+		errors.append("atlas_cells is set but atlas_path is empty")
+	for key in atlas_cells:
+		var orientation_name := str(key)
+		if orientation_name not in ["north", "east", "south", "west"]:
+			errors.append("atlas_cells key '%s' is not a supported orientation" % orientation_name)
+			continue
+		var cell_value: Variant = atlas_cells[key]
+		if typeof(cell_value) != TYPE_VECTOR2I:
+			errors.append("atlas_cells['%s'] must be a [column, row] Vector2i cell" % orientation_name)
+			continue
+		var cell: Vector2i = cell_value
+		if cell.x < 0 or cell.y < 0:
+			errors.append("atlas_cells['%s'] cell %s is outside the atlas sheet" % [orientation_name, str(cell)])
+	if atlas_cell != Vector2i(-1, -1) and atlas_cells.has("north") and atlas_cells["north"] != atlas_cell:
+		errors.append("atlas_cell %s disagrees with atlas_cells['north'] %s (the fallback cell must match the default orientation)" % [str(atlas_cell), str(atlas_cells["north"])])
 	for index in range(build_cost.size()):
 		var entry: Dictionary = build_cost[index] if typeof(build_cost[index]) == TYPE_DICTIONARY else {}
 		if str(entry.get("item_id", "")).is_empty():

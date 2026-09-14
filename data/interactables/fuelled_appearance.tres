@@ -1,11 +1,25 @@
 [gd_resource type="Resource" script_class="AppearanceProfile" format=3]
 
-[ext_resource type="Script" path="res://resources/appearance_profile.gd" id="1"]
+[ext_resource type="Script" path="res://resources/appearance_profile.gd" id="1_mub5k"]
 
 [resource]
 resource_name = "fuelled_appearance"
-script = ExtResource("1")
-states = {"unlit": {"first_frame": 0, "frame_count": 1, "fps": 1.0, "loop": false}, "lit": {"first_frame": 0, "frame_count": 1, "fps": 4.0, "loop": true}}
+script = ExtResource("1_mub5k")
+sheet_path = "res://assets/tiles/interactables/hearth.png"
+states = {
+"lit": {
+"first_frame": 1,
+"fps": 4.0,
+"frame_count": 1,
+"loop": true
+},
+"unlit": {
+"first_frame": 0,
+"fps": 1.0,
+"frame_count": 1,
+"loop": false
+}
+}
 initial_state = "unlit"
 powered_state = "lit"
 unpowered_state = "unlit"

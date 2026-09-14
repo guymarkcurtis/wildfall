@@ -76,6 +76,11 @@ func _load_items() -> void:
 	items["wooden_door"] = _create_item("wooden_door", "Wooden Door", "building", 8, 1.5)
 	items["wooden_roof"] = _create_item("wooden_roof", "Wood Roof", "building", 24, 1.8)
 	items["wooden_stairs"] = _create_item("wooden_stairs", "Wood Stairs", "building", 16, 2.0)
+	# Down-stairs reuse the up-stair icon: at 32 px a 180-degree rotation reads
+	# identically, so this is a deliberate decision (see the art contract).
+	var wooden_stairs_down_item := _create_item("wooden_stairs_down", "Wood Stairs (down)", "building", 16, 2.0)
+	wooden_stairs_down_item.texture_path = "res://assets/items/pickups/wooden_stairs.png"
+	items["wooden_stairs_down"] = wooden_stairs_down_item
 	items["wooden_ramp"] = _create_item("wooden_ramp", "Wood Ramp", "building", 16, 1.8)
 	items["wooden_pillar"] = _create_item("wooden_pillar", "Wood Pillar", "building", 16, 2.2)
 	items["stone_foundation"] = _create_item("stone_foundation", "Stone Foundation", "building", 32, 3.0)
@@ -85,6 +90,9 @@ func _load_items() -> void:
 	items["stone_door"] = _create_item("stone_door", "Stone Door", "building", 8, 3.0)
 	items["stone_roof"] = _create_item("stone_roof", "Stone Roof", "building", 24, 2.8)
 	items["stone_stairs"] = _create_item("stone_stairs", "Stone Stairs", "building", 16, 3.2)
+	var stone_stairs_down_item := _create_item("stone_stairs_down", "Stone Stairs (down)", "building", 16, 3.2)
+	stone_stairs_down_item.texture_path = "res://assets/items/pickups/stone_stairs.png"
+	items["stone_stairs_down"] = stone_stairs_down_item
 	items["stone_ramp"] = _create_item("stone_ramp", "Stone Ramp", "building", 16, 3.0)
 	items["stone_pillar"] = _create_item("stone_pillar", "Stone Pillar", "building", 16, 3.5)
 	items["campfire"] = _create_item("campfire", "Campfire", "building", 4, 1.0)
@@ -130,6 +138,9 @@ func _load_items() -> void:
 	items["brazier"] = _create_item("brazier", "Iron Brazier", "building", 4, 4.0)
 	items["shuttered_window"] = _create_item("shuttered_window", "Shuttered Window", "building", 16, 3.0)
 	items["metal_stair"] = _create_item("metal_stair", "Metal Stair", "building", 16, 4.0)
+	var metal_stair_down_item := _create_item("metal_stair_down", "Metal Stair (down)", "building", 16, 4.0)
+	metal_stair_down_item.texture_path = "res://assets/items/pickups/metal_stair.png"
+	items["metal_stair_down"] = metal_stair_down_item
 	items["metal_fence"] = _create_item("metal_fence", "Metal Fence", "building", 32, 3.0)
 	items["signal_pole"] = _create_item("signal_pole", "Signal Pole", "building", 16, 2.0)
 	items["metal_lantern"] = _create_item("metal_lantern", "Metal Lantern", "building", 8, 1.5)
@@ -291,6 +302,9 @@ func _load_recipes() -> void:
 	recipes["wooden_stairs"] = _create_recipe("wooden_stairs", "wooden_stairs", 1, "", {
 		"plank": 3
 	})
+	recipes["wooden_stairs_down"] = _create_recipe("wooden_stairs_down", "wooden_stairs_down", 1, "", {
+		"plank": 3
+	})
 	recipes["wooden_ramp"] = _create_recipe("wooden_ramp", "wooden_ramp", 1, "", {
 		"plank": 2
 	})
@@ -317,6 +331,9 @@ func _load_recipes() -> void:
 		"stone_brick": 2
 	})
 	recipes["stone_stairs"] = _create_recipe("stone_stairs", "stone_stairs", 1, "", {
+		"stone_brick": 3
+	})
+	recipes["stone_stairs_down"] = _create_recipe("stone_stairs_down", "stone_stairs_down", 1, "", {
 		"stone_brick": 3
 	})
 	recipes["stone_ramp"] = _create_recipe("stone_ramp", "stone_ramp", 1, "", {
@@ -455,7 +472,7 @@ func _load_recipes() -> void:
 	# stone and metal work are earned through the technology panel.
 	_set_recipe_technology([
 		"wooden_foundation", "wooden_floor", "wooden_wall", "wooden_window",
-		"wooden_door", "wooden_roof", "wooden_stairs", "wooden_ramp", "wooden_pillar",
+		"wooden_door", "wooden_roof", "wooden_stairs", "wooden_stairs_down", "wooden_ramp", "wooden_pillar",
 		"fence", "fence_gate", "wooden_railing", "wooden_porch", "wooden_deck",
 		"wooden_path", "planter_box", "wooden_table", "yard_lantern",
 		"chair", "shelf", "rug", "wardrobe", "steps", "awning", "corner_post"
@@ -463,7 +480,7 @@ func _load_recipes() -> void:
 	_set_recipe_technology([
 		"stone_brick", "stone_axe", "stone_pickaxe", "stone_sword", "stone_hoe", "stone_hammer",
 		"stone_foundation", "stone_floor", "stone_wall", "stone_window", "stone_door",
-		"stone_roof", "stone_stairs", "stone_ramp", "stone_pillar", "furnace", "workbench",
+		"stone_roof", "stone_stairs", "stone_stairs_down", "stone_ramp", "stone_pillar", "furnace", "workbench",
 		"stone_gate", "stone_railing", "stone_patio", "stone_path", "stone_planter",
 		"hearth", "cabinet", "bookcase", "well", "brazier"
 	], "stone_building")
@@ -471,7 +488,7 @@ func _load_recipes() -> void:
 		"iron_ingot", "copper_ingot", "bronze_ingot", "iron_axe", "iron_pickaxe",
 		"iron_sword", "anvil", "reinforced_floor", "reinforced_wall", "metal_roof",
 		"metal_gate", "metal_railing", "metal_grate",
-		"shuttered_window", "metal_stair", "metal_fence", "signal_pole",
+		"shuttered_window", "metal_stair", "metal_stair_down", "metal_fence", "signal_pole",
 		"metal_lantern", "workshop_cabinet", "metal_locker"
 	], "metalworking")
 

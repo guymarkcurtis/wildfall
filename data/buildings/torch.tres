@@ -2,9 +2,9 @@
 
 [ext_resource type="Resource" path="res://data/interactables/fuel_burnable.tres" id="1_h3pnr"]
 [ext_resource type="Resource" path="res://data/interactables/interaction_use.tres" id="1_kh1qe"]
+[ext_resource type="Resource" path="res://data/interactables/torch_appearance.tres" id="1_pxukh"]
 [ext_resource type="Script" path="res://resources/building_definition.gd" id="1_ysbuq"]
 [ext_resource type="Resource" path="res://data/interactables/light_torch.tres" id="3_te2uq"]
-[ext_resource type="Resource" path="res://data/interactables/fuelled_appearance.tres" id="4_app"]
 
 [resource]
 script = ExtResource("1_ysbuq")
@@ -22,4 +22,4 @@ atlas_cell = Vector2i(0, 0)
 interaction_profile = ExtResource("1_kh1qe")
 fuel_profile = ExtResource("1_h3pnr")
 light_profile = ExtResource("3_te2uq")
-appearance_profile = ExtResource("4_app")
+appearance_profile = ExtResource("1_pxukh")

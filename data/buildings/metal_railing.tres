@@ -18,3 +18,6 @@ build_cost = Array[Dictionary]([{
 max_health = 210
 allowed_orientations = PackedStringArray("north", "east", "south", "west")
 visual_family_id = "metal"
+atlas_path = "res://assets/tiles/building/boundaries_metal.png"
+atlas_cell = Vector2i(0, 2)
+atlas_cells = {"north": Vector2i(0, 2), "east": Vector2i(1, 2), "south": Vector2i(2, 2), "west": Vector2i(3, 2)}

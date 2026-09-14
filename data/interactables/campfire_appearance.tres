@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="AppearanceProfile" format=3]
+
+[ext_resource type="Script" path="res://resources/appearance_profile.gd" id="1_l1n51"]
+
+[resource]
+resource_name = "campfire_appearance"
+script = ExtResource("1_l1n51")
+sheet_path = "res://assets/tiles/interactables/campfire.png"
+states = {
+"burn A": {
+"first_frame": 2,
+"fps": 4.0,
+"frame_count": 3,
+"loop": true
+},
+"ignition": {
+"first_frame": 1,
+"fps": 1.0,
+"frame_count": 1,
+"loop": false
+},
+"unlit": {
+"first_frame": 0,
+"fps": 1.0,
+"frame_count": 1,
+"loop": false
+}
+}
+initial_state = "unlit"
+powered_state = "burn A"
+unpowered_state = "unlit"

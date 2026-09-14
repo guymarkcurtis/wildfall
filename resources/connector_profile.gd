@@ -4,8 +4,8 @@
 class_name ConnectorProfile
 extends Resource
 
-## Story the upper landing sits on, relative to the connector's own story
-## (1 = one story up this pass).
+## Story the landing sits on, relative to the connector's own story
+## (+1 = one story up, -1 = one story down).
 @export var upper_story_offset: int = 1
 
 ## When true the connector reserves the floor slot directly above its tile as
@@ -18,8 +18,8 @@ extends Resource
 
 func validate() -> Array[String]:
 	var errors: Array[String] = []
-	if upper_story_offset < 1:
-		errors.append("upper_story_offset (%d) must be at least 1 this pass" % upper_story_offset)
+	if upper_story_offset == 0:
+		errors.append("upper_story_offset (%d) must be non-zero (landing on the same story)" % upper_story_offset)
 	if trigger_radius_px <= 0.0:
 		errors.append("trigger_radius_px (%.1f) must be positive" % trigger_radius_px)
 	return errors

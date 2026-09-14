@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="ConnectorProfile" format=3]
+
+[ext_resource type="Script" path="res://resources/connector_profile.gd" id="1_ef53k"]
+
+[resource]
+resource_name = "stair_connector_down"
+script = ExtResource("1_ef53k")
+upper_story_offset = -1
