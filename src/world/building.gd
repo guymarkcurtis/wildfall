@@ -50,6 +50,8 @@ var _station_sprite: Sprite2D = null
 var _part_sprite: Sprite2D = null
 var _appearance_sprite: Sprite2D = null
 var _appearance_state: String = ""
+var _light: PointLight2D = null
+static var _shared_light_texture: GradientTexture2D = null
 var _label: Label = null
 var _health_bar: ProgressBar = null
 
@@ -77,6 +79,10 @@ func setup(item_id: String, item_name: String, tile: Vector2i, hp: int = 50, sto
 	z_index = _render_band()
 	_setup_visuals()
 	_setup_collision()
+	_setup_light()
+
+func _process(_delta: float) -> void:
+	_update_light()
 
 func _id_blocks(item_id: String) -> bool:
 	return item_id.ends_with("wall") or item_id == "fence" or item_id == "wooden_door"
@@ -140,6 +146,44 @@ func reload_visual_texture() -> void:
 		_part_sprite.texture = TexturePackManager.get_texture(UTILITIES_TEXTURE_PATH if UTILITY_CELL_INDEX.has(building_id) else PARTS_TEXTURE_PATH)
 	if _appearance_sprite != null and definition != null and definition.appearance_profile != null:
 		_appearance_sprite.texture = TexturePackManager.get_texture(definition.appearance_profile.sheet_path)
+
+## One shared radial texture backs every profile-driven local light. The
+## profile controls radius, colour, energy, flicker, and daylight policy;
+## buildings supply no ID-specific presentation logic.
+func _setup_light() -> void:
+	if definition == null or definition.light_profile == null:
+		return
+	var profile: LightProfile = definition.light_profile
+	if _shared_light_texture == null:
+		var gradient := Gradient.new()
+		gradient.set_color(0, Color(1, 1, 1, 1))
+		gradient.set_color(1, Color(1, 1, 1, 0))
+		_shared_light_texture = GradientTexture2D.new()
+		_shared_light_texture.gradient = gradient
+		_shared_light_texture.width = 128
+		_shared_light_texture.height = 128
+		_shared_light_texture.fill = GradientTexture2D.FILL_RADIAL
+	_light = PointLight2D.new()
+	_light.texture = _shared_light_texture
+	_light.position = Vector2(TILE_SIZE, TILE_SIZE) * 0.5
+	_light.color = profile.color
+	_light.energy = profile.energy
+	_light.texture_scale = profile.radius_px / 64.0
+	_light.visible = false
+	add_child(_light)
+
+func _update_light() -> void:
+	if _light == null or definition == null or definition.light_profile == null:
+		return
+	var profile: LightProfile = definition.light_profile
+	var parent := get_parent()
+	var main := parent.get_parent() if parent != null else null
+	var cycle := main.get_node_or_null("DayNightCycle") as DayNightCycle if main != null else null
+	var allowed_by_daylight := profile.daylight_policy == "always" or (cycle != null and cycle.is_nighttime())
+	var powered := not profile.requires_power or bool(capability_state.get("enabled", false))
+	_light.visible = allowed_by_daylight and powered
+	if _light.visible:
+		_light.energy = profile.energy * (1.0 + sin(Time.get_ticks_msec() * 0.008) * 0.08 if profile.flicker else 1.0)
 
 ## Build an authored state-sheet sprite when art is available. Assets may
 ## provide states before their dedicated sheet ships; in that case the normal
