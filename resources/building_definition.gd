@@ -67,6 +67,11 @@ extends Resource
 ## "cover"). M2's support validator consumes these tags generically.
 @export var support_tags: PackedStringArray = PackedStringArray()
 
+## Support vocabulary this part REQUIRES beneath it when
+## requires_lower_support is set (checked on upper stories only). Empty with
+## requires_lower_support=true means "any placed part below counts".
+@export var required_support_tags: PackedStringArray = PackedStringArray()
+
 ## Replacement policy when another part already occupies this definition's
 ## slot: "none" (reject) this pass; "edge_fixture" (wall -> door/window) is
 ## reserved for M2 and must not be authored before that lands.

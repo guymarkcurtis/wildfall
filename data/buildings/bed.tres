@@ -11,6 +11,7 @@ requires_lower_support = false
 max_health = 50
 allowed_orientations = PackedStringArray()
 support_tags = PackedStringArray()
+required_support_tags = PackedStringArray()
 visual_family_id = "primitive"
 atlas_path = "res://assets/tiles/wildfall-building-utilities.png"
 atlas_cell = Vector2i(1, 0)

@@ -2069,6 +2069,16 @@ func _run_checks() -> void:
 	_check(not creature_respawned, "Killed creature node is not recreated after load")
 	_check(technology_buildings.get_building_at(saved_building_tile) != null,
 		"Placed building is restored after loading")
+	var restored_record := technology_buildings.get_record_at(saved_building_tile, 0, "edge", "north")
+	_check(restored_record != null and restored_record.layer == "edge",
+		"v8 layered record restores to its canonical edge slot")
+	var v8_payload: Array = technology_buildings.serialize()
+	var v8_entry: Dictionary = {}
+	for entry in v8_payload:
+		if str(entry.get("item_id")) == "wooden_wall" and int(entry.get("x")) == saved_building_tile.x:
+			v8_entry = entry
+	_check(str(v8_entry.get("layer", "")) == "edge" and v8_entry.has("health"),
+		"Building serialization emits v8 layered records (layer + orientation capable)")
 
 	# --- 8. Chunk unload / re-enter cycle (B3) --------------------------------
 	# Full signal path: ChunkSystem.generate_chunk/unload_chunk -> Main handlers
@@ -2343,7 +2353,7 @@ func _run_checks() -> void:
 	SaveSystem.set_autosave_enabled(prev_auto)
 
 	# ------------------------------------------------- tool durability
-	_check(SaveSystem.SAVE_VERSION == 7, "Save format v7 persists explored POI map knowledge (carrying forward generation and durability data)")
+	_check(SaveSystem.SAVE_VERSION == 8, "Save format v8 persists layered building records (carrying forward exploration, generation, and durability data)")
 	var all_durations: Dictionary = item_database.get_all_durations()
 	_check(all_durations.size() > 0, "Item database knows which items are durable")
 	_check(int(all_durations.get("wooden_axe", 0)) == 50, "Wooden axe is defined at 50 durability")

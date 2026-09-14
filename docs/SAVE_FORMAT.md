@@ -45,18 +45,22 @@ Options / Return to Title / Quit). F5 save, F9 load still work.
 | 3 | Added the `technology` module; missing research data safely uses starting unlocks |
 | 4 | Added `world_state`: destroyed resource and creature spawn tiles persist without serializing deterministic chunks |
 | 5 | Added tool durability and mission modules; cave ledgers remain optional world-state fields |
+| 6 | Added `world.generation_version` (the world-generation version that built the world, WG-12) |
+| 7 | Added `map_exploration`: revealed chunk identities and explored POI markers |
+| 8 | Building entries became **layered records**: `layer`, optional `orientation`/`footprint`, and an optional `state` payload for capability state (containers, fuel, stations). v1–v7 entries load with the layer derived from the part's definition and empty state |
 
-## Current format (v5)
+## Current format (v8)
 
 ```json
 {
   "format": "wildfall-save",
-  "version": 5,
+  "version": 8,
   "kind": "manual",
   "game_mode": "survival",
   "timestamp": 1730000000,
   "modules": {
-    "world": { "seed": 12345 },
+    "world": { "seed": 12345, "generation_version": 2 },
+    "map_exploration": { "revealed_chunks": [], "markers": [] },
     "world_state": {
       "destroyed_resources": [{ "x": 4, "y": -2 }],
       "destroyed_creatures": [{ "x": 7, "y": 1 }],
@@ -68,7 +72,11 @@ Options / Return to Title / Quit). F5 save, F9 load still work.
     "status": {},
     "technology": { "unlocked": ["wood_building", "stone_building"] },
     "buildings": [
-      { "item_id": "wooden_wall", "x": 3, "y": 3, "story": 0, "health": 100 }
+      {
+        "item_id": "wooden_wall", "x": 3, "y": 3, "story": 0,
+        "layer": "edge", "orientation": "north", "health": 100,
+        "state": {}
+      }
     ],
     "player": {
       "position": { "x": 0.0, "y": 0.0 },
@@ -83,6 +91,25 @@ Options / Return to Title / Quit). F5 save, F9 load still work.
   }
 }
 ```
+
+### Building entries (v8 layered records)
+
+Each entry describes one placed record: `item_id`, tile `x`/`y`, `story`,
+`layer` (one of `ground`, `floor`, `edge`, `object`, `overhead`,
+`connector`), optional `orientation` (edge parts: `north`/`east`/`south`/
+`west`), `health`, optional `footprint: [w, h]` for multi-tile objects, and
+an optional `state` dictionary reserved for capability state (M5+:
+container slots, fuel, station inputs/outputs). Edge orientations are
+canonical in the runtime index — the east edge of one tile is the same slot
+as the west edge of its neighbour — so saved orientation + coordinates
+unambiguously identify the slot.
+
+`state` holds only non-default runtime state for the capabilities that
+building's definition actually declares; JSON-safe primitives only, and a
+non-empty container inventory must never be omitted. Loaders default missing
+`layer`/`orientation`/`state` (exactly the v7→v8 migration: derive the layer
+from the definition's placement model, single default orientation, empty
+state) and must never invent contents or enable an old placed fire.
 
 Apply order on load: `world` (regenerates chunks) → `world_state` (suppresses
 mutated deterministic spawns) → `time` → `weather` →

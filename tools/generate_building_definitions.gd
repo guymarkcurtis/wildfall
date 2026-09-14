@@ -69,7 +69,9 @@ func _write_buildings() -> void:
 		["wooden_floor", "Wood Floor", "floor", "wood", "wood_building", 70, false, true, [{"item_id": "plank", "quantity": 1}]],
 		["wooden_wall", "Wood Wall", "wall", "wood", "wood_building", 100, true, true, [{"item_id": "plank", "quantity": 3}]],
 		["wooden_window", "Wood Window", "window", "wood", "wood_building", 80, true, true, [{"item_id": "plank", "quantity": 2}, {"item_id": "glass", "quantity": 1}]],
-		["wooden_door", "Wood Door", "door", "wood", "wood_building", 90, true, true, [{"item_id": "plank", "quantity": 3}]],
+		# Doors no longer block movement (M2): a door is the walkable opening
+		# in a wall edge, which is what makes a built room enterable.
+		["wooden_door", "Wood Door", "door", "wood", "wood_building", 90, false, true, [{"item_id": "plank", "quantity": 3}]],
 		["wooden_roof", "Wood Roof", "roof", "wood", "wood_building", 75, false, true, [{"item_id": "plank", "quantity": 2}]],
 		["wooden_stairs", "Wood Stairs", "stair", "wood", "wood_building", 80, false, true, [{"item_id": "plank", "quantity": 3}]],
 		["wooden_ramp", "Wood Ramp", "ramp", "wood", "wood_building", 80, false, true, [{"item_id": "plank", "quantity": 2}]],
@@ -78,7 +80,7 @@ func _write_buildings() -> void:
 		["stone_floor", "Stone Floor", "floor", "stone", "stone_building", 150, false, true, [{"item_id": "stone_brick", "quantity": 1}]],
 		["stone_wall", "Stone Wall", "wall", "stone", "stone_building", 220, true, true, [{"item_id": "stone_brick", "quantity": 3}]],
 		["stone_window", "Stone Window", "window", "stone", "stone_building", 180, true, true, [{"item_id": "stone_brick", "quantity": 2}, {"item_id": "glass", "quantity": 1}]],
-		["stone_door", "Stone Door", "door", "stone", "stone_building", 190, true, true, [{"item_id": "stone_brick", "quantity": 3}]],
+		["stone_door", "Stone Door", "door", "stone", "stone_building", 190, false, true, [{"item_id": "stone_brick", "quantity": 3}]],
 		["stone_roof", "Stone Roof", "roof", "stone", "stone_building", 160, false, true, [{"item_id": "stone_brick", "quantity": 2}]],
 		["stone_stairs", "Stone Stairs", "stair", "stone", "stone_building", 180, false, true, [{"item_id": "stone_brick", "quantity": 3}]],
 		["stone_ramp", "Stone Ramp", "ramp", "stone", "stone_building", 170, false, true, [{"item_id": "stone_brick", "quantity": 2}]],
@@ -130,6 +132,15 @@ func _save_building(item_id: String, display_name: String, part_type: String, ti
 		typed_cost.append(entry)
 	definition.build_cost = typed_cost
 	definition.visual_family_id = tier
+	# M2 placement model: edge parts orient to the four tile edges; doors and
+	# windows are edge fixtures that may replace a plain wall on the same
+	# edge; supported parts require the "structure" tag below them.
+	if part_type in ["wall", "window", "door"]:
+		definition.allowed_orientations = PackedStringArray(["north", "east", "south", "west"])
+	if part_type in ["window", "door"]:
+		definition.occupancy_replacement = "edge_fixture"
+	if requires_lower_support:
+		definition.required_support_tags = PackedStringArray(["structure"])
 	# Atlas metadata mirrors Building's legacy lookup tables so a later
 	# milestone can move rendering onto definition data without visual change.
 	if tier == "wood" or tier == "stone":

@@ -15,8 +15,9 @@ build_cost = Array[Dictionary]([{
 "quantity": 3
 }])
 max_health = 220
-allowed_orientations = PackedStringArray()
+allowed_orientations = PackedStringArray("north", "east", "south", "west")
 support_tags = PackedStringArray("structure")
+required_support_tags = PackedStringArray("structure")
 visual_family_id = "stone"
 atlas_path = "res://assets/tiles/wildfall-building-parts.png"
 atlas_cell = Vector2i(1, 2)

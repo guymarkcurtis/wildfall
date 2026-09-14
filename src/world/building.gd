@@ -23,19 +23,23 @@ var story: int = 0
 var part_type: String = "utility"
 var tier: String = ""
 var blocks_movement: bool = true
+var layer: String = "object"
+var orientation: String = ""
 
-## Stable identity derived from the placement (see
-## docs/INTERACTABLE_AUTHORING.md): "%d:%d:%d" % [x, y, story]. UI ownership
-## and saved capability state key on this — never on NodePath, creation
-## order, or a random id. The layered grid (M2) extends this key with the
-## placement layer; the tile/story prefix stays stable.
+## Stable identity derived from the placement. Owned by the BuildingRecord;
+## kept here for UI ownership and save-keyed lookups. Never a NodePath,
+## creation order, or random id.
 var placement_key: String = ""
 
 ## Per-placed-object runtime state for the capabilities its definition
-## declares (container contents, fuel remaining, enabled flag, ...). Empty
-## until a capability system (M5+) seeds it; serialized inside the building's
-## save entry as `state`. Generic by design: no item-id keys or branches.
+## declares (container contents, fuel remaining, enabled flag, ...). The
+## authoritative copy lives on the BuildingRecord and is serialized inside
+## the building's save entry as `state`. Generic by design.
 var capability_state: Dictionary = {}
+
+## How far an edge part's art nudges toward its oriented edge (cheap
+## readability for the edge model until the dedicated edge art lands).
+const EDGE_VISUAL_OFFSET: float = 6.0
 
 var _body: Polygon2D = null
 var _station_sprite: Sprite2D = null
@@ -46,7 +50,7 @@ var _health_bar: ProgressBar = null
 signal building_destroyed
 signal building_damaged(current_health: int, max_health: int)
 
-func setup(item_id: String, item_name: String, tile: Vector2i, hp: int = 50, story_level: int = 0, definition: Variant = null) -> void:
+func setup(item_id: String, item_name: String, tile: Vector2i, hp: int = 50, story_level: int = 0, definition: Variant = null, placement_layer: String = "", edge_orientation: String = "") -> void:
 	building_id = item_id
 	display_name = item_name
 	tile_coords = tile
@@ -54,6 +58,8 @@ func setup(item_id: String, item_name: String, tile: Vector2i, hp: int = 50, sto
 	health = hp
 	max_health = hp
 	placement_key = "%d:%d:%d" % [tile.x, tile.y, story]
+	layer = placement_layer if placement_layer != "" else (str(definition.effective_placement_layer()) if definition != null else "object")
+	orientation = edge_orientation
 	position = Vector2(tile) * TILE_SIZE + Vector2(0.0, -story * STORY_RISE)
 	part_type = str(definition.get("part_type")) if definition != null else "utility"
 	tier = str(definition.get("tier")) if definition != null else ""
@@ -66,6 +72,7 @@ func _id_blocks(item_id: String) -> bool:
 	return item_id.ends_with("wall") or item_id == "fence" or item_id == "wooden_door"
 
 func _setup_visuals() -> void:
+	var edge_offset := _edge_visual_offset()
 	_body = Polygon2D.new()
 	var inset: float = 2.0
 	_body.polygon = PackedVector2Array([
@@ -75,13 +82,14 @@ func _setup_visuals() -> void:
 		Vector2(inset, TILE_SIZE - inset)
 	])
 	_body.color = _color_for(building_id)
+	_body.position = edge_offset
 	add_child(_body)
 	if STATION_CELL_INDEX.has(building_id):
 		# Station artwork always comes through the texture-pack manager. The
 		# matching 4x1 sheet is exported with every reference/refinement pack.
 		_body.color = Color(0.0, 0.0, 0.0, 0.0)
 		_station_sprite = Sprite2D.new()
-		_station_sprite.position = Vector2(TILE_SIZE, TILE_SIZE) * 0.5
+		_station_sprite.position = Vector2(TILE_SIZE, TILE_SIZE) * 0.5 + edge_offset
 		_station_sprite.region_enabled = true
 		_station_sprite.region_rect = Rect2(float(STATION_CELL_INDEX[building_id]) * TILE_SIZE, 0.0, TILE_SIZE, TILE_SIZE)
 		_station_sprite.texture = TexturePackManager.get_texture(STATION_TEXTURE_PATH)
@@ -93,7 +101,7 @@ func _setup_visuals() -> void:
 		# sheet is missing or the part has no atlas cell.
 		_body.color = Color(0.0, 0.0, 0.0, 0.0)
 		_part_sprite = Sprite2D.new()
-		_part_sprite.position = Vector2(TILE_SIZE, TILE_SIZE) * 0.5
+		_part_sprite.position = Vector2(TILE_SIZE, TILE_SIZE) * 0.5 + edge_offset
 		_part_sprite.region_enabled = true
 		_part_sprite.region_rect = Rect2(float(atlas_cell.x) * TILE_SIZE, float(atlas_cell.y) * TILE_SIZE, TILE_SIZE, TILE_SIZE)
 		_part_sprite.texture = TexturePackManager.get_texture(UTILITIES_TEXTURE_PATH if UTILITY_CELL_INDEX.has(building_id) else PARTS_TEXTURE_PATH)
@@ -119,6 +127,22 @@ func reload_visual_texture() -> void:
 		_station_sprite.texture = TexturePackManager.get_texture(STATION_TEXTURE_PATH)
 	if _part_sprite != null:
 		_part_sprite.texture = TexturePackManager.get_texture(UTILITIES_TEXTURE_PATH if UTILITY_CELL_INDEX.has(building_id) else PARTS_TEXTURE_PATH)
+
+## Nudge direction for edge parts so their oriented side reads from above.
+func _edge_visual_offset() -> Vector2:
+	if layer != "edge":
+		return Vector2.ZERO
+	match orientation:
+		"north":
+			return Vector2(0.0, -EDGE_VISUAL_OFFSET)
+		"south":
+			return Vector2(0.0, EDGE_VISUAL_OFFSET)
+		"west":
+			return Vector2(-EDGE_VISUAL_OFFSET, 0.0)
+		"east":
+			return Vector2(EDGE_VISUAL_OFFSET, 0.0)
+		_:
+			return Vector2.ZERO
 
 ## [column, row] of this building's atlas cell, or (-1, -1) when it keeps the
 ## colored placeholder (no atlas cell, or the art sheet is not present yet).
@@ -158,15 +182,31 @@ func _color_for(item_id: String) -> Color:
 func _setup_collision() -> void:
 	var shape := CollisionShape2D.new()
 	var rect := RectangleShape2D.new()
-	rect.size = Vector2(TILE_SIZE - 4.0, TILE_SIZE - 4.0)
+	var center := Vector2(TILE_SIZE, TILE_SIZE) * 0.5
+	if layer == "edge" and blocks_movement:
+		# Edge walls occupy a strip along their oriented edge, so a room's
+		# own floor tile stays walkable and the same edge can't double-book.
+		var horizontal := orientation == "north" or orientation == "south" or orientation == ""
+		rect.size = Vector2(TILE_SIZE - 4.0, 8.0) if horizontal else Vector2(8.0, TILE_SIZE - 4.0)
+		match orientation:
+			"north", "":
+				center = Vector2(TILE_SIZE * 0.5, 4.0)
+			"south":
+				center = Vector2(TILE_SIZE * 0.5, TILE_SIZE - 4.0)
+			"west":
+				center = Vector2(4.0, TILE_SIZE * 0.5)
+			"east":
+				center = Vector2(TILE_SIZE - 4.0, TILE_SIZE * 0.5)
+	else:
+		rect.size = Vector2(TILE_SIZE - 4.0, TILE_SIZE - 4.0)
 	shape.shape = rect
-	shape.position = Vector2(TILE_SIZE, TILE_SIZE) * 0.5
+	shape.position = center
 	add_child(shape)
 	collision_layer = 1
 	collision_mask = 0
-	if not blocks_movement or story > 0:
-		# Upper stories are a cutaway construction plane; they should not block
-		# the player moving on the ground layer.
+	if not blocks_movement or story > 0 or layer == "overhead":
+		# Upper stories are a cutaway construction plane and roofs are pure
+		# presentation: neither may block the player's active-story movement.
 		collision_layer = 0
 
 ## Top-down cutaway: keep the current construction story crisp, fade the

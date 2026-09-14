@@ -151,6 +151,7 @@ func _ready() -> void:
 	player.status_effects = status_effects
 	building_manager.player = player
 	building_manager.item_database = item_database
+	building_manager.world_generator = world_generator
 	building_manager.building_placed.connect(_on_building_placed)
 	building_manager.building_removed.connect(_on_building_removed)
 	# HUD (health/hunger bars, seed label, optional debug readout).

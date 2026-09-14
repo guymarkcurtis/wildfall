@@ -1,6 +1,18 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **Active Build Plan M2 (2026-09-14, layered grid + save v8)**: new focused
+  suite `tests/test_building_placement.gd` **55/55 checks** (canonical edge
+  key normalization, layer coexistence + duplicate rejection, doubled-edge
+  rejection, door/window edge replacement with exact refund and fixture-over-
+  fixture refusal, direct-support validator incl. the 2×2 supported room and
+  the structure-tag veto, transactional failure reasons, orientation ignored
+  on non-rotatable parts, demolition refund, edge-strip vs. door collision,
+  v8 serialize/deserialize round-trip incl. `state`, and v7 flat-entry
+  migration). Full harness **438/0** (v8 version pin + layered-record
+  round-trip checks added), content suite 69/0, sandbox harness 0 failures,
+  900-frame live headless boot 0 script errors. Save format bumped to **v8**
+  (layered building records + optional `state`; v1–v7 keep loading).
 - **Active Build Plan M1 (2026-09-14, content foundation)**: full harness
   436 passed / 0 failed / 0 script errors; new focused suite
   `tests/test_building_content.gd` **69/69 checks** (registry discovery +

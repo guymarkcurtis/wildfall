@@ -1,6 +1,10 @@
-## Modular, story-aware building placement for Wildfall's top-down cutaway.
-## Each world tile can contain one structural part on each story (ground plus
-## three upper stories). The active story is the construction plane.
+## Layered, story-aware building placement for Wildfall's top-down cutaway.
+## Placement occupancy is a record index over canonical keys (six layers,
+## normalized tile edges — see BuildingRecord), so floors, walls, roofs, and
+## furniture coexist around one tile while an identical slot stays exclusive.
+## Placement and demolition are transactional: the whole footprint validates
+## before anything is consumed, and failures change nothing. All behaviour
+## comes from BuildingDefinition data — no item-id branches.
 class_name BuildingManager
 extends Node2D
 
@@ -10,9 +14,14 @@ const MAX_STORIES := 4
 const CRAFTING_STATION_IDS = ["campfire", "furnace", "workbench", "anvil"]
 const CRAFTING_STATION_RANGE := 72.0
 
-var buildings: Dictionary = {} # Vector3i(x, y, story) -> Building
+## Deterministic lookup priority for the ambiguous tile+story query.
+const LAYER_QUERY_PRIORITY := ["object", "connector", "floor", "ground", "edge", "overhead"]
+
+var records: Dictionary = {} # canonical key -> BuildingRecord (shared per footprint)
+var _record_list: Array[BuildingRecord] = [] # authoritative iteration set
 var definitions: Dictionary = {} # item_id -> BuildingDefinition resource
 var content_registry: BuildingContentRegistry = null
+var world_generator: WorldGenerator = null
 var build_mode := false
 var selected_item_id := ""
 var selected_story := 0
@@ -20,6 +29,10 @@ var selected_story := 0
 var player: Player = null
 var item_database: ItemDatabase = null
 var technology_system: TechnologySystem = null
+
+## Refund target for API-driven placement/demolition without a player
+## (test harnesses). Live play always refunds through player.inventory.
+var refund_inventory: InventoryComponent = null
 
 var _ghost: Polygon2D = null
 var _owned: PackedStringArray = []
@@ -148,78 +161,122 @@ func get_owned_building_items() -> Array[String]:
 func get_definition(item_id: String) -> Variant:
 	return definitions.get(item_id)
 
-func can_place(tile: Vector2i, story: int = selected_story) -> bool:
-	if selected_item_id == "" or story < 0 or story >= MAX_STORIES:
-		return false
-	if buildings.has(_cell(tile, story)):
-		return false
-	if player == null or player.inventory == null or not player.inventory.has_item(selected_item_id, 1):
-		return false
-	var definition: Variant = get_definition(selected_item_id)
-	if definition == null:
-		return false
-	if not _is_item_unlocked(selected_item_id):
-		return false
-	if story > 0 and bool(definition.get("requires_lower_support")) and not _has_lower_support(tile, story):
-		return false
-	return true
+# --- Occupancy queries ---
 
-## Place the selected structural part on the active construction story.
+## Every placed record (authoritative iteration set, no key duplicates).
+func get_all_records() -> Array[BuildingRecord]:
+	return _record_list.duplicate()
+
+## Every placed Building node (compatibility view for callers that only
+## iterate placed parts).
+func get_all_buildings() -> Array:
+	var result: Array = []
+	for record in _record_list:
+		if record.node != null and is_instance_valid(record.node):
+			result.append(record.node)
+	return result
+
+## The record occupying one exact slot (tile layers) or one canonical edge.
+func get_record_for_key(key: String) -> BuildingRecord:
+	return records.get(key) as BuildingRecord
+
+## Record on a specific layer/edge at a tile+story. Edge orientations are
+## normalized through the canonical key, so "east" finds the record placed
+## from the neighbouring tile's "west".
+func get_record_at(tile: Vector2i, story: int, layer: String, orientation: String = "") -> BuildingRecord:
+	if layer == "edge":
+		return records.get(BuildingRecord.canonical_edge_key(tile, story, orientation)) as BuildingRecord
+	return records.get(BuildingRecord.tile_key(tile, story, layer)) as BuildingRecord
+
+## Ambiguous tile+story query (compatibility): the topmost record by the
+## deterministic layer priority. New callers should prefer get_record_at.
+func get_building_at(tile: Vector2i, story: int = selected_story) -> Building:
+	var record := _top_record_at(tile, story)
+	return record.node if record != null else null
+
+func _top_record_at(tile: Vector2i, story: int) -> BuildingRecord:
+	for layer in LAYER_QUERY_PRIORITY:
+		var record := get_record_at(tile, story, layer)
+		if record != null:
+			return record
+	return null
+
+func get_building_count() -> int:
+	return _record_list.size()
+
+# --- Placement ---
+
+func can_place(tile: Vector2i, story: int = selected_story) -> bool:
+	return _placement_failure(selected_item_id, tile, story, _orientation_for_mouse(tile)) == ""
+
+## Place the selected structural part on the active construction story,
+## orienting edge parts to the nearest tile edge under the cursor.
 func try_place_at(tile: Vector2i) -> bool:
-	if not can_place(tile):
-		placement_failed.emit(_placement_failure_reason(tile, selected_story))
+	var orientation := _orientation_for_mouse(tile)
+	var reason := _placement_failure(selected_item_id, tile, selected_story, orientation)
+	if reason != "":
+		placement_failed.emit(reason)
 		return false
-	return place_building_item(selected_item_id, tile, null, selected_story)
+	return place_record(selected_item_id, tile, null, selected_story, orientation)
 
 ## Test/API placement. A story of -1 means the active construction plane.
+## Edge parts use `orientation` ("north"/"east"/"south"/"west"; "" defaults
+## to north). Consumes exactly one item on success.
 func place_building_item(item_id: String, tile: Vector2i, inventory: InventoryComponent = null, story: int = -1) -> bool:
+	return place_record(item_id, tile, inventory, story, "")
+
+## Full transactional placement: validate the complete footprint, then
+## reserve every key, consume the item, and spawn the node — or change
+## nothing and report the exact failure reason.
+func place_record(item_id: String, tile: Vector2i, inventory: InventoryComponent = null, story: int = -1, orientation: String = "") -> bool:
 	var target_story: int = selected_story if story < 0 else story
 	var inv: InventoryComponent = inventory if inventory != null else (player.inventory if player != null else null)
-	var definition: Variant = get_definition(item_id)
-	if inv == null or item_id == "" or definition == null or target_story < 0 or target_story >= MAX_STORIES:
+	var reason := _placement_failure_for(item_id, tile, target_story, orientation, inv)
+	if reason != "":
+		placement_failed.emit(reason)
 		return false
-	if not _is_item_unlocked(item_id):
-		return false
-	if buildings.has(_cell(tile, target_story)) or not inv.has_item(item_id, 1):
-		return false
-	if target_story > 0 and bool(definition.get("requires_lower_support")) and not _has_lower_support(tile, target_story):
-		return false
-	inv.remove_item(item_id, 1)
-	var display := str(definition.get("display_name"))
-	var building := Building.new()
-	building.setup(item_id, display, tile, int(definition.get("max_health")), target_story, definition)
-	building.building_destroyed.connect(_on_building_destroyed.bind(building))
-	add_child(building)
-	buildings[_cell(tile, target_story)] = building
+	var definition := get_definition(item_id) as BuildingDefinition
+	var record := _make_record(definition, item_id, tile, target_story,
+			_resolve_orientation(definition, orientation))
+	# Edge replacement: an edge fixture (door/window) takes over a plain
+	# wall's edge, refunding it exactly. Both policies are authored data.
+	var replaced: BuildingRecord = null
+	var keys := record.reserved_keys()
+	if record.layer == "edge":
+		var existing := records.get(keys[0]) as BuildingRecord
+		if existing != null:
+			replaced = existing
+	for key in keys:
+		records[key] = record
+	_record_list.append(record)
+	if inv != null:
+		inv.remove_item(item_id, 1)
+	if replaced != null:
+		_remove_record(replaced, true, inv)
+	_spawn_node(record)
 	_apply_cutaway()
 	building_placed.emit(item_id, tile)
 	return true
 
+# --- Demolition ---
+
 func demolish_at(tile: Vector2i, story: int = selected_story) -> bool:
-	var cell := _cell(tile, story)
-	if not buildings.has(cell):
+	var record := _top_record_at(tile, story)
+	if record == null:
 		return false
-	_remove_building(buildings[cell], true)
+	_remove_record(record, true)
 	return true
 
-func get_building_at(tile: Vector2i, story: int = selected_story) -> Building:
-	return buildings.get(_cell(tile, story)) as Building
-
-func get_building_count() -> int:
-	return buildings.size()
-
-## Ground-story stations are usable within this radius. Keeping this in the
-## building manager makes station craft checks follow placed/demolished/saved
-## buildings automatically instead of maintaining a second station registry.
 func get_nearby_station_ids(world_position: Vector2, interaction_range: float = CRAFTING_STATION_RANGE) -> PackedStringArray:
 	var nearby := PackedStringArray()
-	for candidate in buildings.values():
-		var building := candidate as Building
-		if building == null or not is_instance_valid(building) or building.story != 0 or not CRAFTING_STATION_IDS.has(building.building_id):
+	for record in _record_list:
+		if record.story != 0 or not CRAFTING_STATION_IDS.has(record.item_id):
 			continue
-		var station_center: Vector2 = building.global_position + Vector2(TILE_SIZE, TILE_SIZE) * 0.5
-		if station_center.distance_to(world_position) <= interaction_range and not nearby.has(building.building_id):
-			nearby.append(building.building_id)
+		if record.node == null or not is_instance_valid(record.node):
+			continue
+		var station_center: Vector2 = record.node.global_position + Vector2(TILE_SIZE, TILE_SIZE) * 0.5
+		if station_center.distance_to(world_position) <= interaction_range and not nearby.has(record.item_id):
+			nearby.append(record.item_id)
 	nearby.sort()
 	return nearby
 
@@ -227,23 +284,16 @@ func has_station_near(station_id: String, world_position: Vector2, interaction_r
 	return get_nearby_station_ids(world_position, interaction_range).has(station_id)
 
 func refresh_texture_pack() -> void:
-	for building in buildings.values():
-		if is_instance_valid(building) and building.has_method("reload_visual_texture"):
-			building.reload_visual_texture()
+	for record in _record_list:
+		if record.node != null and is_instance_valid(record.node) and record.node.has_method("reload_visual_texture"):
+			record.node.reload_visual_texture()
+
+# --- Save round-trip (v8 layered records) ---
 
 func serialize() -> Array:
 	var out: Array = []
-	for cell in buildings:
-		var building: Building = buildings[cell]
-		if not is_instance_valid(building):
-			continue
-		out.append({
-			"item_id": building.building_id,
-			"x": building.tile_coords.x,
-			"y": building.tile_coords.y,
-			"story": building.story,
-			"health": building.health
-		})
+	for record in _record_list:
+		out.append(record.serialize())
 	return out
 
 func deserialize(data: Variant) -> void:
@@ -253,94 +303,193 @@ func deserialize(data: Variant) -> void:
 	for entry in data:
 		if typeof(entry) != TYPE_DICTIONARY:
 			continue
+		var item_id := str(entry.get("item_id", ""))
 		var tile := Vector2i(int(entry.get("x", 0)), int(entry.get("y", 0)))
-		restore_building(str(entry.get("item_id", "")), tile, int(entry.get("health", 50)), int(entry.get("story", 0)))
+		restore_building(item_id, tile, int(entry.get("health", 50)), int(entry.get("story", 0)),
+				str(entry.get("layer", "")), str(entry.get("orientation", "")), entry)
 
-## Spawn a saved building without consuming inventory.
-func restore_building(item_id: String, tile: Vector2i, health: int = 50, story: int = 0) -> bool:
-	var definition: Variant = get_definition(item_id)
-	if definition == null or buildings.has(_cell(tile, story)):
+## Spawn a saved building without consuming inventory. layer/orientation/state
+## default from the definition when the save predates v8.
+func restore_building(item_id: String, tile: Vector2i, health: int = 50, story: int = 0,
+		layer: String = "", orientation: String = "", entry: Dictionary = {}) -> bool:
+	var definition := get_definition(item_id) as BuildingDefinition
+	if definition == null:
 		return false
-	var building := Building.new()
-	building.setup(item_id, str(definition.get("display_name")), tile, int(definition.get("max_health")), story, definition)
-	building.health = clampi(health, 0, building.max_health)
-	building.building_destroyed.connect(_on_building_destroyed.bind(building))
-	add_child(building)
-	buildings[_cell(tile, story)] = building
+	var record := BuildingRecord.new()
+	record.deserialize(entry, definition)
+	record.item_id = item_id
+	record.tile = tile
+	record.story = story
+	record.health = clampi(health, 0, int(definition.max_health))
+	if not layer.is_empty():
+		record.layer = layer
+	if not orientation.is_empty():
+		record.orientation = orientation
+	var keys := record.reserved_keys()
+	for key in keys:
+		if records.has(key):
+			return false # occupied slot in the save; skip rather than merge
+	for key in keys:
+		records[key] = record
+	_record_list.append(record)
+	_spawn_node(record)
 	_apply_cutaway()
 	building_placed.emit(item_id, tile)
 	return true
 
 func clear_all() -> void:
-	for building in buildings.values():
-		if is_instance_valid(building):
-			building.queue_free()
-	buildings.clear()
+	for record in _record_list:
+		if record.node != null and is_instance_valid(record.node):
+			record.node.queue_free()
+	records.clear()
+	_record_list.clear()
 	set_build_mode(false)
 
-func _demolish_near_player() -> void:
-	if player == null:
-		return
-	var nearest: Building = null
-	var best: float = 56.0
-	for building in buildings.values():
-		if not is_instance_valid(building) or building.story != selected_story:
-			continue
-		var dist: float = building.position.distance_to(player.global_position)
-		if dist < best:
-			best = dist
-			nearest = building
-	if nearest != null:
-		_remove_building(nearest, true)
+# --- Transaction internals ---
 
-func _remove_building(building: Building, refund: bool) -> void:
-	var cell := _cell(building.tile_coords, building.story)
-	var item_id := building.building_id
-	buildings.erase(cell)
-	if refund and player != null and player.inventory != null and item_id != "":
-		player.inventory.add_item(item_id, 1)
-	building_removed.emit(item_id, building.tile_coords)
-	if is_instance_valid(building):
-		building.queue_free()
+## The exact placement failure reason, or "" when the placement would
+## succeed. Everything is checked before anything mutates.
+func _placement_failure(item_id: String, tile: Vector2i, story: int, orientation: String) -> String:
+	var inv: InventoryComponent = player.inventory if player != null else null
+	return _placement_failure_for(item_id, tile, story, orientation, inv)
 
-func _on_building_destroyed(building: Building) -> void:
-	_remove_building(building, false)
-
-func _has_lower_support(tile: Vector2i, story: int) -> bool:
-	var lower := get_building_at(tile, story - 1)
-	if lower == null:
-		return false
-	return ["foundation", "floor", "wall", "pillar", "stair", "ramp"].has(lower.part_type)
-
-func _placement_failure_reason(tile: Vector2i, story: int) -> String:
-	if selected_item_id == "":
+func _placement_failure_for(item_id: String, tile: Vector2i, story: int, orientation: String, inv: InventoryComponent) -> String:
+	if item_id == "":
 		return "No building part selected"
-	if buildings.has(_cell(tile, story)):
-		return "That story tile is already occupied"
-	if player == null or player.inventory == null or not player.inventory.has_item(selected_item_id, 1):
-		return "You do not have that building part"
-	var definition: Variant = get_definition(selected_item_id)
+	if story < 0 or story >= MAX_STORIES:
+		return "That story is out of range"
+	var definition := get_definition(item_id) as BuildingDefinition
 	if definition == null:
 		return "That item is not a placeable building part"
-	if not _is_item_unlocked(selected_item_id):
-		var technology_id := str(definition.get("technology_id"))
+	if inv == null or not inv.has_item(item_id, 1):
+		return "You do not have that building part"
+	if not _is_item_unlocked(item_id):
+		var technology_id := str(definition.technology_id)
 		var technology_name := technology_id.replace("_", " ").capitalize()
 		if technology_system != null:
 			var technology := technology_system.get_definition(technology_id)
 			if technology != null:
 				technology_name = technology.display_name
 		return "Research %s before building this" % technology_name
-	if story > 0 and bool(definition.get("requires_lower_support")) and not _has_lower_support(tile, story):
-		return "Upper stories need a floor, foundation, wall, pillar, stair, or ramp below"
-	return "That part cannot be placed here"
+	var resolved_orientation := _resolve_orientation(definition, orientation)
+	var probe := _make_record(definition, item_id, tile, story, resolved_orientation)
+	var keys := probe.reserved_keys()
+	for key in keys:
+		var existing := records.get(key) as BuildingRecord
+		if existing == null:
+			continue
+		if probe.layer == "edge" and str(definition.occupancy_replacement) == "edge_fixture" \
+				and existing.definition != null \
+				and str(existing.definition.occupancy_replacement) == "none":
+			continue # the fixture will replace this wall
+		return "That slot is already occupied"
+	if story == 0 and probe.layer == "ground" and not _terrain_is_buildable(tile):
+		return "Foundations need solid land, not water"
+	if story > 0 and bool(definition.requires_lower_support) and not _support_ok(probe):
+		var required := definition.required_support_tags
+		if required.is_empty():
+			return "Upper stories need a placed part directly below"
+		return "Upper stories need %s support directly below" % ", ".join(required)
+	return ""
+
+## Orientation resolved against the definition: non-orientable parts always
+## get the single default; edge parts keep only allowed orientations.
+func _resolve_orientation(definition: BuildingDefinition, orientation: String) -> String:
+	if definition.allowed_orientations.is_empty():
+		return ""
+	return orientation if definition.allowed_orientations.has(orientation) else "north"
+
+func _make_record(definition: BuildingDefinition, item_id: String, tile: Vector2i, story: int, orientation: String) -> BuildingRecord:
+	var record := BuildingRecord.new()
+	record.definition = definition
+	record.item_id = item_id
+	record.tile = tile
+	record.story = story
+	record.footprint = Vector2i(maxi(definition.width, 1), maxi(definition.height, 1))
+	record.layer = definition.effective_placement_layer()
+	record.orientation = orientation
+	record.health = int(definition.max_health)
+	return record
+
+## Conservative direct-support rule: every footprint cell needs a placed
+## record directly below whose definition provides one of the required tags.
+func _support_ok(probe: BuildingRecord) -> bool:
+	var required: PackedStringArray = probe.definition.required_support_tags
+	for dx in range(probe.footprint.x):
+		for dy in range(probe.footprint.y):
+			var cell := probe.tile + Vector2i(dx, dy)
+			var supported := false
+			for layer in LAYER_QUERY_PRIORITY:
+				var below := get_record_at(cell, probe.story - 1, layer)
+				if below == null or below.definition == null:
+					continue
+				if required.is_empty():
+					supported = true
+				else:
+					for tag in required:
+						if below.definition.support_tags.has(tag):
+							supported = true
+				if supported:
+					break
+			if not supported:
+				return false
+	return true
+
+func _terrain_is_buildable(tile: Vector2i) -> bool:
+	if world_generator == null:
+		return true # test contexts without a world; terrain gating is live-game behaviour
+	var center := Vector2(tile) * float(TILE_SIZE) + Vector2(TILE_SIZE, TILE_SIZE) * 0.5
+	var water_class := world_generator.get_water_class_at_world(int(center.x), int(center.y))
+	return water_class == "land" or water_class == "shore"
+
+func _remove_record(record: BuildingRecord, refund: bool, refund_to: InventoryComponent = null) -> void:
+	for key in record.reserved_keys():
+		if records.get(key) == record:
+			records.erase(key)
+	_record_list.erase(record)
+	var target := refund_to
+	if target == null and player != null:
+		target = player.inventory
+	if target == null:
+		target = refund_inventory
+	if refund and target != null and record.item_id != "":
+		target.add_item(record.item_id, 1)
+	building_removed.emit(record.item_id, record.tile)
+	if record.node != null and is_instance_valid(record.node):
+		record.node.queue_free()
+	record.node = null
+
+func _demolish_near_player() -> void:
+	if player == null:
+		return
+	var nearest: BuildingRecord = null
+	var best: float = 56.0
+	for record in _record_list:
+		if record.node == null or not is_instance_valid(record.node) or record.story != selected_story:
+			continue
+		var dist: float = record.node.position.distance_to(player.global_position)
+		if dist < best:
+			best = dist
+			nearest = record
+	if nearest != null:
+		_remove_record(nearest, true)
+
+## Orientation for a live edge placement: the nearest tile edge under the
+## cursor (deterministic; API placements default to north).
+func _orientation_for_mouse(tile: Vector2i) -> String:
+	var definition := get_definition(selected_item_id) as BuildingDefinition
+	if definition == null or definition.allowed_orientations.is_empty():
+		return ""
+	var world := player.get_global_mouse_position() if player != null else Vector2(tile) * float(TILE_SIZE)
+	var center_offset := world - Vector2(tile) * float(TILE_SIZE) - Vector2(TILE_SIZE, TILE_SIZE) * 0.5
+	if absf(center_offset.x) >= absf(center_offset.y):
+		return "east" if center_offset.x > 0.0 else "west"
+	return "south" if center_offset.y > 0.0 else "north"
 
 func _apply_cutaway() -> void:
-	for building in buildings.values():
-		if is_instance_valid(building):
-			building.set_cutaway_story(selected_story)
-
-func _cell(tile: Vector2i, story: int) -> Vector3i:
-	return Vector3i(tile.x, tile.y, story)
+	for record in _record_list:
+		if record.node != null and is_instance_valid(record.node):
+			record.node.set_cutaway_story(selected_story)
 
 func _mouse_tile() -> Vector2i:
 	var world := player.get_global_mouse_position() if player != null else Vector2.ZERO
@@ -374,3 +523,15 @@ func _load_definitions() -> void:
 	definitions = content_registry.definitions
 	for message in content_registry.validation_errors:
 		push_error("Building content: %s" % message)
+
+func _spawn_node(record: BuildingRecord) -> void:
+	var building := Building.new()
+	building.setup(record.item_id, record.display_name(), record.tile, record.health,
+			record.story, record.definition, record.layer, record.orientation)
+	building.placement_key = record.placement_key()
+	building.building_destroyed.connect(_on_building_destroyed.bind(record))
+	add_child(building)
+	record.node = building
+
+func _on_building_destroyed(record: BuildingRecord) -> void:
+	_remove_record(record, false)

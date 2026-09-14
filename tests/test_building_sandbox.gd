@@ -28,7 +28,7 @@ func _run() -> void:
 	var buildings: BuildingManager = _main.get_node("BuildingManager") as BuildingManager
 	for station_id in BuildingManager.CRAFTING_STATION_IDS:
 		var found := false
-		for building in buildings.buildings.values():
+		for building in buildings.get_all_buildings():
 			if is_instance_valid(building) and building.building_id == station_id:
 				found = true
 				break

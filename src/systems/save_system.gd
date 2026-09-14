@@ -7,7 +7,7 @@
 class_name SaveSystem
 extends Node
 
-const SAVE_VERSION: int = 7
+const SAVE_VERSION: int = 8
 const FORMAT_ID: String = "wildfall-save"
 const SAVE_DIR: String = "user://saves"
 const SAVE_PATH: String = "user://saves/slot_1.json"
