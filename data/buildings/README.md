@@ -66,3 +66,9 @@ light, and appearance profiles entirely through Resource references.
 The Tier 2 `stone_gate`, `stone_railing`, `stone_patio`, `stone_path`, and
 `stone_planter` follow the exact same layer and replacement vocabulary with
 the `stone_building` research gate; existing stone IDs are not renamed.
+
+The first reinforced family (`reinforced_floor`, `reinforced_wall`,
+`metal_roof`, `metal_gate`, `metal_railing`, `metal_grate`) uses only the
+existing `metalworking` gate and placement vocabulary. It is content, not a
+parallel metal-building system; balance values remain subject to M8 sandbox
+playtesting.

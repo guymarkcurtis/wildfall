@@ -108,6 +108,12 @@ func _load_items() -> void:
 	items["stone_patio"] = _create_item("stone_patio", "Stone Patio", "building", 32, 3.0)
 	items["stone_path"] = _create_item("stone_path", "Stone Path", "building", 32, 2.0)
 	items["stone_planter"] = _create_item("stone_planter", "Stone Planter", "building", 16, 4.0)
+	items["reinforced_floor"] = _create_item("reinforced_floor", "Reinforced Floor", "building", 32, 4.0)
+	items["reinforced_wall"] = _create_item("reinforced_wall", "Reinforced Wall", "building", 16, 5.0)
+	items["metal_roof"] = _create_item("metal_roof", "Metal Roof", "building", 24, 4.5)
+	items["metal_gate"] = _create_item("metal_gate", "Metal Gate", "building", 16, 4.5)
+	items["metal_railing"] = _create_item("metal_railing", "Metal Railing", "building", 32, 3.0)
+	items["metal_grate"] = _create_item("metal_grate", "Metal Grate", "building", 32, 4.0)
 	
 	# Special
 	items["seed_wheat"] = _create_item("seed_wheat", "Wheat Seed", "resource", 64, 0.1)
@@ -373,6 +379,12 @@ func _load_recipes() -> void:
 	recipes["stone_planter"] = _create_recipe("stone_planter", "stone_planter", 1, "", {
 		"stone_brick": 3
 	})
+	recipes["reinforced_floor"] = _create_recipe("reinforced_floor", "reinforced_floor", 1, "", {"iron_ingot": 2})
+	recipes["reinforced_wall"] = _create_recipe("reinforced_wall", "reinforced_wall", 1, "", {"iron_ingot": 4})
+	recipes["metal_roof"] = _create_recipe("metal_roof", "metal_roof", 1, "", {"iron_ingot": 3})
+	recipes["metal_gate"] = _create_recipe("metal_gate", "metal_gate", 1, "", {"iron_ingot": 3})
+	recipes["metal_railing"] = _create_recipe("metal_railing", "metal_railing", 1, "", {"iron_ingot": 1})
+	recipes["metal_grate"] = _create_recipe("metal_grate", "metal_grate", 1, "", {"iron_ingot": 2})
 	
 	# Advanced
 	recipes["potion_health"] = _create_recipe("potion_health", "potion_health", 1, "furnace", {
@@ -414,7 +426,8 @@ func _load_recipes() -> void:
 	], "stone_building")
 	_set_recipe_technology([
 		"iron_ingot", "copper_ingot", "bronze_ingot", "iron_axe", "iron_pickaxe",
-		"iron_sword", "anvil"
+		"iron_sword", "anvil", "reinforced_floor", "reinforced_wall", "metal_roof",
+		"metal_gate", "metal_railing", "metal_grate"
 	], "metalworking")
 
 ## Create a basic item.

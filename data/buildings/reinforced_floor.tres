@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="1_def"]
+
+[resource]
+script = ExtResource("1_def")
+id = "reinforced_floor"
+display_name = "Reinforced Floor"
+part_type = "floor"
+tier = "metal"
+technology_id = "metalworking"
+build_cost = Array[Dictionary]([{
+"item_id": "iron_ingot",
+"quantity": 2
+}])
+max_health = 230
+support_tags = PackedStringArray("structure")
+required_support_tags = PackedStringArray("structure")
+visual_family_id = "metal"

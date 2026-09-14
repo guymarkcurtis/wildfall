@@ -2,13 +2,14 @@
 
 ## Test Run Summary
 - **Active Build Plan M8 checkpoint (2026-09-14, homestead catalogue data)**:
-  `tests/test_building_content.gd` **86/86 checks**, placement **61/61**, and
+  `tests/test_building_content.gd` **93/93 checks**, placement **61/61**, and
   editor/parser exit 0. The registry now discovers 40 definitions. Timber and
   stone boundary/exterior/interior assets have stable item IDs, reachable
   research-gated recipes, and sandbox coverage through the database-driven
   Supply Store. Fences and railings occupy canonical edge slots; their gates
-  use the generic edge-fixture replacement rule. M8 remains in progress
-  pending reinforced content, remaining furniture, and final art.
+  use the generic edge-fixture replacement rule. The first reinforced family
+  is gated behind `metalworking`. M8 remains in progress pending sandbox
+  balance, remaining furniture, and final art.
 - **Active Build Plan M7 (2026-09-14, fuel/on-off/local lighting)**: focused
   `tests/test_station_crafting.gd` **22/22 checks**, content **70/70**, and
   editor/parser exit 0. `FuelConsumer` accepts only profile-tagged fuel while

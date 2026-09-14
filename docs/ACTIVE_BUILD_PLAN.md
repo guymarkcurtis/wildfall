@@ -417,8 +417,9 @@ fuel cannot be duplicated; night lighting is readable and responsive.
 fence gates, railings, porch/deck/path surfaces, planter boxes, tables, and a
 fuelled yard lantern as ordinary content assets. The matching stone gate,
 railing, patio/path, and planter now form the first Tier 2 yard slice.
-Reinforced families, the remaining furniture catalogue, and final art remain
-below.*
+The first Tier 3 reinforced floor/wall/roof, gate, railing, and grate are
+gated behind `metalworking`; their sandbox balance, remaining furniture
+catalogue, and final art remain below.*
 
 - [ ] Tier 1 timber complete: structural, stair/rail, boundary, exterior, and
       initial interior sets per the catalogue table in the building plan.
