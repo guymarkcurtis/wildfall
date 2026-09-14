@@ -15,6 +15,8 @@ func initialize(player_ref: Player) -> void:
 	player = player_ref
 	_load_technologies()
 	_reset_to_defaults()
+	if GameSession.is_building_sandbox():
+		unlock_all_free()
 
 func _load_technologies() -> void:
 	technologies.clear()
@@ -114,6 +116,12 @@ func unlock_free(technology_id: String) -> bool:
 	technology_unlocked.emit(technology_id)
 	return true
 
+## Sandbox is intentionally a permanent research-complete test surface. This
+## is separate from Creative so its crafting path can still consume supplies.
+func unlock_all_free() -> void:
+	for technology_id in technology_order:
+		unlocked[technology_id] = true
+
 func serialize() -> Dictionary:
 	return {"unlocked": Array(get_unlocked_ids())}
 
@@ -125,3 +133,5 @@ func deserialize(data: Variant) -> void:
 		var id := str(technology_id)
 		if technologies.has(id):
 			unlocked[id] = true
+	if GameSession.is_building_sandbox():
+		unlock_all_free()

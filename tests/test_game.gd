@@ -248,46 +248,39 @@ func _run_checks() -> void:
 	if world_map != null:
 		world_map.toggle()
 		_check(world_map.is_open() and world_map.get_node_or_null("Minimap") != null
-				and world_map.get_node_or_null("MapWindow/Column") != null
-				and bool(world_map.get("_marker_scan_active")),
-			"Mappable full-screen view opens alongside the always-present minimap")
+				and world_map.get_node_or_null("MapWindow/Column") != null,
+			"Exploration map opens alongside the always-present minimap")
+		var map_window: Control = world_map.get_node_or_null("MapWindow") as Control
+		var viewport_center := main.get_viewport().get_visible_rect().get_center()
+		var panel_center := map_window.get_global_rect().get_center() if map_window != null else Vector2.ZERO
+		_check(map_window != null and panel_center.distance_to(viewport_center) < 1.0,
+			"World map panel is centred in the viewport (%s, %s vs %s)" % [str(map_window.get_global_rect() if map_window != null else Rect2()), str(panel_center), str(viewport_center)])
 		_check(player.call("_ui_blocks_world_input"), "Open world map blocks player movement and world actions")
-		# The real M-key path evaluates sparse anchors under a per-frame budget.
-		# Drain those slices explicitly in the headless harness before inspecting
-		# the complete result; querying the synchronous tool API would otherwise
-		# bypass the performance behavior this regression is meant to cover.
-		while bool(world_map.get("_marker_scan_active")):
-			world_map.call("_process_marker_scan")
-		var cave_marker_count := world_map.get_cave_marker_count()
-		_check(cave_marker_count > 0,
-			"World map exposes deterministic cave markers across the finite world (%d caves)" % cave_marker_count)
-		var map_markers: Array = world_map.get("_markers") as Array
-		var first_cave: Dictionary = {}
-		for marker_variant in map_markers:
-			var marker: Dictionary = marker_variant
-			if not str(marker.get("cave_id", "")).is_empty():
-				first_cave = marker
-				break
-		var cave_tile := Vector2i(int(first_cave.get("x", 0)), int(first_cave.get("y", 0)))
-		var cave_chunk := Vector2i(floori(float(cave_tile.x) / float(world_config.chunk_size_tiles)),
-				floori(float(cave_tile.y) / float(world_config.chunk_size_tiles)))
-		var cave_payload: Dictionary = world_gen.generate_chunk(cave_chunk)
-		var map_candidate_matches_chunk := false
-		for candidate in cave_payload.get("poi_candidates", []):
-			if str(candidate.get("cave_id", "")) == str(first_cave.get("cave_id", "")):
-				map_candidate_matches_chunk = true
-				break
-		_check(not first_cave.is_empty() and map_candidate_matches_chunk,
-			"Map cave marker matches the POI candidate emitted when its chunk streams in")
-		world_map.set_waypoint(cave_tile, "Cave")
-		_check(not first_cave.is_empty() and world_map.has_waypoint() and world_map.get_waypoint() == cave_tile,
-			"Selecting a cave map marker sets a waypoint rendered on the minimap")
+		_check(world_map.get_revealed_chunk_count() > 0 and world_map.get_revealed_chunk_count() <= 25,
+			"Map reveals only the compact loaded chunk neighbourhood around the player")
+		var known_before := world_map.get_known_marker_count()
+		var sample_chunk: Vector2i = chunk_system.get_player_chunk() + Vector2i(10, 10)
+		var sample_tile: Vector2i = sample_chunk * world_config.chunk_size_tiles + Vector2i(2, 2)
+		world_map.reveal_chunk_pois(sample_chunk, {"poi_candidates": [{
+			"poi_id": "map_test_marker", "poi_category": "landmark", "poi_name": "Survey Marker",
+			"cave_type_id": "", "cave_id": "", "x": sample_tile.x, "y": sample_tile.y, "biome": "grassland"
+		}]})
+		_check(world_map.get_known_marker_count() == known_before + 1,
+			"Map adds POIs from a newly revealed chunk without a whole-world scan")
+		var map_memory: Dictionary = world_map.serialize_exploration()
+		world_map.set_world_seed(-1)
+		world_map.deserialize_exploration(map_memory)
+		_check(world_map.get_known_marker_count() == known_before + 1 and world_map.get_revealed_chunk_count() > 0,
+			"Explored POIs and empty revealed chunks survive map save/load state")
+		world_map.set_waypoint(sample_tile, "Survey Marker")
+		_check(world_map.has_waypoint() and world_map.get_waypoint() == sample_tile,
+			"Selecting a revealed map marker sets a waypoint rendered on the minimap")
 		var visible_before_filter := world_map.get_visible_marker_count()
-		world_map.set_marker_filter("caves", false)
-		_check(not world_map.is_marker_filter_enabled("caves")
+		world_map.set_marker_filter("poi_landmark", false)
+		_check(not world_map.is_marker_filter_enabled("poi_landmark")
 				and world_map.get_visible_marker_count() < visible_before_filter,
-			"Map legend can hide cave markers without clearing the selected waypoint")
-		world_map.set_marker_filter("caves", true)
+			"Map legend can hide revealed POIs without clearing the selected waypoint")
+		world_map.set_marker_filter("poi_landmark", true)
 		world_map.clear_waypoint()
 		_check(not world_map.has_waypoint(), "Map can clear a selected waypoint")
 		world_map.toggle()
@@ -2030,6 +2023,7 @@ func _run_checks() -> void:
 	_check(technology_buildings.place_building_item("wooden_wall", saved_building_tile, player.inventory),
 		"Placed building is ready for save/load coverage")
 	player.global_position = Vector2(123.0, -77.0)
+	var known_pois_before_save := world_map.get_known_marker_count() if world_map != null else 0
 	var ok_save: bool = main.call("save_game")
 	_check(ok_save, "save_game() succeeds (player at %s)" % str(player.global_position))
 	player.global_position = Vector2(50.0, 50.0)  # simulate drift away from saved position
@@ -2050,6 +2044,8 @@ func _run_checks() -> void:
 	main.call("_spawn_creatures_for_chunk", destroyed_creature_chunk)
 	_check(player.global_position.distance_to(Vector2(123.0, -77.0)) < 1.0, \
 		"Player position restored from save (%s)" % str(player.global_position))
+	_check(world_map != null and world_map.get_known_marker_count() == known_pois_before_save,
+		"Explored POI map knowledge is restored without rescanning the world")
 	_check(player.get_hotbar_items()[8] == "wood", "Saved quick-bar assignment is restored on load")
 	_check(technology_system.is_unlocked("stone_building"), "Saved technology research is restored on load")
 	_check(not resource_spawner.has_resource(destroyed_resource_tile),
@@ -2117,6 +2113,15 @@ func _run_checks() -> void:
 			"HUD exposes a consistent navigation ribbon for the main gameplay screens")
 	var camera: CameraController = camera_controller as CameraController
 	var player_ent: Player = player as Player
+	player_ent.clear_aim_lock()
+	player_ent.call("_update_aim", Vector2.DOWN, false)
+	_check(player_ent.get_aim_direction().dot(Vector2.DOWN) > 0.99 and not bool(player_ent.get("_pointer_facing_active")),
+		"Keyboard movement controls the player's facing direction")
+	Input.action_press("fire")
+	player_ent.call("_update_aim", Vector2.ZERO, false)
+	Input.action_release("fire")
+	_check(bool(player_ent.get("_pointer_facing_active")),
+		"Clicking enables pointer-facing while the player is stationary")
 	camera.rotate_view(PI * 0.5)
 	_check(abs(camera.rotation - PI * 0.5) < 0.01, "Camera rotate_view applies radians")
 	camera.reset_view()
@@ -2338,7 +2343,7 @@ func _run_checks() -> void:
 	SaveSystem.set_autosave_enabled(prev_auto)
 
 	# ------------------------------------------------- tool durability
-	_check(SaveSystem.SAVE_VERSION == 6, "Save format v6 records the world generation version (carrying forward v5 tool durability)")
+	_check(SaveSystem.SAVE_VERSION == 7, "Save format v7 persists explored POI map knowledge (carrying forward generation and durability data)")
 	var all_durations: Dictionary = item_database.get_all_durations()
 	_check(all_durations.size() > 0, "Item database knows which items are durable")
 	_check(int(all_durations.get("wooden_axe", 0)) == 50, "Wooden axe is defined at 50 durability")

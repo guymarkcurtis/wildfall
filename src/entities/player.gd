@@ -39,6 +39,9 @@ var status_effects: StatusEffectSystem = null
 
 var _aim_dir: Vector2 = Vector2.RIGHT
 var _aim_locked: bool = false
+## Keyboard movement owns facing until the player intentionally clicks to aim
+## at the pointer. A later movement input takes facing back immediately.
+var _pointer_facing_active: bool = false
 var _fire_cooldown: float = 0.0
 var _jump_remaining: float = 0.0
 var _jump_cooldown: float = 0.0
@@ -99,8 +102,9 @@ func _spawn_at(position: Vector2) -> void:
 func _physics_process(delta: float) -> void:
 	_fire_cooldown = maxf(0.0, _fire_cooldown - delta)
 	_jump_cooldown = maxf(0.0, _jump_cooldown - delta)
-	_update_aim()
 	var ui_blocks_world := _ui_blocks_world_input()
+	var direction: Vector2 = get_move_vector() if not ui_blocks_world else Vector2.ZERO
+	_update_aim(direction, ui_blocks_world)
 	if Input.is_action_just_pressed("jump") and not ui_blocks_world:
 		try_jump()
 
@@ -110,7 +114,6 @@ func _physics_process(delta: float) -> void:
 	elif ui_blocks_world:
 		velocity = Vector2.ZERO
 	else:
-		var direction: Vector2 = get_move_vector()
 		var speed: float = MOVE_SPEED
 		if Input.is_action_pressed("sprint") and direction != Vector2.ZERO:
 			speed = SPRINT_SPEED
@@ -176,6 +179,7 @@ func set_aim_locked(dir: Vector2) -> void:
 
 func clear_aim_lock() -> void:
 	_aim_locked = false
+	_pointer_facing_active = false
 
 ## A short, collision-respecting hop in the current aim direction. It is an
 ## evasive traversal move, not a way to bypass water or terrain collision.
@@ -194,6 +198,8 @@ func is_jumping() -> bool:
 
 ## Update hunger over time.
 func _process(delta: float) -> void:
+	if GameSession.is_building_sandbox():
+		return
 	if hunger_component:
 		hunger_component.lose_hunger(HUNGER_RATE * delta)
 		hunger_component.apply_starvation(health_component, delta)
@@ -475,13 +481,25 @@ func reload_visual_texture() -> void:
 	if character_visual != null:
 		character_visual.reload_texture_pack()
 
-func _update_aim() -> void:
+func _update_aim(movement_direction: Vector2 = Vector2.ZERO, ui_blocks_world: bool = false) -> void:
 	if not _aim_locked:
-		var to_mouse: Vector2 = get_global_mouse_position() - global_position
-		if to_mouse.length() > 1.0:
-			_aim_dir = to_mouse.normalized()
+		if movement_direction != Vector2.ZERO:
+			# Movement is the default look direction. This makes the authored
+			# directional art follow WASD without cursor drift changing the pose.
+			_pointer_facing_active = false
+			_aim_dir = movement_direction.normalized()
+		elif not ui_blocks_world and Input.is_action_just_pressed("fire"):
+			_pointer_facing_active = true
+			_set_aim_to_pointer()
+		elif _pointer_facing_active:
+			_set_aim_to_pointer()
 	if _facing:
 		_facing.rotation = _aim_dir.angle()
+
+func _set_aim_to_pointer() -> void:
+	var to_mouse: Vector2 = get_global_mouse_position() - global_position
+	if to_mouse.length() > 1.0:
+		_aim_dir = to_mouse.normalized()
 
 func _fire_ranged() -> void:
 	if _ui_blocks_world_input():

@@ -1,4 +1,4 @@
-[gd_scene load_steps=32 format=3]
+[gd_scene load_steps=34 format=3]
 
 [ext_resource type="Script" path="res://src/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://src/core/game_event_bus.gd" id="2_eventbus"]
@@ -31,6 +31,8 @@
 [ext_resource type="Script" path="res://src/systems/mission_manager.gd" id="29_missions"]
 [ext_resource type="Script" path="res://src/ui/mission_panel.gd" id="30_mission_panel"]
 [ext_resource type="Script" path="res://src/ui/world_map.gd" id="31_world_map"]
+[ext_resource type="Script" path="res://src/ui/sandbox_store_panel.gd" id="32_sandbox_store"]
+[ext_resource type="Script" path="res://src/ui/sandbox_save_toolbar.gd" id="33_sandbox_toolbar"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -227,6 +229,23 @@ offset_right = 390.0
 offset_bottom = 636.0
 visible = false
 script = ExtResource("11_craft")
+
+[node name="SandboxStorePanel" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("32_sandbox_store")
+
+[node name="SandboxSaveToolbar" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 10
+anchor_left = 0.5
+anchor_right = 0.5
+grow_horizontal = 2
+script = ExtResource("33_sandbox_toolbar")
 
 [node name="Title" type="Label" parent="HUD/CraftingPanel"]
 layout_mode = 1

@@ -17,6 +17,7 @@ const CHUNK_SIZE: int = 16
 const INITIAL_CHUNK_RADIUS: int = 3
 const CAVE_SPACE_SCENE := preload("res://scenes/cave_space.tscn")
 const PICKUP_ASSET_ROOT := "res://assets/items/pickups"
+const BUILDING_SANDBOX_CONFIG := preload("res://data/world/building_sandbox_world_generation_config.tres")
 # Cave spaces share the runtime scene tree but live outside the finite surface
 # coordinate range. This keeps surface physics and streamed content separate.
 const CAVE_SPACE_ORIGIN := Vector2(1000000.0, 1000000.0)
@@ -49,6 +50,8 @@ const CAVE_SPACE_ORIGIN := Vector2(1000000.0, 1000000.0)
 @onready var world_modulate: CanvasModulate = $WorldModulate
 @onready var pause_menu: PauseMenu = $PauseMenu
 @onready var performance_overlay: PerformanceOverlay = $PerformanceOverlay
+@onready var sandbox_store_panel: SandboxStorePanel = $HUD/SandboxStorePanel
+@onready var sandbox_save_toolbar: SandboxSaveToolbar = $HUD/SandboxSaveToolbar
 
 var _world_seed: int = 0
 var _debug_enabled: bool = false
@@ -101,6 +104,7 @@ var _cave_changes: Dictionary = {}
 var _pending_chunk_visuals: Array[Vector2i] = []
 var _world_info_elapsed := 0.0
 var _last_crafting_station_signature := ""
+var _sandbox_store: SandboxSupplyStore = null
 
 func _ready() -> void:
 	# The game is designed around a smooth 60 Hz simulation. Running uncapped
@@ -153,7 +157,7 @@ func _ready() -> void:
 	hud.set_player(player)
 	hud.set_seed(_world_seed)
 	if world_map != null:
-		world_map.configure(world_generator, player)
+		world_map.configure(world_generator, player, chunk_system)
 		world_map.waypoint_changed.connect(_on_map_waypoint_changed)
 
 	# Initialize the item database BEFORE the first refresh: the crafting
@@ -186,6 +190,7 @@ func _ready() -> void:
 				stack_sizes[str(item_id)] = int(item_def.stack_size)
 		player.inventory.set_stack_sizes(stack_sizes)
 	player.inventory.set_item_durations(item_database.get_all_durations())
+	_apply_game_mode_presentation()
 
 	# SeedInput._ready already emitted its own random seed (before the
 	# connections above existed). Push Main's chosen seed so the world is
@@ -198,6 +203,8 @@ func _ready() -> void:
 		seed_input.set_seed(_world_seed)
 
 	_refresh_ui()
+	if sandbox_save_toolbar != null:
+		sandbox_save_toolbar.configure(self)
 	print("Main scene ready. Seed: %d  Mode: %s" % [_world_seed, GameSession.mode_label()])
 
 ## SeedInput wants the world (re)generated with a new seed.
@@ -264,7 +271,8 @@ func _generate_world(seed: int) -> void:
 	if building_manager:
 		building_manager.clear_all()
 
-	world_generator.initialize(seed)
+	var config_override: WorldGenerationConfig = BUILDING_SANDBOX_CONFIG if GameSession.is_building_sandbox() else null
+	world_generator.initialize(seed, config_override)
 	resource_spawner.initialize(seed)
 	creature_spawner.initialize(seed)
 	chunk_system.initialize(seed, world_generator.get_configuration())
@@ -274,6 +282,8 @@ func _generate_world(seed: int) -> void:
 	# (chunk_generated signals drive terrain rendering + resource spawns).
 	player.global_position = Vector2.ZERO
 	chunk_system.update_player_position(player.get_world_position())
+	if GameSession.is_building_sandbox():
+		call_deferred("_ensure_building_sandbox_fixtures")
 
 	_refresh_ui()
 
@@ -307,10 +317,13 @@ func _process_one_chunk_visual() -> void:
 		return
 	var start_usec := Time.get_ticks_usec()
 	terrain_renderer.update_chunk(chunk_coords, data)
-	_spawn_resources_for_chunk(chunk_coords, data)
-	_spawn_creatures_for_chunk(chunk_coords)
-	_spawn_pois_for_chunk(chunk_coords, data)
-	_spawn_features_for_chunk(chunk_coords, data)
+	if not GameSession.is_building_sandbox():
+		if day_night != null:
+			day_night.set_progression_enabled(true)
+		_spawn_resources_for_chunk(chunk_coords, data)
+		_spawn_creatures_for_chunk(chunk_coords)
+		_spawn_pois_for_chunk(chunk_coords, data)
+		_spawn_features_for_chunk(chunk_coords, data)
 	if performance_overlay != null:
 		performance_overlay.record_chunk_load(chunk_coords,
 				float(Time.get_ticks_usec() - start_usec) / 1000.0)
@@ -984,6 +997,10 @@ func _has_required_crafting_station(def: RecipeDefinition) -> bool:
 ## (wood -> plank -> ...).
 func _get_obtainable_items() -> Dictionary:
 	var obtainable: Dictionary = {}
+	if GameSession.is_building_sandbox() and item_database != null:
+		for item_id in item_database.items:
+			obtainable[str(item_id)] = true
+		return obtainable
 	if resource_spawner != null:
 		for item_id in resource_spawner.get_all_droppable_items():
 			obtainable[str(item_id)] = true
@@ -1016,7 +1033,7 @@ func _recipe_is_obtainable(def: RecipeDefinition, obtainable: Dictionary) -> boo
 	return true
 
 func _is_recipe_unlocked(def: RecipeDefinition) -> bool:
-	return GameSession.is_creative() or technology_system == null or technology_system.is_unlocked(def.technology_id)
+	return GameSession.is_creative() or GameSession.is_building_sandbox() or technology_system == null or technology_system.is_unlocked(def.technology_id)
 
 ## Adapt a RecipeDefinition into the panel's plain-dict schema.
 func _recipe_to_dict(def: RecipeDefinition) -> Dictionary:
@@ -1075,6 +1092,7 @@ func _register_save_modules() -> void:
 	save_system.clear_modules()
 	save_system.register_module("world", _collect_world, _apply_world)
 	save_system.register_module("world_state", _collect_world_state, _apply_world_state)
+	save_system.register_module("map_exploration", _collect_map_exploration, _apply_map_exploration)
 	save_system.register_module("time", _collect_time, _apply_time)
 	save_system.register_module("weather", _collect_weather, _apply_weather)
 	save_system.register_module("status", _collect_status, _apply_status)
@@ -1095,6 +1113,7 @@ func _collect_world() -> Dictionary:
 func _apply_world(data: Variant) -> void:
 	var world: Dictionary = data if typeof(data) == TYPE_DICTIONARY else {}
 	var seed: int = int(world.get("seed", _world_seed))
+	_apply_game_mode_presentation()
 	seed_input.set_seed(seed)
 
 ## JSON-safe mutation ledger. Spawn coordinates are stable across chunk
@@ -1120,6 +1139,16 @@ func _apply_world_state(data: Variant) -> void:
 	_discovered_cave_ids = _deserialize_string_keys(state.get("discovered_caves", []))
 	if typeof(state.get("cave_changes", {})) == TYPE_DICTIONARY:
 		_cave_changes = (state.get("cave_changes", {}) as Dictionary).duplicate(true)
+
+## Explored map knowledge is a player-state ledger, not generated-world data.
+## The deterministic base POIs stay coordinate-derived; only what the player
+## has already learned is saved, so opening the map never scans the world.
+func _collect_map_exploration() -> Dictionary:
+	return world_map.serialize_exploration() if world_map != null else {}
+
+func _apply_map_exploration(data: Variant) -> void:
+	if world_map != null:
+		world_map.deserialize_exploration(data)
 
 func _serialize_tiles(tiles: Dictionary) -> Array:
 	var out: Array = []
@@ -1185,6 +1214,8 @@ func _collect_technology() -> Dictionary:
 func _apply_technology(data: Variant) -> void:
 	if technology_system:
 		technology_system.deserialize(data)
+		if GameSession.is_building_sandbox():
+			technology_system.unlock_all_free()
 
 func _collect_buildings() -> Array:
 	return building_manager.serialize() if building_manager else []
@@ -1192,6 +1223,72 @@ func _collect_buildings() -> Array:
 func _apply_buildings(data: Variant) -> void:
 	if building_manager:
 		building_manager.deserialize(data)
+		if GameSession.is_building_sandbox():
+			call_deferred("_ensure_building_sandbox_fixtures")
+
+## Building Sandbox uses the regular world, inventory, tech, crafting, and
+## building systems with a deliberately small config and no generated actors.
+## This keeps it representative without adding a parallel testing game loop.
+func _apply_game_mode_presentation() -> void:
+	if not GameSession.is_building_sandbox():
+		if world_map != null:
+			world_map.visible = true
+		if sandbox_store_panel != null:
+			sandbox_store_panel.close()
+		if sandbox_save_toolbar != null:
+			sandbox_save_toolbar.visible = false
+		if _sandbox_store != null and is_instance_valid(_sandbox_store):
+			_sandbox_store.queue_free()
+		_sandbox_store = null
+		return
+	if player != null and player.inventory != null:
+		player.inventory.set_max_slots(200)
+		player.inventory.set_max_weight(10000.0)
+	if technology_system != null:
+		technology_system.unlock_all_free()
+	if day_night != null:
+		day_night.set_progression_enabled(false)
+		day_night.set_time(12.0)
+	if world_map != null:
+		world_map.visible = false
+	if sandbox_store_panel != null and player != null:
+		sandbox_store_panel.configure(player.inventory, item_database)
+	if sandbox_save_toolbar != null:
+		sandbox_save_toolbar.visible = true
+
+func _ensure_building_sandbox_fixtures() -> void:
+	if not GameSession.is_building_sandbox() or building_manager == null:
+		return
+	# Fixtures are normal Building nodes, so nearby-station checks, save/load,
+	# texture packs, and demolition all use the same production code path.
+	var station_tiles := {
+		"campfire": Vector2i(-3, -3),
+		"workbench": Vector2i(-1, -3),
+		"furnace": Vector2i(1, -3),
+		"anvil": Vector2i(3, -3)
+	}
+	for station_id in station_tiles:
+		var tile: Vector2i = station_tiles[station_id]
+		if building_manager.get_building_at(tile, 0) == null:
+			building_manager.restore_building(str(station_id), tile)
+	if _sandbox_store == null or not is_instance_valid(_sandbox_store):
+		_sandbox_store = SandboxSupplyStore.new()
+		_sandbox_store.player = player
+		_sandbox_store.position = Vector2(0.0, 3.0 * TILE_SIZE)
+		_sandbox_store.opened.connect(_open_sandbox_supply_store)
+		add_child(_sandbox_store)
+	if sandbox_store_panel != null:
+		sandbox_store_panel.configure(player.inventory, item_database)
+	if sandbox_save_toolbar != null:
+		sandbox_save_toolbar.refresh()
+
+func _open_sandbox_supply_store() -> void:
+	if GameSession.is_building_sandbox() and sandbox_store_panel != null:
+		sandbox_store_panel.open()
+
+func set_sandbox_time(hour: float) -> void:
+	if GameSession.is_building_sandbox() and day_night != null:
+		day_night.set_time(hour)
 
 func _collect_player() -> Dictionary:
 	var payload: Dictionary = {
@@ -1244,6 +1341,11 @@ func _apply_player(data: Variant) -> void:
 	if player_data.has("equipped_tool"):
 		player.equipped_tool = str(player_data.get("equipped_tool", "hand"))
 		player.tool_changed.emit(player.equipped_tool)
+	if GameSession.is_building_sandbox():
+		if player.health_component != null:
+			player.health_component.reset()
+		if player.hunger_component != null:
+			player.hunger_component.set_hunger(player.hunger_component.max_hunger)
 
 func _collect_camera() -> Dictionary:
 	if camera_controller == null:

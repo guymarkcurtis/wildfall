@@ -5,6 +5,23 @@
 **Phase 2 (Resource Harvesting) COMPLETE, Phase 3 Gameplay COMPLETE,
 Phase 4 core (tool durability + mission system) COMPLETE.**
 
+Building Sandbox is now available from New Game. It is a dedicated 5×3-chunk
+land-only test yard (about four screens) with no generated resources,
+creatures, POIs, or terrain features. It starts with campfire, workbench,
+furnace, and anvil fixtures; every technology and recipe unlocked; a clickable
+Supply Store that draws its free catalog from `ItemDatabase`; a fixed,
+selectable time of day; and a collapsed bottom-left Sandbox button that reveals
+sandbox-only save, load, and delete controls. Choosing Building Sandbox
+automatically resumes its latest sandbox save when one exists. Unlike Creative,
+crafting still consumes supplied ingredients, keeping material and station
+requirements testable. Player facing now follows WASD movement by default and
+only follows the pointer after a click; the survival world map opens centred
+and uses saved fog-of-war discovery: only POIs from the five-by-five loaded
+chunk neighbourhood are revealed as the player travels, never a whole-world
+scan.
+checks representative of normal play. Hunger drain is paused and health/hunger
+are restored when a sandbox save loads, so long building tests remain safe.
+
 The pre-playtest UI refinement pass replaces the old undifferentiated crafting
 list with a searchable, five-discipline workbench whose material counts and
 station requirements are readable at a glance. Technology is now presented as
@@ -94,7 +111,7 @@ two new atlases to the texture-pack export. All requests in
 
 ## CURRENT TEST RESULTS (2026-09-14)
 
-Automated headless run of the real main scene — **428/428 checks passed,
+Automated headless run of the real main scene — **436/436 checks passed,
 0 failures, 0 script errors**:
 
 | Test | Status |

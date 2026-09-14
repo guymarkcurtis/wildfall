@@ -20,6 +20,13 @@ constrain against (see the WG-05 section below), plus a connected
 river/stream flow mask derived from the same water mask and elevation
 (see the WG-06 section below).
 
+`data/world/building_sandbox_world_generation_config.tres` is a separate,
+mode-owned configuration for the Building Sandbox test yard. It reduces the
+finite extent to 5×3 chunks, disables water and rivers, and sets resource
+density to zero. The runtime mode then deliberately skips procedural resource,
+creature, POI, and terrain-feature presentation; normal content discovery and
+normal-world generation remain unchanged.
+
 Runtime streaming separates procedural data work from the following frame's
 terrain/entity presentation work. This prevents both indivisible costs from
 landing in the same 60 Hz frame; resource-spacing candidates are also memoized

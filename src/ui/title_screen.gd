@@ -96,7 +96,7 @@ func _make_mode_panel() -> ColorRect:
 	overlay.add_child(center)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(420.0, 320.0)
+	panel.custom_minimum_size = Vector2(420.0, 410.0)
 	var style := StyleBoxFlat.new()
 	style.bg_color = MenuStyle.PANEL
 	style.corner_radius_top_left = 6
@@ -127,10 +127,25 @@ func _make_mode_panel() -> ColorRect:
 	box.add_child(creative)
 	box.add_child(MenuStyle.make_label("Free crafting. Wildlife stays peaceful. You can still die.", 13, MenuStyle.MUTED))
 
+	var sandbox := MenuStyle.make_button("Building Sandbox")
+	sandbox.pressed.connect(_start_building_sandbox)
+	box.add_child(sandbox)
+	box.add_child(MenuStyle.make_label("A compact empty test yard with free research, stations, and a supply store.", 13, MenuStyle.MUTED))
+
 	var back := MenuStyle.make_button("Back", 160.0)
 	back.pressed.connect(func() -> void: overlay.visible = false)
 	box.add_child(back)
 	return overlay
+
+func _start_building_sandbox() -> void:
+	var latest: String = SaveSystem.most_recent_save_path_for_mode(GameSession.MODE_BUILDING_SANDBOX)
+	if latest.is_empty():
+		GameSession.request_new_game(GameSession.MODE_BUILDING_SANDBOX)
+	else:
+		# The sandbox is a workbench, so returning to it resumes the last
+		# sandbox layout immediately instead of making the player choose a slot.
+		GameSession.request_load_game(latest, GameSession.MODE_BUILDING_SANDBOX)
+	GameSession.go_to_game(get_tree())
 
 func _on_load_game() -> void:
 	if SaveSystem.list_save_entries().is_empty():

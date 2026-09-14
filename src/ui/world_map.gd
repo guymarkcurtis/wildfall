@@ -1,29 +1,32 @@
 ## Lightweight finite-world map: an always-visible minimap plus a filterable
-## full-screen POI map. Markers are deterministic generator candidates, not a
-## record of which chunks happen to be loaded.
+## full-screen POI map. It reveals deterministic POIs only for chunks around
+## the player, then saves that explored knowledge with the world.
 class_name WorldMap
 extends Control
 
 const TILE_SIZE := 32.0
 const INVALID_TILE := Vector2i(999999999, 999999999)
-const MARKER_SCAN_BUDGET_MSEC := 2.0
+## Reveal a compact five-by-five chunk neighbourhood. This follows the player
+## through already-streamed chunk payloads, never by scanning the whole map.
+const POI_REVEAL_RADIUS_CHUNKS := 2
 
 var _world_generator: WorldGenerator = null
 var _player: Player = null
+var _chunk_system: ChunkSystem = null
 var _markers: Array[Dictionary] = []
+var _marker_keys: Dictionary = {}
 var _filters: Dictionary = {}
-var _marker_seed := -1
+## Chunks are recorded even when they contain no POIs, so revisiting them does
+## not repeat map discovery work after a save/load.
+var _revealed_chunk_keys: Dictionary = {}
 var _waypoint := INVALID_TILE
 var _waypoint_label := ""
 ## The maps use tile-level positions, so redrawing only when this changes
 ## preserves their visual behaviour without issuing canvas work every frame.
 var _last_player_tile := INVALID_TILE
-var _marker_scan_queue: Array[Dictionary] = []
-var _marker_scan_index := 0
-var _marker_scan_active := false
 
 var _minimap: MapSurface
-var _window: PanelContainer
+var _window: Panel
 var _full_map: MapSurface
 var _legend: VBoxContainer
 var _status: Label
@@ -36,24 +39,29 @@ func _ready() -> void:
 	_build_minimap()
 	_build_full_map()
 
-func configure(generator: WorldGenerator, player_ref: Player) -> void:
+func configure(generator: WorldGenerator, player_ref: Player, chunk_system_ref: ChunkSystem = null) -> void:
+	if _chunk_system != null:
+		if _chunk_system.chunks_changed.is_connected(_on_chunks_changed):
+			_chunk_system.chunks_changed.disconnect(_on_chunks_changed)
+		if _chunk_system.player_chunk_changed.is_connected(_on_player_chunk_changed):
+			_chunk_system.player_chunk_changed.disconnect(_on_player_chunk_changed)
 	_world_generator = generator
 	_player = player_ref
+	_chunk_system = chunk_system_ref
+	if _chunk_system != null:
+		_chunk_system.chunks_changed.connect(_on_chunks_changed)
+		_chunk_system.player_chunk_changed.connect(_on_player_chunk_changed)
 	_last_player_tile = INVALID_TILE
+	_sync_nearby_loaded_chunks()
 	queue_redraws()
 
-## Invalidate candidates on a seed swap. The next map interaction regenerates
-## the small, anchor-only snapshot lazily, so re-seeding does not build an
-## entire-world map during the gameplay-critical frame.
+## A new world starts with no explored map knowledge. Saved knowledge is
+## restored afterward through deserialize_exploration().
 func set_world_seed(seed: int) -> void:
-	if _marker_seed == seed:
-		return
-	_marker_seed = -1
 	_markers.clear()
+	_marker_keys.clear()
 	_filters.clear()
-	_marker_scan_queue.clear()
-	_marker_scan_index = 0
-	_marker_scan_active = false
+	_revealed_chunk_keys.clear()
 	if has_waypoint():
 		clear_waypoint()
 	queue_redraws()
@@ -63,9 +71,8 @@ func toggle() -> void:
 		return
 	_window.visible = not _window.visible
 	if _window.visible:
-		_begin_marker_scan()
-		if not _marker_scan_active:
-			_refresh_legend()
+		_sync_nearby_loaded_chunks()
+		_refresh_legend()
 		_refresh_status()
 		queue_redraws()
 
@@ -95,11 +102,9 @@ func clear_waypoint() -> void:
 	queue_redraws()
 
 func get_visible_marker_count() -> int:
-	_ensure_markers()
 	return _visible_markers().size()
 
 func get_cave_marker_count() -> int:
-	_ensure_markers()
 	var count := 0
 	for marker in _markers:
 		if _marker_kind(marker) == "caves":
@@ -107,7 +112,6 @@ func get_cave_marker_count() -> int:
 	return count
 
 func set_marker_filter(kind: String, enabled: bool) -> void:
-	_ensure_markers()
 	if not _filters.has(kind):
 		return
 	_filters[kind] = enabled
@@ -115,47 +119,119 @@ func set_marker_filter(kind: String, enabled: bool) -> void:
 	queue_redraws()
 
 func is_marker_filter_enabled(kind: String) -> bool:
-	_ensure_markers()
 	return bool(_filters.get(kind, false))
 
+func get_revealed_chunk_count() -> int:
+	return _revealed_chunk_keys.size()
+
+func get_known_marker_count() -> int:
+	return _markers.size()
+
 func _process(_delta: float) -> void:
-	_process_marker_scan()
 	# Both maps render the player at tile precision. Avoid recreating visible
 	# marker lists and issuing canvas redraws every frame while the player is
 	# stationary within a tile; waypoint and filter changes redraw explicitly.
 	var player_tile := _get_player_tile()
 	if player_tile != _last_player_tile:
 		_last_player_tile = player_tile
+		_sync_nearby_loaded_chunks()
 		queue_redraws()
 
-func _begin_marker_scan() -> void:
-	if _world_generator == null or _marker_seed == _world_generator.get_seed() or _marker_scan_active:
-		return
-	_markers.clear()
-	_filters.clear()
-	_marker_scan_queue = _world_generator.get_map_poi_anchor_requests()
-	_marker_scan_index = 0
-	_marker_scan_active = true
+func _on_chunks_changed() -> void:
+	_sync_nearby_loaded_chunks()
 
-func _process_marker_scan() -> void:
-	if not _marker_scan_active or _world_generator == null:
+func _on_player_chunk_changed(_old_chunk: Vector2i, _new_chunk: Vector2i) -> void:
+	_sync_nearby_loaded_chunks()
+
+## POIs are already part of streamed chunk payloads. Reusing those payloads
+## keeps map discovery free of world-wide generator work and ties fog-of-war
+## knowledge to places the player has actually approached.
+func _sync_nearby_loaded_chunks() -> void:
+	if _chunk_system == null:
 		return
-	var started_usec := Time.get_ticks_usec()
-	while _marker_scan_index < _marker_scan_queue.size():
-		var request: Dictionary = _marker_scan_queue[_marker_scan_index]
-		_marker_scan_index += 1
-		var candidate := _world_generator.get_map_poi_candidate(str(request["poi_id"]), request["tile"])
-		if not candidate.is_empty():
-			_markers.append(candidate)
-			var kind := _marker_kind(candidate)
-			if not _filters.has(kind):
-				_filters[kind] = true
-		if float(Time.get_ticks_usec() - started_usec) / 1000.0 >= MARKER_SCAN_BUDGET_MSEC:
-			break
-	if _marker_scan_index >= _marker_scan_queue.size():
-		_marker_scan_active = false
-		_marker_seed = _world_generator.get_seed()
-		_marker_scan_queue.clear()
+	var center := _chunk_system.get_player_chunk()
+	if center.x == -999999:
+		return
+	var chunks: Array = _chunk_system.get_loaded_chunks()
+	chunks.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		return a.x < b.x if a.y == b.y else a.y < b.y
+	)
+	for chunk_variant in chunks:
+		var chunk_coords: Vector2i = chunk_variant
+		if maxi(abs(chunk_coords.x - center.x), abs(chunk_coords.y - center.y)) > POI_REVEAL_RADIUS_CHUNKS:
+			continue
+		reveal_chunk_pois(chunk_coords, _chunk_system.get_chunk(chunk_coords))
+
+## Public because Main's chunk presentation path and the map's loaded-chunk
+## synchronisation both use this single persistence-aware discovery route.
+func reveal_chunk_pois(chunk_coords: Vector2i, chunk_data: Dictionary) -> void:
+	var chunk_key := _chunk_key(chunk_coords)
+	if _revealed_chunk_keys.has(chunk_key):
+		return
+	_revealed_chunk_keys[chunk_key] = true
+	var changed := false
+	for candidate_variant in chunk_data.get("poi_candidates", []):
+		if typeof(candidate_variant) != TYPE_DICTIONARY:
+			continue
+		var candidate: Dictionary = (candidate_variant as Dictionary).duplicate(true)
+		var marker_key := _marker_key(candidate)
+		if marker_key.is_empty() or _marker_keys.has(marker_key):
+			continue
+		_marker_keys[marker_key] = true
+		_markers.append(candidate)
+		var kind := _marker_kind(candidate)
+		if not _filters.has(kind):
+			_filters[kind] = true
+		changed = true
+	if changed and is_open():
+		_refresh_legend()
+	if changed:
+		_refresh_status()
+		queue_redraws()
+
+func serialize_exploration() -> Dictionary:
+	var chunks: Array[Dictionary] = []
+	for key in _revealed_chunk_keys:
+		var parts := str(key).split(",")
+		if parts.size() == 2:
+			chunks.append({"x": int(parts[0]), "y": int(parts[1])})
+	chunks.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a["x"]) < int(b["x"]) if int(a["y"]) == int(b["y"]) else int(a["y"]) < int(b["y"])
+	)
+	var markers: Array[Dictionary] = _markers.duplicate(true)
+	markers.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var ay := int(a.get("y", 0))
+		var by := int(b.get("y", 0))
+		if ay == by:
+			var ax := int(a.get("x", 0))
+			var bx := int(b.get("x", 0))
+			return str(a.get("poi_id", "")) < str(b.get("poi_id", "")) if ax == bx else ax < bx
+		return ay < by
+	)
+	return {"revealed_chunks": chunks, "markers": markers}
+
+func deserialize_exploration(data: Variant) -> void:
+	_markers.clear()
+	_marker_keys.clear()
+	_filters.clear()
+	_revealed_chunk_keys.clear()
+	if typeof(data) == TYPE_DICTIONARY:
+		var exploration: Dictionary = data
+		for chunk_variant in exploration.get("revealed_chunks", []):
+			if typeof(chunk_variant) == TYPE_DICTIONARY:
+				var chunk: Dictionary = chunk_variant
+				_revealed_chunk_keys[_chunk_key(Vector2i(int(chunk.get("x", 0)), int(chunk.get("y", 0))))] = true
+		for marker_variant in exploration.get("markers", []):
+			if typeof(marker_variant) != TYPE_DICTIONARY:
+				continue
+			var marker: Dictionary = (marker_variant as Dictionary).duplicate(true)
+			var key := _marker_key(marker)
+			if key.is_empty() or _marker_keys.has(key):
+				continue
+			_marker_keys[key] = true
+			_markers.append(marker)
+			_filters[_marker_kind(marker)] = true
+	if is_open():
 		_refresh_legend()
 	_refresh_status()
 	queue_redraws()
@@ -177,10 +253,16 @@ func _build_minimap() -> void:
 	add_child(_minimap)
 
 func _build_full_map() -> void:
-	_window = PanelContainer.new()
+	# A plain panel holds the fixed-size centred map. PanelContainer expands to
+	# a tall legend's combined minimum size, which pushed the map below centre.
+	_window = Panel.new()
 	_window.name = "MapWindow"
 	_window.set_anchors_preset(Control.LayoutPreset.PRESET_CENTER)
 	_window.size = Vector2(960.0, 620.0)
+	# PRESET_CENTER places the anchor at the viewport centre; offset the panel
+	# by half its size so its own centre, rather than its top-left corner, sits
+	# there.
+	_window.position = -_window.size * 0.5
 	_window.add_theme_stylebox_override("panel", _panel_style())
 	_window.visible = false
 	_window.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -188,6 +270,7 @@ func _build_full_map() -> void:
 
 	var column := VBoxContainer.new()
 	column.name = "Column"
+	column.set_anchors_and_offsets_preset(Control.LayoutPreset.PRESET_FULL_RECT)
 	column.add_theme_constant_override("separation", 8)
 	_window.add_child(column)
 	var title := Label.new()
@@ -227,10 +310,17 @@ func _build_full_map() -> void:
 	legend_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	legend_hint.add_theme_font_size_override("font_size", 12)
 	sidebar.add_child(legend_hint)
+	# Keep a dense world seed from growing the entire panel taller than the
+	# viewport. The legend has its own scroll area instead, preserving the map's
+	# fixed, centred footprint.
+	var legend_scroll := ScrollContainer.new()
+	legend_scroll.name = "LegendScroll"
+	legend_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sidebar.add_child(legend_scroll)
 	_legend = VBoxContainer.new()
 	_legend.name = "Legend"
-	_legend.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	sidebar.add_child(_legend)
+	_legend.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	legend_scroll.add_child(_legend)
 	var clear := Button.new()
 	clear.name = "ClearWaypoint"
 	clear.text = "Clear waypoint"
@@ -240,25 +330,6 @@ func _build_full_map() -> void:
 	close.text = "Close map (M)"
 	close.pressed.connect(func() -> void: _window.visible = false)
 	sidebar.add_child(close)
-
-func _ensure_markers() -> void:
-	if _world_generator == null:
-		return
-	var seed := _world_generator.get_seed()
-	if _marker_seed == seed:
-		return
-	# Synchronous callers (tests/tools) deliberately request a complete
-	# snapshot; cancel any partially evaluated UI scan so results cannot be
-	# appended twice afterward.
-	_marker_scan_active = false
-	_marker_scan_queue.clear()
-	_marker_scan_index = 0
-	_markers = _world_generator.get_map_poi_candidates()
-	_marker_seed = seed
-	for marker in _markers:
-		var kind := _marker_kind(marker)
-		if not _filters.has(kind):
-			_filters[kind] = true
 
 func _refresh_legend() -> void:
 	if _legend == null:
@@ -288,25 +359,18 @@ func _refresh_legend() -> void:
 		_legend.add_child(toggle)
 	if kinds.is_empty():
 		var empty := Label.new()
-		empty.text = "No POIs for this seed."
+		empty.text = "No POIs discovered yet."
 		_legend.add_child(empty)
 
 func _refresh_status() -> void:
 	if _status == null:
 		return
-	if _marker_scan_active:
-		_status.text = "Scanning points of interest… %d%%" % int(100.0 * float(_marker_scan_index)
-				/ float(maxi(1, _marker_scan_queue.size())))
-		return
 	if has_waypoint():
 		_status.text = "%s: tile %d, %d — shown in gold on the minimap" % [_waypoint_label, _waypoint.x, _waypoint.y]
 	else:
-		_status.text = "Select a visible point of interest, or click the map to place a waypoint."
+		_status.text = "%d POIs discovered. Explore nearby terrain to reveal more." % _markers.size()
 
 func _select_map_position(normalized: Vector2) -> void:
-	if _marker_scan_active:
-		return
-	_ensure_markers()
 	var closest: Dictionary = {}
 	var closest_distance := 0.018
 	for marker in _visible_markers():
@@ -339,6 +403,15 @@ func _display_kind(kind: String) -> String:
 
 func _marker_color(marker: Dictionary) -> Color:
 	return Color(0.96, 0.72, 0.24) if _marker_kind(marker) == "caves" else Color(0.39, 0.72, 0.93)
+
+func _chunk_key(chunk_coords: Vector2i) -> String:
+	return "%d,%d" % [chunk_coords.x, chunk_coords.y]
+
+func _marker_key(marker: Dictionary) -> String:
+	var poi_id := str(marker.get("poi_id", ""))
+	if poi_id.is_empty() or not marker.has("x") or not marker.has("y"):
+		return ""
+	return "%s@%d,%d" % [poi_id, int(marker["x"]), int(marker["y"])]
 
 func _world_bounds() -> Rect2i:
 	if _world_generator == null:

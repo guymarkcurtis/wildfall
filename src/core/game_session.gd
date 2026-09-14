@@ -7,6 +7,7 @@ extends RefCounted
 
 const MODE_SURVIVAL := "survival"
 const MODE_CREATIVE := "creative"
+const MODE_BUILDING_SANDBOX := "building_sandbox"
 
 enum BootAction {
 	NEW_GAME,
@@ -24,6 +25,8 @@ static func request_new_game(mode: String = MODE_SURVIVAL) -> void:
 static func set_game_mode(mode: String) -> void:
 	if mode == MODE_CREATIVE:
 		game_mode = MODE_CREATIVE
+	elif mode == MODE_BUILDING_SANDBOX:
+		game_mode = MODE_BUILDING_SANDBOX
 	else:
 		game_mode = MODE_SURVIVAL
 
@@ -31,16 +34,25 @@ static func is_creative() -> bool:
 	return game_mode == MODE_CREATIVE
 
 static func is_survival() -> bool:
-	return not is_creative()
+	return game_mode == MODE_SURVIVAL
+
+static func is_building_sandbox() -> bool:
+	return game_mode == MODE_BUILDING_SANDBOX
 
 static func mode_label(mode: String = "") -> String:
 	var value: String = mode if mode != "" else game_mode
-	return "Creative" if value == MODE_CREATIVE else "Survival"
+	if value == MODE_CREATIVE:
+		return "Creative"
+	if value == MODE_BUILDING_SANDBOX:
+		return "Building Sandbox"
+	return "Survival"
 
-static func request_load_game(path: String = "") -> void:
+static func request_load_game(path: String = "", mode_hint: String = "") -> void:
 	boot_action = BootAction.LOAD_GAME
 	if path != "":
 		load_path = path
+	if mode_hint != "":
+		set_game_mode(mode_hint)
 
 static func wants_load() -> bool:
 	return boot_action == BootAction.LOAD_GAME

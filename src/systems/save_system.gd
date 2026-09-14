@@ -7,7 +7,7 @@
 class_name SaveSystem
 extends Node
 
-const SAVE_VERSION: int = 6
+const SAVE_VERSION: int = 7
 const FORMAT_ID: String = "wildfall-save"
 const SAVE_DIR: String = "user://saves"
 const SAVE_PATH: String = "user://saves/slot_1.json"
@@ -15,7 +15,7 @@ const SETTINGS_PATH: String = "user://settings.json"
 const AUTOSAVE_INTERVAL_SEC: float = 300.0
 const AUTOSAVE_KEEP: int = 2
 const APPLY_ORDER: PackedStringArray = [
-	"world", "world_state", "time", "weather", "status", "technology", "buildings", "player", "missions", "camera"
+	"world", "world_state", "map_exploration", "time", "weather", "status", "technology", "buildings", "player", "missions", "camera"
 ]
 
 static var _autosave_enabled: bool = true
@@ -179,6 +179,14 @@ func migrate(data: Dictionary) -> Dictionary:
 		if not world6.has("generation_version"):
 			world6["generation_version"] = 2
 		current["modules"] = modules6
+	if version < 7:
+		# v7 persists explored POI markers and explored chunk identities. The
+		# deterministic world remains untouched; older saves simply begin with
+		# an unexplored map and reveal POIs as the player travels.
+		var modules7: Dictionary = current.get("modules", {})
+		if not modules7.has("map_exploration"):
+			modules7["map_exploration"] = {"revealed_chunks": [], "markers": []}
+		current["modules"] = modules7
 	current["version"] = SAVE_VERSION
 	current["format"] = FORMAT_ID
 	return current
@@ -199,6 +207,14 @@ func most_recent_save_path() -> String:
 	if entries.is_empty():
 		return ""
 	return str(entries[0].get("path", ""))
+
+## The Building Sandbox resumes its own latest layout. Keeping this filtered
+## by mode prevents a normal survival save from replacing the test yard.
+static func most_recent_save_path_for_mode(game_mode: String) -> String:
+	for entry in list_save_entries():
+		if str(entry.get("game_mode", GameSession.MODE_SURVIVAL)) == game_mode:
+			return str(entry.get("path", ""))
+	return ""
 
 static func is_autosave_enabled() -> bool:
 	load_settings()
@@ -331,7 +347,7 @@ static func peek_save_summary(path: String) -> Dictionary:
 	var mode: String = str(raw.get("game_mode", ""))
 	if mode == "":
 		mode = str(world.get("game_mode", GameSession.MODE_SURVIVAL))
-	if mode != GameSession.MODE_CREATIVE:
+	if mode != GameSession.MODE_CREATIVE and mode != GameSession.MODE_BUILDING_SANDBOX:
 		mode = GameSession.MODE_SURVIVAL
 	return {
 		"path": path,

@@ -20,6 +20,9 @@ var moon_color: Color = Color(0.55, 0.62, 0.95)
 var night_overlay: Color = Color(0.1, 0.1, 0.2, 0.6)
 var modulate_node: CanvasModulate = null
 var _was_daytime: bool = true
+## Sandbox can hold a chosen lighting state without changing the normal
+## survival clock. The selected hour still serializes with the save.
+var progression_enabled := true
 
 # Signals
 signal hour_changed(hour: float, day: int)
@@ -114,6 +117,8 @@ func get_celestial_color() -> Color:
 
 ## Update the day/night cycle and world lighting.
 func _process(delta: float) -> void:
+	if not progression_enabled:
+		return
 	var previous_hour := current_hour
 	var hours_passed := delta / SECONDS_PER_HOUR
 	current_hour += hours_passed
@@ -156,7 +161,13 @@ func set_time(hour: float, day: int = -1) -> void:
 	if day >= 0:
 		current_day = day
 	current_hour = clamp(hour, 0.0, HOURS_IN_DAY - 0.001)
+	_was_daytime = is_daytime()
 	time_changed.emit(current_hour, current_day)
+	_apply_modulate()
+
+func set_progression_enabled(enabled: bool) -> void:
+	progression_enabled = enabled
+	_apply_modulate()
 
 ## Get the sun position (0 to 1, where 0 is horizon, 1 is zenith).
 func get_sun_position() -> float:
@@ -184,4 +195,6 @@ func deserialize(data: Dictionary) -> void:
 	current_hour = data.get("current_hour", DAY_START)
 	current_day = data.get("current_day", 1)
 	total_hours_passed = data.get("total_hours_passed", 0.0)
+	_was_daytime = is_daytime()
 	time_changed.emit(current_hour, current_day)
+	_apply_modulate()
