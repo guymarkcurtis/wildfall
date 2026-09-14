@@ -45,6 +45,7 @@ const CAVE_SPACE_ORIGIN := Vector2(1000000.0, 1000000.0)
 @onready var weather_system: WeatherSystem = $WeatherSystem
 @onready var status_effects: StatusEffectSystem = $StatusEffectSystem
 @onready var building_manager: BuildingManager = $BuildingManager
+@onready var interaction_manager: InteractionManager = $InteractionManager
 @onready var technology_system: TechnologySystem = $TechnologySystem
 @onready var texture_pack_manager: TexturePackManager = $TexturePackManager
 @onready var world_modulate: CanvasModulate = $WorldModulate
@@ -223,6 +224,8 @@ func _on_world_seed_set(seed: int) -> void:
 
 ## (Re)generate the world: noise, chunk loading, terrain, and resources.
 func _generate_world(seed: int) -> void:
+	if interaction_manager != null:
+		interaction_manager.close("world_reset")
 	# A seed change starts a fresh world. Loading restores its mutation ledger
 	# immediately after this reset through the world_state save module.
 	if is_in_cave():
@@ -524,6 +527,8 @@ func _on_cave_entrance_entered(entrance: CaveEntrance) -> void:
 func enter_cave_from_entrance(entrance: CaveEntrance) -> bool:
 	if is_in_cave() or entrance == null or not is_instance_valid(entrance):
 		return false
+	if interaction_manager != null:
+		interaction_manager.close("cave")
 	var definition: CaveDefinition = world_generator.get_cave(entrance.cave_type_id)
 	if definition == null:
 		return false
@@ -766,6 +771,8 @@ func _on_world_pickup_tree_exiting(pickup: WorldPickup) -> void:
 
 ## Player death (HUD / respawn handling can hook in here later).
 func _on_player_died() -> void:
+	if interaction_manager != null:
+		interaction_manager.close("death")
 	print("Player died.")
 
 ## Inventory changed (via the event bus): refresh all UI.

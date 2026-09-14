@@ -249,6 +249,14 @@ func first_index_of(item_id: String) -> int:
 			return index
 	return -1
 
+## First slot that could receive up to `quantity` of `item_id` right now
+## (matching stack with room, or a filter-passing empty slot). -1 = none.
+func find_receiving_slot_for(item_id: String, quantity: int) -> int:
+	for index in range(slots.size()):
+		if acceptance_at(index, item_id, quantity) > 0:
+			return index
+	return -1
+
 func quantity_of(item_id: String) -> int:
 	var total := 0
 	for slot in slots:

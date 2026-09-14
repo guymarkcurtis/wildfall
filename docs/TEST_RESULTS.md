@@ -1,6 +1,25 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **Active Build Plan M4 (2026-09-14, interaction router + shared UI)**: new
+  focused suite `tests/test_interaction_router.gd` **25/25 checks**
+  (nearest-in-range targeting with stable-key tie-break, authored-verb prompt
+  text, out-of-range exclusion, E open/close toggle with world fall-through,
+  input lock while a panel is open, the full close-reason matrix — escape,
+  button, toggle, switched, out-of-range, removal, damage, world-reset, cave,
+  death, pause — each fired twice proving idempotence, no-signal on closing
+  nothing, object-to-object switching, click-click / shift-click / right-
+  click-split transfers with exact conservation, and genericity via a
+  runtime-registered `test_crate` fixture instead of the chest). Stairs suite
+  37/0, placement 55/0, content 69/0, sandbox 0 failures, full harness
+  **440/0**, 900-frame live boot 0 script errors. M4 shipped:
+  `InteractionManager` (deterministic targeting + prompt + the one close
+  pipeline), `InteractablePanel` (shared chrome + container view),
+  `StorageGridView` (single drag/click/shift/right-click/tooltip
+  implementation for every storage surface, read-only capable),
+  `Building` Interactable capability from `InteractionProfile` data, HUD
+  interaction prompt, and the router wired into `Player._handle_interaction`
+  after cave priority.
 - **Active Build Plan M3 (2026-09-14, active story + playable stairs)**: new
   focused suite `tests/test_building_stairs.gd` **37/37 checks** (connector
   profile data on both stairs, stairwell reservation blocking/placement/

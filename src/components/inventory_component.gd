@@ -159,6 +159,22 @@ func has_item(item_id: String, quantity: int = 1) -> bool:
 func get_all_items() -> Dictionary:
 	return _storage.all_items()
 
+## The indexed-slot backing store — for UI views that render slots directly
+## (the shared StorageGridView) and for building the player side of object
+## panels. All mutations still belong to this component or InventoryTransfer.
+func get_storage() -> InventoryStorage:
+	return _storage
+
+## Per-item max stack sizes (for seeding container storages so their slot
+## acceptance matches the ItemDatabase).
+func get_stack_sizes() -> Dictionary:
+	return _storage.stack_sizes.duplicate()
+
+## Per-item max durabilities (so container storages seed full durability on
+## newly opened tool stacks moved through panels).
+func get_duration_caps() -> Dictionary:
+	return _storage.max_durations.duplicate()
+
 ## Clear all items.
 func clear() -> void:
 	_storage.clear()

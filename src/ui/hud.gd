@@ -11,6 +11,7 @@ var _debug_enabled: bool = false
 var _player: Node = null
 var _info_label: Label = null
 var _toast_label: Label = null
+var _interaction_prompt: Label = null
 var _health_text: Label = null
 var _hunger_text: Label = null
 
@@ -30,6 +31,22 @@ func _ready() -> void:
 	_toast_label.size = Vector2(720.0, 30.0)
 	_toast_label.modulate = Color(1.0, 1.0, 1.0, 0.0)
 	$Overlay.add_child(_toast_label)
+	_interaction_prompt = Label.new()
+	_interaction_prompt.name = "InteractionPrompt"
+	_interaction_prompt.position = Vector2(8.0, 86.0)
+	_interaction_prompt.size = Vector2(720.0, 24.0)
+	_interaction_prompt.add_theme_font_size_override("font_size", 14)
+	_interaction_prompt.add_theme_color_override("font_color", Color(0.95, 0.93, 0.66))
+	_interaction_prompt.text = ""
+	$Overlay.add_child(_interaction_prompt)
+
+## Bottom-of-HUD prompt published by the InteractionManager ("E Open Wood
+## Chest"). Empty text hides the label.
+func set_interaction_prompt(text: String) -> void:
+	if _interaction_prompt == null or not is_inside_tree():
+		return
+	_interaction_prompt.text = text
+	_interaction_prompt.visible = text != ""
 
 ## Set the player reference for HUD updates.
 func set_player(player: Node) -> void:

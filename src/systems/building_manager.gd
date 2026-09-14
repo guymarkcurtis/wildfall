@@ -286,6 +286,16 @@ func _top_record_at(tile: Vector2i, story: int) -> BuildingRecord:
 func get_building_count() -> int:
 	return _record_list.size()
 
+## The record that owns a given placed Building node (UI ownership, panel
+## state, capability storage).
+func get_record_for_building(building: Building) -> BuildingRecord:
+	if building == null:
+		return null
+	for record in _record_list:
+		if record.node == building:
+			return record
+	return null
+
 # --- Placement ---
 
 func can_place(tile: Vector2i, story: int = selected_story) -> bool:

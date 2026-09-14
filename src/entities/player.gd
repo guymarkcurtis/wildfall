@@ -207,6 +207,14 @@ func _process(delta: float) -> void:
 ## Handle interaction: attack the nearest creature in range (hunting takes
 ## priority over harvesting), otherwise harvest the nearest resource.
 func _handle_interaction() -> void:
+	var interaction_manager: Node = get_parent().get_node_or_null("InteractionManager")
+	if interaction_manager != null and interaction_manager.has_method("ui_blocks_world") \
+			and interaction_manager.ui_blocks_world():
+		# A panel is open: E closes it before any world interaction applies
+		# (the same press can never also fire, harvest, or target elsewhere).
+		_fire_cooldown = FIRE_COOLDOWN
+		interaction_manager.close("toggle")
+		return
 	var manager := get_parent().get_node_or_null("BuildingManager") as BuildingManager
 	if _ui_blocks_world_input() or (manager != null and manager.build_mode) or _fire_cooldown > 0.0:
 		return
@@ -224,6 +232,12 @@ func _handle_interaction() -> void:
 	if not entrances.is_empty():
 		_fire_cooldown = FIRE_COOLDOWN
 		entrances[0].interact()
+		return
+	# Placed-object interaction router (M4): cave entrances kept priority;
+	# resources and creatures come after.
+	if interaction_manager != null and interaction_manager.has_method("try_interact") \
+			and interaction_manager.try_interact():
+		_fire_cooldown = FIRE_COOLDOWN
 		return
 	_fire_cooldown = FIRE_COOLDOWN
 	if character_visual != null:
@@ -573,6 +587,10 @@ func _ui_blocks_world_input() -> bool:
 		return false
 	var seed_input: Node = parent.get_node_or_null("SeedInput")
 	if seed_input != null and seed_input.has_method("is_editing") and seed_input.is_editing():
+		return true
+	var interaction_manager: Node = parent.get_node_or_null("InteractionManager")
+	if interaction_manager != null and interaction_manager.has_method("ui_blocks_world") \
+			and interaction_manager.ui_blocks_world():
 		return true
 	var inv_panel: Node = parent.get_node_or_null("HUD/InventoryPanel")
 	if inv_panel != null and inv_panel.has_method("is_open") and inv_panel.is_open():

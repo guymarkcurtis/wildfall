@@ -1,4 +1,4 @@
-[gd_scene load_steps=34 format=3]
+[gd_scene load_steps=35 format=3]
 
 [ext_resource type="Script" path="res://src/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://src/core/game_event_bus.gd" id="2_eventbus"]
@@ -33,6 +33,7 @@
 [ext_resource type="Script" path="res://src/ui/world_map.gd" id="31_world_map"]
 [ext_resource type="Script" path="res://src/ui/sandbox_store_panel.gd" id="32_sandbox_store"]
 [ext_resource type="Script" path="res://src/ui/sandbox_save_toolbar.gd" id="33_sandbox_toolbar"]
+[ext_resource type="Script" path="res://src/systems/interaction_manager.gd" id="34_interaction"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -83,6 +84,9 @@ script = ExtResource("21_status")
 
 [node name="BuildingManager" type="Node2D" parent="."]
 script = ExtResource("22_build")
+
+[node name="InteractionManager" type="Node2D" parent="."]
+script = ExtResource("34_interaction")
 
 [node name="TechnologySystem" type="Node" parent="."]
 script = ExtResource("26_technology")

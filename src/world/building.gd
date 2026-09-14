@@ -25,6 +25,11 @@ var blocks_movement: bool = true
 var layer: String = "object"
 var orientation: String = ""
 
+## The authored BuildingDefinition this part was placed from (null in legacy
+## test contexts); capability data (interaction profile, container, ...) is
+## read from here — never inferred from the item id.
+var definition: Variant = null
+
 ## Stable identity derived from the placement. Owned by the BuildingRecord;
 ## kept here for UI ownership and save-keyed lookups. Never a NodePath,
 ## creation order, or random id.
@@ -59,6 +64,7 @@ func setup(item_id: String, item_name: String, tile: Vector2i, hp: int = 50, sto
 	placement_key = "%d:%d:%d" % [tile.x, tile.y, story]
 	layer = placement_layer if placement_layer != "" else (str(definition.effective_placement_layer()) if definition != null else "object")
 	orientation = edge_orientation
+	self.definition = definition
 	# Aligned top-down: every story sits on the same world X/Y (the floor-plan
 	# model). Stories are told apart by render band and opacity, never by
 	# shifting position up the screen.
@@ -257,3 +263,33 @@ func take_damage(amount: float) -> bool:
 
 func get_building_id() -> String:
 	return building_id
+
+# --- Interactable capability (M4) ---
+# One generic runtime path: capability data comes from the definition's
+# InteractionProfile; nothing here branches on the building's identity.
+
+## The authored interaction profile, or null when this object is not
+## interactable at all.
+func get_interaction_profile() -> InteractionProfile:
+	if definition == null:
+		return null
+	return definition.interaction_profile
+
+## Whether `player` may interact right now: an interaction profile exists and
+## the player is within the authored range.
+func can_interact(player: Node2D) -> bool:
+	var profile := get_interaction_profile()
+	if profile == null or player == null:
+		return false
+	var center := global_position + Vector2(TILE_SIZE, TILE_SIZE) * 0.5
+	return center.distance_to(player.global_position) <= profile.range_px
+
+## HUD prompt text, e.g. "Open Wood Chest".
+func get_interaction_prompt() -> String:
+	var profile := get_interaction_profile()
+	if profile == null:
+		return ""
+	var subject := profile.prompt
+	if subject.is_empty():
+		subject = display_name
+	return "%s %s" % [profile.verb, subject]

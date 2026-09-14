@@ -186,8 +186,26 @@ capability design must not preclude any of these later.
       nothing is destroyed on a partial target). Stable placement identity:
       `Building.placement_key` = `"%d:%d:%d" % [x, y, story]`, extended with
       the layer by M2.
-- [ ] **Phase 2** — the interaction router: how `InteractionProfile` range/verb
-      map to the HUD prompt and to `Player._handle_interaction()` priority.
+- [x] **Phase 2** — the interaction router is `InteractionManager` (a plain
+      node in `main.tscn`): it scans placed records whose definition carries
+      an `InteractionProfile`, picks the nearest in `range_px` (ties broken
+      by stable placement key), and publishes the HUD prompt
+      (`verb + prompt-or-display-name`, e.g. "E Open Wood Chest").
+      `Player._handle_interaction()` consults it after cave-entrance
+      priority and before resources/creatures; E with a panel open closes it
+      and is consumed. The shared `InteractablePanel` (chrome + player
+      inventory view + content area) presents `ui_kind` "container" via the
+      M4 view builder — stations register their own builder in Phase 4. The
+      shared `StorageGridView` is the one drag/click/shift-click/right-click
+      -split/tooltip implementation for every storage surface (read-only
+      grids for output slots). All close reasons (escape, button, toggle,
+      switched, out-of-range, cave, world reset, removal, damage, death,
+      pause) run through one idempotent `InteractionManager.close(reason)`;
+      an open panel blocks world clicks (full-rect STOP backdrop) and locks
+      movement/firing/building. While open, the object's container storage is
+      the record's `InventoryStorage` (seeded from its `ContainerProfile`,
+      stack sizes copied from the player database) — moved only via
+      `InventoryTransfer`.
 - [ ] **Phase 3** — author a chest end‑to‑end (`.tres` + 27‑slot container +
       open/close appearance + save `state`).
 - [ ] **Phase 4** — author a station (workbench/campfire/furnace) and route its

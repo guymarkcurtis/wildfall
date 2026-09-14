@@ -38,6 +38,33 @@ var capability_state: Dictionary = {} # saved as `state` on the building entry
 
 var node: Building = null # the visual/physical node; null between scenes
 
+## Runtime container contents for records whose definition declares a
+## ContainerProfile (seeded lazily on first open). Serialized into the
+## building entry's `state` payload from M5 on; not yet persisted.
+var container_storage: InventoryStorage = null
+
+## Seed (or return) the record's indexed container storage from its authored
+## ContainerProfile. Returns null when the definition has no container.
+func get_container_storage() -> InventoryStorage:
+	if container_storage != null:
+		return container_storage
+	if definition == null or definition.container_profile == null:
+		return null
+	var profile := definition.container_profile
+	container_storage = InventoryStorage.new(profile.slot_count, profile.max_weight)
+	# Default contents fill their slots in authored order (JSON-safe data).
+	var index := 0
+	for entry in profile.default_contents:
+		if index >= container_storage.slot_count():
+			break
+		var item_id := str(entry.get("item_id", ""))
+		var quantity := int(entry.get("quantity", 0))
+		if item_id == "" or quantity <= 0:
+			continue
+		container_storage.add_item(item_id, quantity)
+		index += 1
+	return container_storage
+
 static func canonical_edge_key(tile: Vector2i, story: int, orientation: String) -> String:
 	match orientation:
 		"north":
