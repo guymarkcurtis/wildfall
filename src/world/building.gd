@@ -44,6 +44,9 @@ var capability_state: Dictionary = {}
 ## How far an edge part's art nudges toward its oriented edge (cheap
 ## readability for the edge model until the dedicated edge art lands).
 const EDGE_VISUAL_OFFSET: float = 6.0
+## Cosmetic lights outside this radius cannot affect the active view, so they
+## stay disabled without needing a per-light manager scan.
+const LIGHT_CULL_RADIUS_PX: float = 960.0
 
 var _body: Polygon2D = null
 var _station_sprite: Sprite2D = null
@@ -179,9 +182,11 @@ func _update_light() -> void:
 	var parent := get_parent()
 	var main := parent.get_parent() if parent != null else null
 	var cycle := main.get_node_or_null("DayNightCycle") as DayNightCycle if main != null else null
+	var player := main.get_node_or_null("Player") as Node2D if main != null else null
+	var in_light_budget := player == null or global_position.distance_to(player.global_position) <= LIGHT_CULL_RADIUS_PX
 	var allowed_by_daylight := profile.daylight_policy == "always" or (cycle != null and cycle.is_nighttime())
 	var powered := not profile.requires_power or bool(capability_state.get("enabled", false))
-	_light.visible = allowed_by_daylight and powered
+	_light.visible = in_light_budget and allowed_by_daylight and powered
 	if _light.visible:
 		_light.energy = profile.energy * (1.0 + sin(Time.get_ticks_msec() * 0.008) * 0.08 if profile.flicker else 1.0)
 
