@@ -19,6 +19,8 @@ var _window: Panel = null
 var _title_label: Label = null
 var _help_label: Label = null
 var _content_box: HBoxContainer = null
+var _object_capacity_label: Label = null
+var _player_capacity_label: Label = null
 var _player_storage: InventoryStorage = null
 var _object_storage: InventoryStorage = null
 var _selected: Dictionary = {} # {grid: String, index: int} or empty
@@ -74,6 +76,20 @@ func _ready() -> void:
 	_content_box.custom_minimum_size = Vector2(612, 240)
 	_content_box.add_theme_constant_override("separation", 24)
 	_window.add_child(_content_box)
+
+	_object_capacity_label = Label.new()
+	_object_capacity_label.position = Vector2(24, 306)
+	_object_capacity_label.size = Vector2(280, 20)
+	_object_capacity_label.add_theme_font_size_override("font_size", 11)
+	_object_capacity_label.add_theme_color_override("font_color", Color(0.66, 0.72, 0.54))
+	_window.add_child(_object_capacity_label)
+
+	_player_capacity_label = Label.new()
+	_player_capacity_label.position = Vector2(338, 306)
+	_player_capacity_label.size = Vector2(280, 20)
+	_player_capacity_label.add_theme_font_size_override("font_size", 11)
+	_player_capacity_label.add_theme_color_override("font_color", Color(0.66, 0.72, 0.54))
+	_window.add_child(_player_capacity_label)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if is_open and event.is_action_pressed("ui_cancel"):
@@ -210,3 +226,13 @@ func _refresh() -> void:
 	if player_grid != null:
 		player_grid.refresh()
 		player_grid.highlight_selected(int(_selected.get("index", -1)) if str(_selected.get("grid", "")) == "player" else -1)
+	if _object_capacity_label != null:
+		_object_capacity_label.text = _storage_summary("Container", _object_storage)
+	if _player_capacity_label != null:
+		_player_capacity_label.text = _storage_summary("Inventory", _player_storage)
+
+func _storage_summary(label: String, storage: InventoryStorage) -> String:
+	if storage == null:
+		return "%s unavailable" % label
+	var contents := "Empty" if storage.occupied_count() == 0 else "%d/%d slots" % [storage.occupied_count(), storage.slot_count()]
+	return "%s: %s  %.0f / %.0f weight" % [label, contents, storage.total_weight(), storage.max_weight]

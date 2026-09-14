@@ -20,6 +20,13 @@ extends Resource
 ## State to show when the object spawns (e.g. "closed" / "unlit").
 @export var initial_state: String = ""
 
+## Interaction transition states. Empty fields opt a profile out of that
+## transition; content chooses its own state names, never the runtime.
+@export var interaction_opening_state: String = ""
+@export var interaction_open_state: String = ""
+@export var interaction_closing_state: String = ""
+@export var interaction_closed_state: String = ""
+
 func validate() -> Array[String]:
 	var errors: Array[String] = []
 	if frame_size.x <= 0 or frame_size.y <= 0:
@@ -35,4 +42,8 @@ func validate() -> Array[String]:
 			errors.append("state '%s' has a non-positive frame_count" % str(state_name))
 	if not initial_state.is_empty() and not states.has(initial_state):
 		errors.append("initial_state '%s' is not a named state" % initial_state)
+	for state_name in [interaction_opening_state, interaction_open_state,
+			interaction_closing_state, interaction_closed_state]:
+		if not state_name.is_empty() and not states.has(state_name):
+			errors.append("interaction state '%s' is not a named state" % state_name)
 	return errors

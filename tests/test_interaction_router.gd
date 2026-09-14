@@ -261,6 +261,11 @@ func _test_switching_and_transfers() -> void:
 	var record := buildings.get_record_for_building(crate_b)
 	_check(record.get_container_storage() == record.get_container_storage(),
 			"The container storage is a stable per-record instance (seeded once)")
+	# M5 safety: the same generic panel closes if an occupied data-authored
+	# container is protected from demolition. No chest-specific route exists.
+	buildings.demolish_at(Vector2i(51, 50), 0)
+	_check(manager.open_panel == null and buildings.get_record_at(Vector2i(51, 50), 0, "object") != null,
+			"Protected non-empty container demolition closes its panel without deleting contents")
 	player.queue_free()
 	manager.queue_free()
 	buildings.queue_free()

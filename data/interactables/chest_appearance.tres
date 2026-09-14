@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="AppearanceProfile" format=3]
+
+[ext_resource type="Script" path="res://resources/appearance_profile.gd" id="1_appearance"]
+
+[resource]
+resource_name = "chest_appearance"
+script = ExtResource("1_appearance")
+states = {
+"closed": {
+"first_frame": 0,
+"frame_count": 1,
+"fps": 1.0,
+"loop": false
+},
+"opening": {
+"first_frame": 0,
+"frame_count": 1,
+"fps": 8.0,
+"loop": false
+},
+"open": {
+"first_frame": 0,
+"frame_count": 1,
+"fps": 1.0,
+"loop": false
+},
+"closing": {
+"first_frame": 0,
+"frame_count": 1,
+"fps": 8.0,
+"loop": false
+}
+}
+initial_state = "closed"
+interaction_opening_state = "opening"
+interaction_open_state = "open"
+interaction_closing_state = "closing"
+interaction_closed_state = "closed"

@@ -19,6 +19,7 @@ func _run() -> void:
 	_test_demolition_refund()
 	_test_collision_rules()
 	_test_save_round_trip()
+	_test_container_persistence_and_safe_demolition()
 	print("Building placement failures: %d (%d checks)" % [_failures, _checks])
 	quit(_failures)
 
@@ -283,4 +284,51 @@ func _test_save_round_trip() -> void:
 	_check(migrated_fire != null and migrated_fire.layer == "object",
 			"v7 objects migrate to the object layer")
 	manager3.queue_free()
+	manager.queue_free()
+
+# --- M5 container state ---
+
+func _test_container_persistence_and_safe_demolition() -> void:
+	var manager := _make_manager()
+	var inventory := _make_inventory({"chest": 1, "wood": 12})
+	manager.refund_inventory = inventory
+	_check(manager.place_record("chest", Vector2i(80, 80), inventory, 0),
+			"A data-authored chest places through the normal record path")
+	var record := manager.get_record_at(Vector2i(80, 80), 0, "object")
+	var storage := record.get_container_storage()
+	storage.stack_sizes = inventory.get_stack_sizes()
+	storage.add_item("wood", 12)
+	var payload := manager.serialize()
+	var entry: Dictionary = payload[0]
+	_check(entry.get("state", {}).get("container", {}).get("slots", []).size() == 27
+			and not entry.get("state", {}).has("open"),
+			"Non-empty indexed container state saves in v8 while UI-open state stays transient")
+
+	var restored_manager := _make_manager()
+	restored_manager.deserialize(payload)
+	var restored := restored_manager.get_record_at(Vector2i(80, 80), 0, "object")
+	_check(restored != null and restored.get_container_storage().quantity_of("wood") == 12
+			and restored.get_container_storage().slot_count() == 27,
+			"Chest contents and authored capacity survive a save/reload round trip")
+
+	var blocked_reasons: Array[String] = []
+	manager.placement_failed.connect(func(reason: String): blocked_reasons.append(reason))
+	_check(not manager.demolish_at(Vector2i(80, 80), 0) and manager.get_building_count() == 1
+			and not blocked_reasons.is_empty(),
+			"Any non-empty authored container refuses demolition with a clear message")
+	storage.remove_item("wood", 12)
+	_check(manager.demolish_at(Vector2i(80, 80), 0) and _count(inventory, "chest") == 1,
+			"An empty container demolishes normally and refunds exactly one item")
+
+	var malformed_manager := _make_manager()
+	malformed_manager.deserialize([{
+		"item_id": "chest", "x": 81, "y": 80, "story": 0, "layer": "object",
+		"state": {"container": {"slots": ["not-a-27-slot-container"]}}
+	}])
+	var malformed := malformed_manager.get_record_at(Vector2i(81, 80), 0, "object")
+	_check(malformed != null and malformed.get_container_storage().occupied_count() == 0
+			and not malformed.capability_state.has("container"),
+			"Malformed saved container fields are rejected safely without reshaping storage")
+	restored_manager.queue_free()
+	malformed_manager.queue_free()
 	manager.queue_free()

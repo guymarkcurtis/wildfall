@@ -86,6 +86,10 @@ func _test_capability_profiles() -> void:
 			"chest is data-defined with container + interaction profiles")
 	_check(chest != null and chest.container_profile.slot_count == 27,
 			"chest container profile carries the agreed 27-slot grid")
+	_check(chest != null and chest.appearance_profile != null
+			and chest.appearance_profile.interaction_open_state == "open"
+			and chest.appearance_profile.interaction_closed_state == "closed",
+			"chest open/close presentation is authored through an AppearanceProfile")
 	var campfire := registry.get_definition("campfire")
 	_check(campfire != null and campfire.station_profile != null
 			and campfire.fuel_profile != null and campfire.light_profile != null,

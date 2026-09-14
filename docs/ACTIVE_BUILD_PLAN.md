@@ -27,8 +27,8 @@ source plans conflict, this plan and its decision log at the bottom win.
    that violates one needs a dated decision-log entry.
 
 **Plan status:** `ACTIVE`
-**Current milestone:** M5 — Chests and persistent storage
-**Last updated:** 2026-09-14 (M4 complete)
+**Current milestone:** M6 — Station panels and recipe inputs/outputs
+**Last updated:** 2026-09-14 (M5 complete)
 
 ## Groundwork already in place
 
@@ -313,24 +313,31 @@ input, stuck movement, or world-interaction leak.
 
 ## M5 — Chests and persistent storage
 
-- [ ] Author `data/buildings/wood_chest.tres`: 27-slot (9×3) container
-      profile, `Open` prompt, chest appearance profile, existing stable
-      `chest` item ID, zero special-case code.
-- [ ] Wire the chest panel: player inventory and chest side by side;
+*COMPLETE 2026-09-14.*
+
+- [x] Author the existing stable `data/buildings/chest.tres` as the 27-slot
+      (9×3) container: `Open` prompt, `chest_container` profile, and a
+      `chest_appearance` profile. No chest-name branch exists in runtime code.
+- [x] Wire the chest panel: player inventory and chest side by side;
       drag/drop both ways, quick transfer both ways, merge/swap/split,
-      tooltips, empty state, capacity/weight feedback.
-- [ ] Chest open/close animation states; logically open only once the opening
+      tooltips, empty-state and capacity/weight feedback.
+- [x] Chest open/close animation states; logically open only once the opening
       transition begins; forced closes (range/load/removal) still play or
-      reverse the transition.
-- [ ] Serialize per-building runtime state into its v8 building entry's
+      reverse the transition. `AppearanceProfile` names the transition states;
+      the existing static utility atlas remains the fallback until a dedicated
+      state sheet is supplied by content.
+- [x] Serialize per-building runtime state into its v8 building entry's
       `state` payload: `{container: <indexed storage>, enabled, ...}` —
       JSON-safe primitives only; omit defaults, never omit a non-empty
       inventory; loader rejects malformed fields safely.
-- [ ] Demolition policy: **block demolishing a non-empty chest** with a clear
+- [x] Demolition policy: **block demolishing a non-empty chest** with a clear
       message and panel close; never silently refund or delete contents.
-- [ ] Tests: craft→place→open→fill→empty; exact contents survive
+      This is generic to every data-authored persistent container.
+- [x] Tests: craft→place→open→fill→empty; exact contents survive
       save→quit/reload→open; UI-open state is not saved as gameplay state;
       loading clears stale panels; non-empty chest refuses demolition.
+      (`tests/test_building_placement.gd` 61/61; interaction router 26/26;
+      content 70/70; editor/parser exit 0.)
 
 **Exit:** nothing is lost across save/load; a non-empty chest cannot be
 demolished.
@@ -521,6 +528,7 @@ Append one row per completed milestone. Do not rewrite history.
 | 2026-09-14 | M2 | Complete | `BuildingRecord` + canonical-key occupancy index replaces the per-tile/story single slot: six layers, normalized edge keys (E==W of neighbour, S==N of the tile below), multi-key footprints, floor+object+overhead coexistence, door/window edge replacement with exact refund, conservative direct-support validator driven by `required_support_tags`/`support_tags`, water-vetoed ground placement, edge-strip collision (doors walkable), and save **v8** layered records with optional `state` (v7 entries migrate by deriving layer from the definition). Verified: placement suite 55/55, full harness 438/0, content suite 69/0, sandbox 0 failures, live boot 0 script errors. |
 | 2026-09-14 | M3 | Complete | Active story owned by `BuildingManager` (player mask/z/velocity follow it; E-interaction gated to story 0 until M4). `STORY_RISE` removed: aligned `STORY_Z_STRIDE` render bands with the focus policy (active full / below 25% / above hidden or 14% blueprint in build mode / focus roofs 40%, sandbox R toggle). `ConnectorProfile` stairs: stairwell floor slot reserved by the record itself, edge-triggered up/down traversal with velocity clear, traversal paused in build mode, sandbox `[`/`]` moves the ACTIVE story as the anti-strand escape. Story collision bits (16<<story) make inactive stories unblockable by construction. Verified: stairs suite 37/37, placement 55/0, content 69/0, harness 440/0, sandbox 0, live boot 0. |
 | 2026-09-14 | M4 | Complete | `InteractionManager` (router: deterministic targeting by distance+key, HUD prompt `E Open ...`, open/close pipeline) + `InteractablePanel` (shared chrome, container view) + `StorageGridView` (one drag/click/shift-click/right-click-split/tooltip implementation for every storage surface; read-only grids for future outputs). `Building` exposes the `Interactable` capability from `InteractionProfile` data. E routes: open panel → close; cave entrances → cave; placed objects → panel; then resources/creatures. Close reasons wired: escape, button, toggle, switched, out-of-range, cave, world_reset, removal/damage, death, pause — all idempotent. Panel blocks world clicks and locks movement/firing/building. Genericity proven with a runtime-registered `test_crate` (25/25 focused checks; full sweep: stairs 37/0, placement 55/0, content 69/0, harness 440/0, sandbox 0, live boot 0). |
+| 2026-09-14 | M5 | Complete | Persistent containers now serialize lazily-created indexed storage into the existing v8 `state.container` field only when non-empty; profile-owned slot count/weight are restored safely, malformed payloads are rejected, and UI-open state is transient. Chest data references an authored 27-slot profile and generic interaction presentation states. The shared panel adds empty/capacity/weight feedback. Any non-empty data-authored container blocks player demolition, emits a clear toast, and closes its panel; no contents can be silently deleted. Verified: placement 61/61, interaction 26/26, content 70/70, editor/parser exit 0. |
 | 2026-09-14 | Plan | Created | This combined deployment plan created; source plans retained as design references; scheduling conflicts resolved in the decision log below. |
 
 ## Decision log

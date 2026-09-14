@@ -1,6 +1,15 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **Active Build Plan M5 (2026-09-14, persistent containers)**: focused
+  placement suite **61/61 checks**, interaction suite **26/26**, and content
+  suite **70/70**; editor/parser exit 0. M5 verifies the data-authored chest
+  profile, 27-slot indexed-container save/reload, malformed-payload rejection,
+  transient (unsaved) panel state, and protected non-empty-container
+  demolition that closes the panel without deleting contents. The panel now
+  reports empty/capacity/weight state. `AppearanceProfile` owns chest
+  open/close transition names and the existing static atlas remains its visual
+  fallback until a dedicated state sheet is authored.
 - **Active Build Plan M4 (2026-09-14, interaction router + shared UI)**: new
   focused suite `tests/test_interaction_router.gd` **25/25 checks**
   (nearest-in-range targeting with stable-key tie-break, authored-verb prompt

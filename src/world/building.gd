@@ -48,6 +48,8 @@ const EDGE_VISUAL_OFFSET: float = 6.0
 var _body: Polygon2D = null
 var _station_sprite: Sprite2D = null
 var _part_sprite: Sprite2D = null
+var _appearance_sprite: Sprite2D = null
+var _appearance_state: String = ""
 var _label: Label = null
 var _health_bar: ProgressBar = null
 
@@ -92,6 +94,7 @@ func _setup_visuals() -> void:
 	_body.color = _color_for(building_id)
 	_body.position = edge_offset
 	add_child(_body)
+	_setup_appearance_visual(edge_offset)
 	if STATION_CELL_INDEX.has(building_id):
 		# Station artwork always comes through the texture-pack manager. The
 		# matching 4x1 sheet is exported with every reference/refinement pack.
@@ -103,7 +106,7 @@ func _setup_visuals() -> void:
 		_station_sprite.texture = TexturePackManager.get_texture(STATION_TEXTURE_PATH)
 		add_child(_station_sprite)
 	var atlas_cell := _atlas_cell(building_id)
-	if atlas_cell.x >= 0:
+	if _appearance_sprite == null and atlas_cell.x >= 0:
 		# Structural parts and the small utilities render from their atlas
 		# cell; the flat color placeholder stays as a fallback when the art
 		# sheet is missing or the part has no atlas cell.
@@ -135,6 +138,51 @@ func reload_visual_texture() -> void:
 		_station_sprite.texture = TexturePackManager.get_texture(STATION_TEXTURE_PATH)
 	if _part_sprite != null:
 		_part_sprite.texture = TexturePackManager.get_texture(UTILITIES_TEXTURE_PATH if UTILITY_CELL_INDEX.has(building_id) else PARTS_TEXTURE_PATH)
+	if _appearance_sprite != null and definition != null and definition.appearance_profile != null:
+		_appearance_sprite.texture = TexturePackManager.get_texture(definition.appearance_profile.sheet_path)
+
+## Build an authored state-sheet sprite when art is available. Assets may
+## provide states before their dedicated sheet ships; in that case the normal
+## atlas remains the honest visual fallback while state transitions still work.
+func _setup_appearance_visual(edge_offset: Vector2) -> void:
+	if definition == null or definition.appearance_profile == null:
+		return
+	var profile: AppearanceProfile = definition.appearance_profile
+	if profile.sheet_path.is_empty() or not FileAccess.file_exists(profile.sheet_path):
+		return
+	_appearance_sprite = Sprite2D.new()
+	_appearance_sprite.position = Vector2(TILE_SIZE, TILE_SIZE) * 0.5 + edge_offset
+	_appearance_sprite.region_enabled = true
+	_appearance_sprite.texture = TexturePackManager.get_texture(profile.sheet_path)
+	add_child(_appearance_sprite)
+	set_appearance_state(profile.initial_state)
+
+## Set one data-authored visual state. The state machine is generic: neither
+## this method nor callers identify individual buildings.
+func set_appearance_state(state_name: String) -> void:
+	if definition == null or definition.appearance_profile == null or state_name.is_empty():
+		return
+	var profile: AppearanceProfile = definition.appearance_profile
+	var state: Variant = profile.states.get(state_name, null)
+	if typeof(state) != TYPE_DICTIONARY:
+		return
+	_appearance_state = state_name
+	if _appearance_sprite != null:
+		var first_frame := int(state.get("first_frame", 0))
+		_appearance_sprite.region_rect = Rect2(0.0, float(first_frame * profile.frame_size.y),
+				float(profile.frame_size.x), float(profile.frame_size.y))
+
+## Inform a profile-driven appearance that its interaction has opened or
+## closed. Opening begins before the panel is marked open; forced closes take
+## the same authored close path. UI openness itself is never serialized.
+func set_interaction_open(is_open: bool) -> void:
+	if definition == null or definition.appearance_profile == null:
+		return
+	var profile: AppearanceProfile = definition.appearance_profile
+	var transition := profile.interaction_opening_state if is_open else profile.interaction_closing_state
+	var resting := profile.interaction_open_state if is_open else profile.interaction_closed_state
+	set_appearance_state(transition)
+	set_appearance_state(resting)
 
 ## Nudge direction for edge parts so their oriented side reads from above.
 func _edge_visual_offset() -> Vector2:

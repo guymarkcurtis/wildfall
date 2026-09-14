@@ -206,8 +206,16 @@ capability design must not preclude any of these later.
       the record's `InventoryStorage` (seeded from its `ContainerProfile`,
       stack sizes copied from the player database) — moved only via
       `InventoryTransfer`.
-- [ ] **Phase 3** — author a chest end‑to‑end (`.tres` + 27‑slot container +
-      open/close appearance + save `state`).
+- [x] **Phase 3** — the shipped `chest.tres` references the 27-slot
+      `chest_container` and `chest_appearance` profiles. Container contents
+      serialize only while non-empty as `state.container` (indexed slots and
+      JSON-safe primitives); the profile owns the slot count and capacity on
+      restore, and malformed container data is discarded safely. Interaction
+      open state is transient and never saved. `AppearanceProfile` supplies
+      the opening/open/closing/closed transition names, with the existing
+      utility atlas used until content supplies a dedicated state sheet.
+      Player demolition is generically blocked for any non-empty container,
+      with a toast and panel close, so contents are never silently lost.
 - [ ] **Phase 4** — author a station (workbench/campfire/furnace) and route its
       recipes through the `StationProfile` (removing `CRAFTING_STATION_IDS`).
 - [ ] **Phase 5** — author fuel and light (`FuelProfile`, `LightProfile`,

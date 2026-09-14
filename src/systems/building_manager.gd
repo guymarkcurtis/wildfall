@@ -52,6 +52,7 @@ signal build_mode_changed(enabled: bool, selected_item_id: String)
 signal build_story_changed(story: int)
 signal active_story_changed(story: int)
 signal placement_failed(reason: String)
+signal demolition_blocked(record: BuildingRecord, reason: String)
 
 func _physics_process(_delta: float) -> void:
 	_update_connector_traversal()
@@ -356,6 +357,8 @@ func demolish_at(tile: Vector2i, story: int = selected_story) -> bool:
 	var record := _top_record_at(tile, story)
 	if record == null:
 		return false
+	if _demolition_is_blocked(record):
+		return false
 	_remove_record(record, true)
 	return true
 
@@ -571,7 +574,20 @@ func _demolish_near_player() -> void:
 			best = dist
 			nearest = record
 	if nearest != null:
+		if _demolition_is_blocked(nearest):
+			return
 		_remove_record(nearest, true)
+
+## Containers are never silently deleted by player demolition. The record
+## knows whether it has storage from its authored definition, so this applies
+## equally to future crates, hoppers, and stations with persistent inputs.
+func _demolition_is_blocked(record: BuildingRecord) -> bool:
+	if record == null or not record.has_nonempty_container():
+		return false
+	var reason := "Empty %s before demolishing it." % record.display_name()
+	placement_failed.emit(reason)
+	demolition_blocked.emit(record, reason)
+	return true
 
 ## Orientation for a live edge placement: the nearest tile edge under the
 ## cursor (deterministic; API placements default to north).
@@ -629,6 +645,7 @@ func _spawn_node(record: BuildingRecord) -> void:
 	building.setup(record.item_id, record.display_name(), record.tile, record.health,
 			record.story, record.definition, record.layer, record.orientation)
 	building.placement_key = record.placement_key()
+	building.capability_state = record.capability_state
 	building.building_destroyed.connect(_on_building_destroyed.bind(record))
 	add_child(building)
 	record.node = building

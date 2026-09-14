@@ -20,6 +20,7 @@ var open_panel: InteractablePanel = null
 
 var _view_builders: Dictionary = {} # ui_kind -> Callable(building, record, panel) -> bool
 var _open_close_handlers: Array = []
+var _bound_building_manager: BuildingManager = null
 
 func _ready() -> void:
 	var parent := get_parent()
@@ -31,6 +32,7 @@ func _ready() -> void:
 		pass # HUD prompt publishes directly; keep the lookup local per frame.
 	# M4 ships the container view; the station view registers in M6.
 	register_view_builder("container", Callable(self, "_build_container_view"))
+	_ensure_building_manager_binding()
 
 ## A view builder returns true when it opened content for the panel.
 func register_view_builder(ui_kind: String, builder: Callable) -> void:
@@ -71,6 +73,7 @@ func try_interact() -> bool:
 ## Open one interactable. Opening another object closes the current one
 ## first ("switched").
 func open(building: Building) -> bool:
+	_ensure_building_manager_binding()
 	if building == null or not is_instance_valid(building) or building_manager == null:
 		return false
 	var profile := building.get_interaction_profile()
@@ -92,6 +95,9 @@ func open(building: Building) -> bool:
 	if not bool(builder.call(building, record, panel)):
 		panel.queue_free()
 		return false
+	# This marks the start of the data-authored opening transition before the
+	# object is considered open by the manager.
+	building.set_interaction_open(true)
 	open_building = building
 	open_record = record
 	open_panel = panel
@@ -108,6 +114,7 @@ func close(reason: String) -> void:
 	if open_panel == null and open_building == null and open_record == null:
 		return # already closed: every path is idempotent
 	if open_building != null and is_instance_valid(open_building):
+		open_building.set_interaction_open(false)
 		if open_building.building_damaged.is_connected(_on_open_building_damaged):
 			open_building.building_damaged.disconnect(_on_open_building_damaged)
 		if open_building.building_destroyed.is_connected(_on_open_building_destroyed):
@@ -176,6 +183,22 @@ func _on_open_building_destroyed() -> void:
 func _on_open_storage_changed() -> void:
 	if open_panel != null and is_instance_valid(open_panel):
 		open_panel.refresh_grids()
+
+func _on_demolition_blocked(record: BuildingRecord, _reason: String) -> void:
+	# The player has been told why removal failed; never leave a panel open over
+	# the protected object, even if this signal fires after a repeat input.
+	if open_record == record:
+		close("demolition_blocked")
+
+func _ensure_building_manager_binding() -> void:
+	if _bound_building_manager == building_manager or building_manager == null:
+		return
+	if _bound_building_manager != null and is_instance_valid(_bound_building_manager) \
+			and _bound_building_manager.demolition_blocked.is_connected(_on_demolition_blocked):
+		_bound_building_manager.demolition_blocked.disconnect(_on_demolition_blocked)
+	if not building_manager.demolition_blocked.is_connected(_on_demolition_blocked):
+		building_manager.demolition_blocked.connect(_on_demolition_blocked)
+	_bound_building_manager = building_manager
 
 ## The M4 container view: object storage and player storage side by side,
 ## both rendered by the shared StorageGridView, moved by InventoryTransfer.

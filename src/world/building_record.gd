@@ -39,8 +39,9 @@ var capability_state: Dictionary = {} # saved as `state` on the building entry
 var node: Building = null # the visual/physical node; null between scenes
 
 ## Runtime container contents for records whose definition declares a
-## ContainerProfile (seeded lazily on first open). Serialized into the
-## building entry's `state` payload from M5 on; not yet persisted.
+## ContainerProfile (seeded lazily on first open). Its indexed contents are
+## persisted in this building entry's `state.container` payload. UI open state
+## deliberately never lives here: it is transient InteractionManager state.
 var container_storage: InventoryStorage = null
 
 ## Seed (or return) the record's indexed container storage from its authored
@@ -52,18 +53,51 @@ func get_container_storage() -> InventoryStorage:
 		return null
 	var profile := definition.container_profile
 	container_storage = InventoryStorage.new(profile.slot_count, profile.max_weight)
+	var restored_container := false
+	# State is hostile-input territory on load. Only accept the exact indexed
+	# shape this profile owns; arbitrary-size arrays must not reshape a chest.
+	var saved_container: Variant = capability_state.get("container", null)
+	if typeof(saved_container) == TYPE_DICTIONARY:
+		var saved_slots: Variant = saved_container.get("slots", null)
+		if typeof(saved_slots) == TYPE_ARRAY and saved_slots.size() == profile.slot_count:
+			container_storage.deserialize({"slots": saved_slots, "max_weight": profile.max_weight})
+			restored_container = true
+		else:
+			# Drop malformed container data safely. Other capability fields remain
+			# available for their owning milestones.
+			capability_state.erase("container")
 	# Default contents fill their slots in authored order (JSON-safe data).
-	var index := 0
-	for entry in profile.default_contents:
-		if index >= container_storage.slot_count():
-			break
-		var item_id := str(entry.get("item_id", ""))
-		var quantity := int(entry.get("quantity", 0))
-		if item_id == "" or quantity <= 0:
-			continue
-		container_storage.add_item(item_id, quantity)
-		index += 1
+	if not restored_container:
+		var index := 0
+		for entry in profile.default_contents:
+			if index >= container_storage.slot_count():
+				break
+			var item_id := str(entry.get("item_id", ""))
+			var quantity := int(entry.get("quantity", 0))
+			if item_id == "" or quantity <= 0:
+				continue
+			container_storage.add_item(item_id, quantity)
+			index += 1
 	return container_storage
+
+## True when this record owns a container with any contents. This remains
+## data-driven; BuildingManager uses it to protect every such object from
+## demolition, not a named chest branch.
+func has_nonempty_container() -> bool:
+	var storage := get_container_storage()
+	return storage != null and storage.occupied_count() > 0
+
+## Bring the runtime container into the JSON-safe capability payload just
+## before serialization. Empty containers are omitted, but non-empty ones can
+## never be omitted. The authored profile, rather than save input, owns the
+## capacity/slot count.
+func _sync_container_state() -> void:
+	if container_storage == null:
+		return
+	if container_storage.occupied_count() > 0:
+		capability_state["container"] = container_storage.serialize()
+	else:
+		capability_state.erase("container")
 
 static func canonical_edge_key(tile: Vector2i, story: int, orientation: String) -> String:
 	match orientation:
@@ -119,6 +153,7 @@ func blocks_movement() -> bool:
 ## Serialize to the v8 building entry (capability state included verbatim;
 ## callers keep it JSON-safe).
 func serialize() -> Dictionary:
+	_sync_container_state()
 	var entry: Dictionary = {
 		"item_id": item_id,
 		"x": tile.x,
@@ -156,4 +191,6 @@ func deserialize(entry: Dictionary, resolved_definition: BuildingDefinition) -> 
 	orientation = str(entry.get("orientation", ""))
 	var state_value: Variant = entry.get("state", null)
 	if typeof(state_value) == TYPE_DICTIONARY:
-		capability_state = state_value
+		# Duplicate so post-load state cleanup never mutates a caller's save
+		# payload. The container itself receives stricter validation on access.
+		capability_state = (state_value as Dictionary).duplicate(true)

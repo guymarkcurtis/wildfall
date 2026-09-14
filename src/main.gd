@@ -155,6 +155,8 @@ func _ready() -> void:
 	building_manager.world_generator = world_generator
 	building_manager.building_placed.connect(_on_building_placed)
 	building_manager.building_removed.connect(_on_building_removed)
+	building_manager.demolition_blocked.connect(func(_record: BuildingRecord, reason: String) -> void:
+		hud.show_toast(reason))
 	# HUD (health/hunger bars, seed label, optional debug readout).
 	hud.set_player(player)
 	hud.set_seed(_world_seed)
