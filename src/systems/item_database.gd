@@ -103,6 +103,11 @@ func _load_items() -> void:
 	items["planter_box"] = _create_item("planter_box", "Planter Box", "building", 16, 2.0)
 	items["wooden_table"] = _create_item("wooden_table", "Wood Table", "building", 8, 3.0)
 	items["yard_lantern"] = _create_item("yard_lantern", "Yard Lantern", "building", 8, 1.5)
+	items["stone_gate"] = _create_item("stone_gate", "Stone Gate", "building", 16, 3.0)
+	items["stone_railing"] = _create_item("stone_railing", "Stone Railing", "building", 32, 2.5)
+	items["stone_patio"] = _create_item("stone_patio", "Stone Patio", "building", 32, 3.0)
+	items["stone_path"] = _create_item("stone_path", "Stone Path", "building", 32, 2.0)
+	items["stone_planter"] = _create_item("stone_planter", "Stone Planter", "building", 16, 4.0)
 	
 	# Special
 	items["seed_wheat"] = _create_item("seed_wheat", "Wheat Seed", "resource", 64, 0.1)
@@ -353,6 +358,21 @@ func _load_recipes() -> void:
 		"plank": 2,
 		"charcoal": 1
 	})
+	recipes["stone_gate"] = _create_recipe("stone_gate", "stone_gate", 1, "", {
+		"stone_brick": 3
+	})
+	recipes["stone_railing"] = _create_recipe("stone_railing", "stone_railing", 1, "", {
+		"stone_brick": 1
+	})
+	recipes["stone_patio"] = _create_recipe("stone_patio", "stone_patio", 1, "", {
+		"stone_brick": 2
+	})
+	recipes["stone_path"] = _create_recipe("stone_path", "stone_path", 1, "", {
+		"stone_brick": 1
+	})
+	recipes["stone_planter"] = _create_recipe("stone_planter", "stone_planter", 1, "", {
+		"stone_brick": 3
+	})
 	
 	# Advanced
 	recipes["potion_health"] = _create_recipe("potion_health", "potion_health", 1, "furnace", {
@@ -389,7 +409,8 @@ func _load_recipes() -> void:
 	_set_recipe_technology([
 		"stone_brick", "stone_axe", "stone_pickaxe", "stone_sword", "stone_hoe", "stone_hammer",
 		"stone_foundation", "stone_floor", "stone_wall", "stone_window", "stone_door",
-		"stone_roof", "stone_stairs", "stone_ramp", "stone_pillar", "furnace", "workbench"
+		"stone_roof", "stone_stairs", "stone_ramp", "stone_pillar", "furnace", "workbench",
+		"stone_gate", "stone_railing", "stone_patio", "stone_path", "stone_planter"
 	], "stone_building")
 	_set_recipe_technology([
 		"iron_ingot", "copper_ingot", "bronze_ingot", "iron_axe", "iron_pickaxe",

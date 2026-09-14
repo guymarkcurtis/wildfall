@@ -10,7 +10,8 @@ const BUILDINGS := ["wooden_foundation", "wooden_floor", "wooden_wall", "wooden_
 	"stone_roof", "stone_stairs", "stone_ramp", "stone_pillar",
 	"torch", "campfire", "furnace", "workbench", "anvil", "chest", "bed", "farm_soil", "fence",
 	"fence_gate", "wooden_railing", "wooden_porch", "wooden_deck", "wooden_path", "planter_box",
-	"wooden_table", "yard_lantern"]
+	"wooden_table", "yard_lantern", "stone_gate", "stone_railing", "stone_patio", "stone_path",
+	"stone_planter"]
 
 var _failures := 0
 var _checks := 0
@@ -44,8 +45,8 @@ func _test_registry_discovery() -> void:
 	registry.discover()
 	_check(not registry.has_validation_errors(),
 			"Shipped building content validates with zero errors" + _first_error(registry))
-	_check(registry.definitions.size() == 35,
-			"Registry discovers all 35 building definitions (got %d)" % registry.definitions.size())
+	_check(registry.definitions.size() == 40,
+			"Registry discovers all 40 building definitions (got %d)" % registry.definitions.size())
 	var ids := registry.definitions.keys()
 	ids.sort()
 	var expected := BUILDINGS.duplicate()
@@ -136,6 +137,10 @@ func _test_placement_metadata() -> void:
 	_check(gate != null and gate.effective_placement_layer() == "edge"
 			and gate.occupancy_replacement == "edge_fixture",
 			"fence gates use the generic edge-fixture replacement contract")
+	var stone_gate := registry.get_definition("stone_gate")
+	_check(stone_gate != null and stone_gate.tier == "stone"
+			and stone_gate.effective_placement_layer() == "edge",
+			"stone boundary additions preserve the generic edge-layer topology")
 
 func _test_registry_validation_failures() -> void:
 	var registry := BuildingContentRegistry.new()
@@ -171,6 +176,10 @@ func _test_item_tags() -> void:
 		_check(database.get_item(building_id) != null and database.get_recipe(building_id) != null
 				and database.get_recipe(building_id).technology_id == "wood_building",
 				"%s has a placeable item, reachable recipe, and wood research gate" % building_id)
+	for building_id in ["stone_gate", "stone_railing", "stone_patio", "stone_path", "stone_planter"]:
+		_check(database.get_item(building_id) != null and database.get_recipe(building_id) != null
+				and database.get_recipe(building_id).technology_id == "stone_building",
+				"%s has a placeable item, reachable recipe, and stone research gate" % building_id)
 
 # --- InventoryStorage ---
 

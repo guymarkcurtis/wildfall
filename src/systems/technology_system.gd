@@ -28,7 +28,7 @@ func _load_technologies() -> void:
 	_define("stone_building", "Stone Construction",
 		"Shape harvested stone into durable, multi-level stone structures and stone tools.",
 		["wood_building"], [{"item_id": "wood", "quantity": 20}, {"item_id": "stone", "quantity": 30}], false,
-		["stone_brick", "stone_foundation", "stone_floor", "stone_wall", "stone_window", "stone_door", "stone_roof", "stone_stairs", "stone_ramp", "stone_pillar"])
+		["stone_brick", "stone_foundation", "stone_floor", "stone_wall", "stone_window", "stone_door", "stone_roof", "stone_stairs", "stone_ramp", "stone_pillar", "stone_gate", "stone_railing", "stone_patio", "stone_path", "stone_planter"])
 	_define("metalworking", "Metalworking",
 		"Smelt and forge iron, copper, and bronze equipment for the next survival tier.",
 		["stone_building"], [{"item_id": "stone", "quantity": 25}, {"item_id": "coal", "quantity": 8}, {"item_id": "iron_ore", "quantity": 12}], false,

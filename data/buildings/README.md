@@ -62,3 +62,7 @@ placement path. `wooden_porch`, `wooden_deck`, and `wooden_path` demonstrate
 ground/floor surfaces, while `planter_box` and `wooden_table` are ordinary
 object-layer props. `yard_lantern` composes the existing interaction, fuel,
 light, and appearance profiles entirely through Resource references.
+
+The Tier 2 `stone_gate`, `stone_railing`, `stone_patio`, `stone_path`, and
+`stone_planter` follow the exact same layer and replacement vocabulary with
+the `stone_building` research gate; existing stone IDs are not renamed.
