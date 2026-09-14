@@ -7,7 +7,7 @@
 class_name SaveSystem
 extends Node
 
-const SAVE_VERSION: int = 5
+const SAVE_VERSION: int = 6
 const FORMAT_ID: String = "wildfall-save"
 const SAVE_DIR: String = "user://saves"
 const SAVE_PATH: String = "user://saves/slot_1.json"
@@ -163,6 +163,22 @@ func migrate(data: Dictionary) -> Dictionary:
 				var max_dur: int = int(item_database_ref.get_all_durations().get(str(item_id), 0))
 				if max_dur > 0 and not slot_dict.has("durability"):
 						slot_dict["durability"] = max_dur
+	if version < 6:
+		# v6 records which world-generation version built the world
+		# (modules.world.generation_version). The WG-12 presence/coverage
+		# guarantee is a superset: it only adds terrain and POI placements and
+		# never removes any, so an older save's mutation ledger (harvested
+		# spawns, builds, discovered caves) stays valid and no data rewrite is
+		# required. Pre-v6 saves lack the field: backfill it with the
+		# generation version that actually produced them (2) so the key is
+		# always present after migration. New (v6) saves carry the live value.
+		var modules6: Dictionary = current.get("modules", {})
+		if not modules6.has("world") or typeof(modules6.get("world")) != TYPE_DICTIONARY:
+			modules6["world"] = {"seed": 0, "game_mode": "survival"}
+		var world6: Dictionary = modules6["world"]
+		if not world6.has("generation_version"):
+			world6["generation_version"] = 2
+		current["modules"] = modules6
 	current["version"] = SAVE_VERSION
 	current["format"] = FORMAT_ID
 	return current

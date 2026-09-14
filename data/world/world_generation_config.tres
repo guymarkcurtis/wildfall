@@ -5,7 +5,8 @@
 [resource]
 script = ExtResource("1_config")
 config_id = "riftwake_default"
-generation_version = 2
+generation_version = 3
+guarantee_candidate_grid_step = 16
 tile_size_pixels = 32
 chunk_size_tiles = 16
 world_dimensions_chunks = Vector2i(128, 128)

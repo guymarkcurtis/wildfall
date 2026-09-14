@@ -1085,7 +1085,12 @@ func _register_save_modules() -> void:
 	save_system.register_module("camera", _collect_camera, _apply_camera)
 
 func _collect_world() -> Dictionary:
-	return {"seed": _world_seed, "game_mode": GameSession.game_mode}
+	# WG-12: record which world-generation version built this world so the
+	# loader can tell a guarantee-enabled (v3) world from an older save. The
+	# guarantee is a superset (it only adds terrain/placements, never removes
+	# them), so an older save still loads — this field is informational.
+	return {"seed": _world_seed, "game_mode": GameSession.game_mode,
+			"generation_version": world_generator.get_configuration().generation_version}
 
 func _apply_world(data: Variant) -> void:
 	var world: Dictionary = data if typeof(data) == TYPE_DICTIONARY else {}

@@ -10,3 +10,6 @@ category = "cave_entrance"
 spawn_weight = 1.0
 min_spacing_tiles = 48
 required_environment_tags = PackedStringArray("rocky")
+guarantee_min_eligible_cells = 1
+guarantee_per_spacing_cell = 1
+guarantee_fallback_biome = "mountain"

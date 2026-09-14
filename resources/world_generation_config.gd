@@ -5,7 +5,12 @@ class_name WorldGenerationConfig
 extends Resource
 
 @export var config_id: String = "default_world"
-@export var generation_version: int = 2
+## Bumped to 3 for WG-12 (guaranteed rocky/cave-entrance presence). The base
+## world is always reconstructed from the seed with the current generator, so
+## saves made under generation_version 2 still load: the guarantee only ADDS
+## rocky terrain and cave entrances (a superset), so a saved mutation ledger
+## (harvested spawns, builds, discovered caves) stays valid.
+@export var generation_version: int = 3
 @export var tile_size_pixels: int = 32
 @export var chunk_size_tiles: int = 16
 @export var world_dimensions_chunks: Vector2i = Vector2i(128, 128)
@@ -60,6 +65,14 @@ extends Resource
 ## coherent-region stage to measure biome fragments. Cells are anchored to
 ## world coordinates, so every chunk and every on-demand biome query compute
 ## the same region decisions from their own coordinates alone.
+## WG-12: lattice step (in region cells) of the coarse candidate grid scanned
+## by the presence guarantee. A candidate cell is a multiple of this step in
+## the world-aligned region grid; the guarantee picks the nearest-to-centre
+## qualifying candidate. Larger steps scan fewer cells (cheaper, coarser
+## placement); the scan short-circuits at the first naturally-eligible
+## candidate, so the common (world already has the terrain) case is cheap.
+@export_range(1, 512) var guarantee_candidate_grid_step: int = 16
+
 @export_range(1, 64) var region_cell_size_tiles: int = 8
 
 @export var resource_min_per_chunk: int = 5

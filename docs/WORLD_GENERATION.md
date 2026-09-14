@@ -295,6 +295,77 @@ above. The live world's R=48 variant was also probed and rejected:
 +13 river tiles at roughly 4× the per-chunk flow cost (473 ms vs
 134 ms per chunk).
 
+## Presence / coverage guarantees (WG-12)
+
+A POI may *guarantee* that it exists where a player needs it, purely by
+declaring a few data fields — no generation code names a biome, cave or
+POI. The guarantee is a **corrective overlay**: it only ever *adds* the
+required terrain and POI placements and never removes naturally-generated
+ones, so a world generated with the guarantee enabled is a strict
+**superset** of the same world generated without it. That superset
+property is what lets an older save's mutation ledger (harvested spawns,
+builds, discovered caves) stay valid when the base world is rebuilt — the
+guarantee is a forward-only change.
+
+- **Opt-in via data.** A `POIDefinition` opts in with
+  `required_environment_tags` (the environment an eligible cell's dominant
+  biome must carry) plus one or both of:
+  - `guarantee_min_eligible_cells` (Part 1, presence) and
+  - `guarantee_per_spacing_cell` (Part 2, coverage),
+  with an optional explicit `guarantee_fallback_biome`. A POI whose
+  `required_environment_tags` is empty, or whose two guarantee values are
+  both 0, is left untouched (dormant). The shipped `cave_entrance` is the
+  only POI that currently declares a guarantee; adding one to another POI
+  is a data-only change (set the fields on its `.tres`).
+- **Configuration.** `world_generation_config` carries
+  `guarantee_candidate_grid_step` (16 live) and `region_cell_size_tiles`
+  (8). `generation_version` is bumped 2 → 3 for the guarantee-enabled
+  generator.
+- **Part 1 — presence backstop.** If the world's coarse candidate lattice
+  (region cells at multiples of `guarantee_candidate_grid_step`, scanned
+  nearest-to-centre first) already holds at least
+  `guarantee_min_eligible_cells` region cells whose *raw* dominant biome
+  carries the POI's tags, Part 1 is a no-op (the common case). Otherwise the
+  nearest-to-centre *land* candidate cell is forced onto the POI's fallback
+  biome, so a world that generated no rocky area at all still gets one — and
+  therefore still gets at least one cave entrance.
+- **Part 2 — coverage.** Each of the POI's `min_spacing_tiles` spacing
+  cells (48×48 for `cave_entrance`) that contains at least one eligible
+  region cell (its raw dominant carries the POI's tags, or it is the Part 1
+  presence cell) forces one of its single anchor tiles onto the fallback
+  biome when that anchor would otherwise *not* place a POI. One forced
+  placement per spacing cell is a superset of "one entrance per rocky
+  area": every rocky 48×48 cell yields an entrance, and no two forced
+  entrances share a spacing cell, so spacing is preserved.
+- **Raw basis, never self-referential.** Every decision is a pure function
+  of the **RAW** biome field plus the POI's data and the world seed, read
+  from a tile's own coordinates with a bounded halo. The raw dominant is
+  kept in its own memo (`_raw_cell_dominant_memo`), deliberately separate
+  from the coherent-region stage's `_region_cell_cache`, and the overlay is
+  never fed back into an eligibility decision — otherwise a tile the
+  guarantee forced could change whether its neighbour is "eligible" and a
+  streamed chunk could diverge from the map.
+- **Map == chunk.** One predicate (`_poi_forces_entrance`) both (a) drives
+  the biome overlay and (b) forces the spawn roll to succeed. It reproduces
+  the anchor's *natural* spawn roll from the raw biome (same tile seed, same
+  suitability-weighted chance, same first draw), so the forced roll and the natural
+  roll agree exactly. Map and chunk reach the same answer because both
+  evaluate the same pure function on the same (poi, tile).
+- **Registry-identity guard.** The guarantee state is rebuilt in
+  `initialize()` against the registry it *discovered*. If a caller swaps
+  `content_registry` afterwards (the fixture test-harnesses do), the cached
+  presence anchors and fallback biomes belong to the old registry and are
+  not applied to the new one — the overlay checks
+  `_guarantee_registry == content_registry` (the same idiom the WG-05
+  distance memo uses) and is a byte-identical no-op when they differ.
+  Fixture worlds that never ship a guaranteed POI therefore pay zero cost.
+- **Documented edge.** A rocky 48×48 spacing cell whose single *anchor* tile
+  happens to be water (an offshore corner) is not forced — the POI stage
+  skips water anchors — so that particular cell may lack a forced entrance.
+  Part 1 backstops the stronger claim (the world is never cave-less), and
+  the remaining cells of a real rocky area are land, so this edge is rare
+  and bounded.
+
 ## Generation Layers
 
 The `FastNoiseLite` instances (Godot 4.x API), all using

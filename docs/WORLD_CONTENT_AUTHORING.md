@@ -149,6 +149,23 @@ seed with F3 as described above. The asset drives:
   unconstrained) — anchors whose tile falls outside the range are simply not
   candidates; the check consumes the chunk's Chebyshev shore-distance field,
   with no water-name branching (see Validation at startup below).
+- `required_environment_tags` + `guarantee_min_eligible_cells` +
+  `guarantee_per_spacing_cell` + `guarantee_fallback_biome` (all optional,
+  default dormant at 0 / "") — opt the POI into a **presence/coverage
+  guarantee** (WG-12). With `required_environment_tags` set,
+  `guarantee_min_eligible_cells` > 0 guarantees the world holds at least that
+  many region cells whose dominant biome carries those tags (a world that
+  generated none gets one forced), and `guarantee_per_spacing_cell` > 0
+  guarantees one placement per spacing cell (`min_spacing_tiles` square) that
+  contains an eligible cell. `guarantee_fallback_biome` names the biome a
+  deficient anchor is forced onto (when empty, the tag-matching biome with
+  the highest `cave_entrance_suitability` is derived from data). The overlay
+  only ever *adds* — it never removes a natural placement — so it is a
+  superset change and old saves keep loading. The shipped `cave_entrance`
+  declares `required_environment_tags = ["rocky"]` with both guarantees at 1
+  and `guarantee_fallback_biome = "mountain"`: at least one rocky area and an
+  entrance in every rocky 48×48 cell. Full mechanics in WORLD_GENERATION.md
+  (WG-12).
 
 If no cave definition references the POI id, its candidates load as plain
 `PoiMarker` runtime nodes (a generic surface marker carrying the POI's
@@ -285,6 +302,14 @@ Rules checked (all generic; no content names appear in the checks):
 - Caves must have `min_rooms <= max_rooms`, a positive `room_size`, and
   `resource_min_deposits <= resource_max_deposits`.
 - POI `min_spacing_tiles` must be non-negative.
+- The WG-12 guarantee fields (`guarantee_min_eligible_cells`,
+  `guarantee_per_spacing_cell`) are editor-range constrained (`@export_range`
+  0..4096 and 0..16) but are not part of startup validation — a value outside
+  range in a hand-edited asset is clamped by the editor and otherwise treated
+  as-is. `guarantee_fallback_biome` is likewise optional; if it names a biome
+  that is missing or lacks the POI's `required_environment_tags`, the generator
+  logs a non-fatal warning and derives a fallback from data (the tag-matching
+  biome with the highest `cave_entrance_suitability`) rather than failing.
 - Distance-to-water constraints on biomes, POIs, terrain features, and
   resources: each side must be -1 or >= 0 (`min < -1` or `max < -1` is
   rejected), and `min <= max`; a `surface_spawnable` resource pinned to

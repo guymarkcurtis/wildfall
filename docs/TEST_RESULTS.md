@@ -1,6 +1,7 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **HEAD baseline (2026-09-14, post-pull `53dd78e`)**: 427 passed / 4 failed / 0 script errors on Godot 4.7.2 headless. All 4 failures are the new cave-map checks introduced by `53dd78e`; that run's random boot seed produced a finite world with zero cave entrances (mountain coverage ~0.86–2.5% of the 4.19M-tile world; cave entrances are gated on rocky/mountain suitability), while the checks assert "at least one cave marker in the finite world". The map code is **correct** — a probe over 3 fresh random boot seeds (224031, 940267, 989406) shows map cave count == streamed-chunk cave count on every seed (9/9, 32/32, 13/13), so this is a seed/coverage property, not a map-vs-chunk divergence bug. Routed to the world-gen workstream (guarantee ≥1 cave entrance per seed, or make the cave-map checks tolerant of a 0-cave world) — out of scope for the interactables pass per AGENTS.md. Full detail: see the "Interactables Phase 0 baseline (2026-09-14)" section at the end of this file. **This line is the authoritative current-HEAD count; the "Current verification" line below records the last fully-clean pass before this pull.**
 - **Current verification**: 428 checks passed, 0 failures, 0 script errors (Godot 4.7.2 headless run after the PixelLab harvesting presentation pass: four 160×192 biome tree species, a four-frame broadleaf hit shake, complete 19-item 32×32 pickup-art set, two-hop world drops, delayed inventory transfer, and proximity magnet collection; plus the UI and graphical refinement pass, the data-driven world-generation, regional-biome, POI-spacing, cave-runtime, directional-animation, fixed-world-direction control, startup content-validation (WG-01), the generic POI layer (WG-02), the coherent-region stage (WG-03), the terrain-feature candidate layer (WG-04), density-field surface resources (WG-07), playable persistent cave deposits (WG-08), expressive cave-definition data (WG-09), compact bad-seed diagnostics (WG-10), fixed-seed layer regression plus configured-radius streaming measurement (WG-11), and a filterable cave/POI world map with waypoint minimap, and the water classification +
   shore distance field (WG-05), and the connected-hydrology stage (WG-06) work; includes registry, large-world configuration, underground-mineral filtering, deterministic regional/POI/cave identity, underground cave deposits, cave entry/exit, discovery-ledger checks, authored player-direction/action frames, jumping, all four fixed WASD axes, the 20-check invalid-content validation suite, the 11-check coherent-region suite (fixture data-driven region floors, world-aligned cell grid, no sub-floor fragments, metadata-respecting merges, tile-for-tile payload/query agreement, seam-chunk and reversed-order stability, and a live-seed dormant no-op), and the 15-check terrain-feature suite (asset discovery/validation, dormant live world, regeneration + seam + reversed-order stability, halo/owner invariants, min-spacing, and the spawner's no_spawn veto end-to-end), and
   the 28-check water-classification suite (fixture classes/origins over all
@@ -608,3 +609,167 @@ release-then-press must be separate frames to register twice).
 | B17 | Biomes built from bare `Resource` → `set()` no-ops → all 6 biomes registered under a null key → monochrome swamp, 53k biome errors | Fixed (`BiomeDefinition` resources) |
 | B18 | `NoiseLayers` created with `.new()` but never added to the tree → ObjectDB leak at exit | Fixed (added as child of WorldGenerator) |
 | B19 | `MAX_RECIPES = 20` capped the panel below the 30 obtainable recipes — 10 recipes unreachable in the UI | Fixed (cap raised to 40) |
+
+## Interactables Phase 0 baseline (2026-09-14)
+
+Phase 0 of `INTERACTABLES_STORAGE_AND_LIGHTING_PLAN.md` requires running and
+recording the verification matrix on the current HEAD before any Phase 1 code.
+This section records that baseline. It is a **new** record for the post-pull
+HEAD `53dd78e`; the older sections above (including the "428 checks passed,
+0 failures" Current verification line) record the last fully-clean pass before
+this pull and are left unchanged.
+
+**Environment:** Godot 4.7.2 stable `linux.x86_64` (official), `--headless`,
+`--path .`. Each Godot invocation ran with an isolated `HOME`/`XDG_*` scratch
+directory to keep `app_userdata` hermetic, under `timeout 300`. Boot seed is
+`randi() % MAX_SEED` — a fresh random seed on every process start.
+
+**Commands (per the plan's verification matrix):**
+
+```text
+godot --headless --path . --import --quit
+godot --headless --path . --script tests/test_game.gd
+godot --headless --path . --editor --quit
+git diff --check
+```
+
+**Results:**
+
+| Step | Result |
+|---|---|
+| `--import --quit` | exit 0 (clean) |
+| `--script tests/test_game.gd` | **427 passed / 4 failed / 0 script errors** (exit 4) |
+| `--editor --quit` | exit 0 (clean) |
+| `git diff --check` | clean (no whitespace errors) |
+
+**The 4 failing checks (all new in `53dd78e`, "Add data-driven world content
+and gameplay polish"):**
+
+1. World map exposes deterministic cave markers across the finite world (0 caves)
+2. Map cave marker matches the POI candidate emitted when its chunk streams in
+3. Selecting a cave map marker sets a waypoint rendered on the minimap
+4. Map legend can hide cave markers without clearing the selected waypoint
+
+**Root-cause classification: seed/coverage property, not a map-vs-chunk
+divergence bug.**
+
+- The test harness is not a timing artifact: the cave-map tests fully drain the
+  world map's budgeted marker scan (`while world_map.get("_marker_scan_active"):
+  world_map.call("_process_marker_scan")`) before asserting, so the "0 caves"
+  reading is the settled scan result, not a mid-scan snapshot.
+- Cave routing is correctly wired in data: the mountain biome carries the
+  `rocky`/`mountainous` tags, `mountain_cave.tres` links `entrance_poi_id =
+  "cave_entrance"`, and `allowed_environment_tags = ["rocky","mountainous"]`, and the
+  mountain biome's `cave_entrance_suitability = 0.72`.
+- The map and the streamed-chunk paths **share** `_poi_candidate_from_anchor()`
+  by design, so a divergence between the two would be a real generator bug.
+
+**Probe evidence (3 fresh random boot seeds, new process each):**
+
+| Run | Boot seed | Map caves | Chunk caves | Mountain tiles / 4,194,304 | Verdict |
+|---|---|---|---|---|---|
+| 1 | 224031 | 9 | 9 | 35,926 (0.86%) | AGREE |
+| 2 | 940267 | 32 | 32 | 105,589 (2.5%) | AGREE |
+| 3 | 989406 | 13 | 13 | 35,137 (0.84%) | AGREE |
+
+On every sampled seed the map's cave marker count exactly equals the count the
+streamed-chunk generator emits — the map faithfully reflects the world. The
+original harness failure is therefore a property of **that** run's random boot
+seed, whose finite world contained **zero** cave entrances: mountain tiles cover
+only ~0.86–2.5% of the 4.19M-tile world and cave entrances are gated on
+rocky/mountain suitability, so some seeds legitimately spawn no caves, while the
+new tests assert "at least one cave marker in the finite world."
+
+**Disposition:** routed to the world-gen workstream (guarantee ≥1 cave entrance
+per seed, or make the cave-map checks tolerant of a 0-cave world). Per
+AGENTS.md, cave generation/reset/depletion policy remains a separate, undecided
+workstream, so this is **not** fixed as part of the interactables pass. Phase 0
+exit criteria are otherwise met: the matrix is run and recorded, the design
+deltas are logged in the plan, and `docs/INTERACTABLE_AUTHORING.md` scaffolds the
+Phase 1+ authoring contract. No Phase 1 code was started.
+
+## Cave presence/coverage guarantee — WG-12 (2026-09-14)
+
+This section is a **new** record. It implements the fix the Phase 0 baseline
+above routed to the world-gen workstream: **every finite world must always
+contain at least one rocky area, and at least one cave entrance per rocky
+area.** The two Phase 0 cave-map failures ("World map exposes deterministic
+cave markers … (0 caves)" and the three checks that depend on it) are the
+acceptance criteria here.
+
+**What changed (data defines content, code defines systems):**
+
+- `resources/poi_definition.gd` — three new opt-in fields:
+  `guarantee_min_eligible_cells` (Part 1, 0..4096),
+  `guarantee_per_spacing_cell` (Part 2, 0..16), and
+  `guarantee_fallback_biome` (String, "" = derive from data).
+- `data/world/pois/cave_entrance.tres` — the only POI that declares a
+  guarantee: `required_environment_tags = ["rocky"]`, both guarantee values =
+  1, `guarantee_fallback_biome = "mountain"`. `survey_marker.tres` and every
+  other POI keep the default 0 and are untouched (dormant).
+- `data/world/world_generation_config.{gd,tres}` — `generation_version` bumped
+  **2 → 3**; new `guarantee_candidate_grid_step = 16` (Part 1's coarse lattice
+  step, in region-cell space).
+- `src/world/world_generator.gd` — the WG-12 engine (see
+  WORLD_GENERATION.md, "Presence / coverage guarantees (WG-12)"): presence
+  backstop + per-spacing-cell coverage, a single `_poi_forces_entrance`
+  predicate shared by the biome overlay and the spawn roll (map == chunk), raw
+  basis kept in a memo separate from the coherent-region cache, and a
+  **registry-identity guard** (below).
+- `src/main.gd` — the `world` save module now records
+  `generation_version` (informational; the live value is 3).
+- `src/systems/save_system.gd` — `SAVE_VERSION` **5 → 6**; the new `v6`
+  migration backfills `modules.world.generation_version = 2` for pre-v6 saves.
+  No other data is rewritten.
+- `tests/test_game.gd` — the hard save-version assertion moves `== 5` → `== 6`
+  (the self-referential migration checks auto-update).
+
+**The registry-identity guard (a real bug caught by the harness).** During
+development the guarantee first *broke* two WG-05 fixture checks
+("distance constraints alone pick the fixture biomes …" and "the
+min_distance_to_water POI places exactly 23 candidates …"). Root cause:
+`initialize()` builds the guarantee state against the registry it **discovers**
+(the shipped `cave_entrance`), but every fixture harness then **swaps
+`content_registry`** for a tiny fixture registry *after* `initialize()`. The
+stale presence anchor — computed against the real `cave_entrance` and real
+biomes over a 12×12-cell fixture world whose coarse lattice (step 16) sampled
+only cell (0,0) — then forced that one cell onto `mountain`, corrupting the
+fixture's biome partition and its POI count. Fix: the overlay records the
+registry it was computed against (`_guarantee_registry`) and is a
+byte-identical no-op whenever `content_registry` no longer equals it (the same
+instance-compare idiom the WG-05 distance memo already uses), applied to both
+the biome override and the forced-spawn predicate so they cannot diverge. Live
+worlds never swap the registry, so the guarantee is fully active there and the
+four cave-map tests now pass.
+
+**Verification matrix (post-change):**
+
+| Step | Result |
+|---|---|
+| `--import --quit` | exit 0 (clean) |
+| `--script tests/test_game.gd` | **431 passed / 0 failed / 0 script errors** |
+| `--editor --quit` | exit 0 (clean) |
+| `git diff --check` | clean (no whitespace errors) |
+
+**Test-state deltas vs the Phase 0 baseline (427/4):**
+
+- The 4 cave-map checks the Phase 0 baseline logged as failing now **PASS**
+  (the harness's live boot seed now reports 73 deterministic cave markers, all
+  map markers matching their streamed-chunk POI candidates).
+- Total moves 427/4 → **431/0**. No previously-passing test regressed: the
+  two WG-05 fixture failures introduced by the first cut are resolved by the
+  registry-identity guard, so the WG-05 suite is green again.
+
+**Old-save compatibility.** `generation_version` is a forward (superset) bump:
+the guarantee only *adds* rocky terrain and cave placements, never removes any,
+so an older save's mutation ledger (harvested spawns, builds, discovered
+caves) stays valid against the rebuilt world. The `SAVE_VERSION` 5→6 bump and
+the v6 migration exist to mark the format change and to backfill the new
+`world.generation_version` key (recorded as 2, the generator that actually
+produced pre-v6 saves); no player data is rewritten. A documented, rare edge
+remains: a rocky 48×48 spacing cell whose single anchor tile is water (an
+offshore corner) is not force-placed (the POI stage skips water anchors), so
+that one cell may lack a *forced* entrance — Part 1's presence backstop
+guarantees the world is never cave-less, and real rocky areas are land, so
+the edge is bounded. Interactables Phase 1 remains out of scope and is not
+started.

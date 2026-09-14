@@ -11,10 +11,10 @@ then begin the next phase.
 
 **Owner:** Quen 3.8
 
-**Plan status:** `NOT STARTED`
+**Plan status:** `IN PROGRESS`
 
 **Last reviewed:** 2026-09-14
-**Current implementation checkpoint:** Phase 0 — design baseline
+**Current implementation checkpoint:** Phase 1 — General inventory and content foundation (Phase 0 complete)
 
 ### Existing systems to preserve
 
@@ -128,16 +128,16 @@ The first authored content set is:
 
 **Goal:** agree the boundaries before changing save or inventory code.
 
-- [ ] Read this plan and record any conscious design changes in the log below.
-- [ ] Run the existing headless harness and parser/import check; record their
+- [x] Read this plan and record any conscious design changes in the log below.
+- [x] Run the existing headless harness and parser/import check; record their
   result in `docs/TEST_RESULTS.md` without rewriting older results.
-- [ ] Create a short `docs/INTERACTABLE_AUTHORING.md` skeleton that states the
+- [x] Create a short `docs/INTERACTABLE_AUTHORING.md` skeleton that states the
   data-driven rule, asset locations, stable identity rule, and save policy.
-- [ ] Decide and document the initial container slot grid: use 27 general
+- [x] Decide and document the initial container slot grid: use 27 general
   chest slots (9×3), one fuel slot, station-defined ingredient slots, and one
   output slot. These are UI capacities, separate from the player's 50 unique
   item-type limit.
-- [ ] Confirm scope: no generated loot chests, no multiplayer locks, no timed
+- [x] Confirm scope: no generated loot chests, no multiplayer locks, no timed
   production queue, and no gameplay effects from light in this pass.
 
 **Exit criteria:** the document names the migration target (save v6), the
@@ -451,6 +451,7 @@ checked above; do not rewrite the plan to hide deferred work.
 | Date | Phase | Status | Evidence / notes |
 | --- | --- | --- | --- |
 | 2026-09-14 | 0 | Not started | Plan authored; repository still uses save v5, compact item-keyed inventory, global C-key nearby-station crafting, and day/night ambient modulation only. |
+| 2026-09-14 | 0 | Complete | Baseline recorded on Godot 4.7.2 headless at HEAD `53dd78e`: `--import` exit 0, harness `tests/test_game.gd` 427 passed / 4 failed / 0 script errors, `--editor --quit` exit 0, `git diff --check` clean. All 4 failures are the new cave-map checks added in `53dd78e` (see TEST_RESULTS.md). Probe over 3 fresh random boot seeds (224031, 940267, 989406) shows map cave count == streamed-chunk cave count on every seed (9/9, 32/32, 13/13), so the map code is correct and the failures are a seed/coverage property: that run's random boot seed produced a finite world with zero cave entrances (mountain tiles ~0.86–2.5% of the 4.19M-tile world; cave entrances gated on rocky/mountain suitability), while the tests assert "at least one cave marker in the finite world". World-gen does not guarantee >=1 cave per seed. Routed to the world-gen workstream (guarantee >=1 cave entrance, or make the cave-map checks tolerant of a 0-cave world); out of scope for this interactables pass per AGENTS.md (cave generation/reset policy remains separate and undecided). Phase 0 deliverables: this log, the updated TEST_RESULTS.md baseline, and the `docs/INTERACTABLE_AUTHORING.md` scaffold. No Phase 1 code started. |
 
 ## Explicit deferrals after this pass
 

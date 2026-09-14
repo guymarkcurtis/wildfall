@@ -41,6 +41,57 @@ var _region_cell_cache: Dictionary = {}
 ## any later registry swap invalidate the memo automatically.
 var _distance_constraint_registry: WorldContentRegistry = null
 var _distance_constrained_content: bool = false
+## ---------------------------------------------------------------------------
+## Presence / coverage guarantees (WG-12)
+## ---------------------------------------------------------------------------
+## A POI may declare data-driven guarantees: a minimum number of "eligible"
+## region cells in the world (the cell's dominant biome carries the POI's
+## required_environment_tags) and a minimum number of placements per spacing
+## cell that contains such a cell. The guarantees are corrective overlays that
+## only ever ADD the required terrain and POI placements — they never remove
+## naturally-generated ones — so a world generated with the guarantee enabled
+## is a superset of the same world generated without it. That superset
+## property is what keeps an older save's mutation ledger (harvested spawns,
+## builds, discovered caves) valid when the base world is rebuilt.
+##
+## Every decision below is a pure function of the RAW biome field plus the
+## POI's data and the world seed, computed from a tile's own coordinates with a
+## bounded read. The raw basis is kept in its own caches (never the
+## coherent-region stage's _region_cell_cache), and the override the guarantees
+## apply is never fed back into an eligibility decision — otherwise a tile the
+## guarantee forced could change whether its neighbour is "eligible" and the
+## map path and a streamed chunk could diverge. All caches are cleared in
+## initialize() so a new seed never reuses decisions from an old field.
+var _guarantee_poi_list: Array[POIDefinition] = []
+## poi_id -> true when a presence anchor is needed (the world has too few
+## eligible cells) and _guarantee_presence_anchors holds that POI's anchor.
+## A separate flag (1) boolean per POI keeps the anchor value a concrete Vector2i
+## (never a Variant) so map and chunk read it identically.
+var _guarantee_presence_active: Dictionary = {}
+## poi_id -> world region cell the presence guarantee forces onto the POI's
+## fallback biome (nearest-to-centre land candidate when the world has too
+## few eligible cells). Meaningful only while _guarantee_presence_active is set.
+var _guarantee_presence_anchors: Dictionary = {}
+## poi_id -> fallback biome id (explicit asset value, else derived from data).
+var _guarantee_fallback_biomes: Dictionary = {}
+## world region cell -> dominant biome over the cell's LAND tiles, computed
+## from the RAW (pre-guarantee) field only. Separate from _region_cell_cache
+## on purpose: see the note above.
+var _raw_cell_dominant_memo: Dictionary = {}
+## "<poi_id>:<cell_x>:<cell_y>" -> whether that spacing cell contains an
+## eligible region cell. Bounded (one cell's region cells) and memoized so
+## each region cell is read once per world.
+var _guarantee_spacing_eligible_memo: Dictionary = {}
+## The content registry instance the state above was computed against
+## (the one initialize() discovered). The guarantee is a pure function of
+## that registry's POIs and biomes, so if a caller swaps content_registry
+## after initialize() (as the fixture test-harnesses do), the cached presence
+## anchors and fallback biomes belong to the old registry and must not be
+## applied to the new one. Comparing by instance (the same idiom the WG-05
+## distance memo uses) makes a registry swap invalidate the overlay
+## automatically, so fixture worlds that never ship a guaranteed POI pay zero
+## cost.
+var _guarantee_registry: WorldContentRegistry = null
 
 signal chunk_generated(chunk_coords: Vector2i, data: Dictionary)
 signal world_regenerated
@@ -64,6 +115,12 @@ func initialize(seed: int, config_override: WorldGenerationConfig = null) -> voi
 	else:
 		content_validation_reported = false
 	_region_cell_cache.clear()
+	_guarantee_presence_active.clear()
+	_guarantee_presence_anchors.clear()
+	_guarantee_fallback_biomes.clear()
+	_raw_cell_dominant_memo.clear()
+	_guarantee_spacing_eligible_memo.clear()
+	_guarantee_registry = null
 	_distance_constraint_registry = null
 	_distance_constrained_content = false
 	generation_context = WorldGenerationContext.new(seed, configuration)
@@ -73,6 +130,11 @@ func initialize(seed: int, config_override: WorldGenerationConfig = null) -> voi
 		noise_layers = NoiseLayers.new()
 		add_child(noise_layers)
 		noise_layers.initialize(seed, configuration.noise_settings)
+	# One-time per seed: resolve every POI's fallback biome and, for any POI
+	# that declares a presence guarantee, decide whether the world already has
+	# enough eligible cells or needs a forced presence anchor. Cheap in the
+	# common case (short-circuits at the first eligible candidate).
+	_recompute_guarantee_anchors()
 
 func get_configuration() -> WorldGenerationConfig:
 	if configuration == null:
@@ -214,8 +276,13 @@ func generate_chunk(chunk_coords: Vector2i, seed: int = -1) -> Dictionary:
 		var shore_distance: int = -1
 		if chunk_dist.size() == size * size and water_mask[index] == 0:
 			shore_distance = chunk_dist[index]
-		biome_map.append(_select_biome_at(elevation, moisture, fields["temperature"][index],
-				get_regional_noise_values(world_x, world_y), shore_distance))
+		# WG-12: build the EFFECTIVE biome map — the raw selection plus the
+		# guarantee overlay. Downstream stages (coherent-region, features, POIs)
+		# and the per-tile payload all read this map, so a guaranteed tile is
+		# rocky here exactly as get_biome_at_world reports it to the map.
+		biome_map.append(_guarantee_biome_override(world_x, world_y, _select_biome_at(
+				elevation, moisture, fields["temperature"][index],
+				get_regional_noise_values(world_x, world_y), shore_distance)))
 	# Coherent-region stage (WG-03): merge raw biome fragments that are too
 	# small for the region sizes the data declares, and record the per-cell
 	# decisions so adjacent chunks provably agree at shared boundaries.
@@ -252,10 +319,13 @@ func generate_chunk(chunk_coords: Vector2i, seed: int = -1) -> Dictionary:
 		# any chunks agree (seams cannot form); empty when disabled.
 		# Rendering and gameplay consumers arrive with later cards.
 		"river_mask": river_mask,
-		"biome": _select_biome(fields["elevation"], fields["moisture"], fields["temperature"],
-				fields["world_start"] + Vector2i(size / 2, size / 2),
-				chunk_dist[size / 2 * size + size / 2]
-						if chunk_dist.size() == size * size and water_mask[size / 2 * size + size / 2] == 0 else -1),
+		"biome": _guarantee_biome_override(
+				(fields["world_start"].x + size / 2),
+				(fields["world_start"].y + size / 2),
+				_select_biome(fields["elevation"], fields["moisture"], fields["temperature"],
+						fields["world_start"] + Vector2i(size / 2, size / 2),
+						chunk_dist[size / 2 * size + size / 2]
+								if chunk_dist.size() == size * size and water_mask[size / 2 * size + size / 2] == 0 else -1)),
 		"biomes": biome_map,
 		"region_cells": region_cells,
 		"feature_candidates": _generate_feature_candidates(chunk_coords, biome_map, water_mask,
@@ -391,6 +461,11 @@ func get_biome_at_world(world_x: int, world_y: int) -> String:
 		var entry := _region_decision_for_cell(_cell_coords_for_tile(world_x, world_y))
 		if str(entry.get("source", "")) == "merged":
 			biome_id = str(entry.get("biome", biome_id))
+	# WG-12: apply the guarantee overlay so the map, the chunk payload, and the
+	# diagnostics all read the same EFFECTIVE biome. The override is computed
+	# from the raw selection above (never from an already-overridden value), so
+	# it is a pure function of (seed, config, coords) and map and chunk agree.
+	biome_id = _guarantee_biome_override(world_x, world_y, biome_id)
 	return biome_id
 
 ## Raw per-tile biome selection from the environmental fields, before the
@@ -973,9 +1048,18 @@ func _poi_candidate_from_anchor(poi: POIDefinition, tile: Vector2i, biome: Biome
 	var random := RandomNumberGenerator.new()
 	random.seed = generation_context.tile_seed(tile,
 			WorldGenerationContext.stable_string_seed(poi.id) ^ 0x45D9F3B)
+	# WG-12: a guaranteed anchor is a single predicate shared by the biome
+	# override (which forces its tile to the eligible fallback biome) and the
+	# spawn roll below (which forces the placement to succeed). Because the
+	# same pure function is evaluated from the same (poi, tile) on both the map
+	# path and the chunk path, a guaranteed entrance is present on the map and
+	# in the chunk together — they cannot diverge. When `forced`, the spawn roll
+	# is skipped so the anchor is placed unconditionally (its biome was already
+	# made eligible by the override when it was not).
+	var forced := _poi_forces_entrance(poi, tile)
 	if _has_cave_for_poi(poi.id):
 		var chance := clampf(biome.cave_entrance_suitability * maxf(0.0, poi.spawn_weight), 0.0, 1.0)
-		if random.randf() > chance:
+		if not forced and random.randf() > chance:
 			return {}
 		var cave := _choose_cave_for_biome(biome, random, poi.id)
 		if cave == null:
@@ -985,7 +1069,7 @@ func _poi_candidate_from_anchor(poi: POIDefinition, tile: Vector2i, biome: Biome
 			"cave_type_id": cave.id, "cave_id": generation_context.cave_identity(tile, cave.id),
 			"x": tile.x, "y": tile.y, "biome": biome.id
 		}
-	if random.randf() > clampf(poi.spawn_weight, 0.0, 1.0):
+	if not forced and random.randf() > clampf(poi.spawn_weight, 0.0, 1.0):
 		return {}
 	return {
 		"poi_id": poi.id, "poi_category": poi.category, "poi_name": poi.display_name,
@@ -1001,12 +1085,26 @@ func _poi_anchor_tiles_in_chunk(poi: POIDefinition, world_start: Vector2i, size:
 ## Anchor grid intersection over any inclusive world-tile rectangle. This is
 ## the same math chunk generation uses, extracted so the map can inspect a
 ## finite world's sparse POI anchors without generating every chunk.
-func _poi_anchor_tiles_in_rect(poi: POIDefinition, rect_start: Vector2i, rect_end: Vector2i) -> Array[Vector2i]:
+## WG-12 helpers ----------------------------------------------------------------
+##
+## The guarantee never branches on content names: it reads the POI's own data
+## (required_environment_tags, min_spacing_tiles, the two guarantee_* fields,
+## and a fallback biome) and the RAW biome field, so adding a new POI that
+## declares a guarantee is a data-only change.
+
+## The POI's deterministic grid offset, derived from its id. Shared by the
+## anchor enumerator and the guarantee so a tile is "an anchor" by exactly the
+## same rule the generator uses to emit anchors.
+func _poi_grid_offset(poi: POIDefinition) -> Vector2i:
 	var spacing := maxi(1, poi.min_spacing_tiles)
 	var offset_random := RandomNumberGenerator.new()
 	offset_random.seed = generation_context.tile_seed(Vector2i.ZERO,
 			WorldGenerationContext.stable_string_seed(poi.id) ^ 0x2C1B3C6D)
-	var offset := Vector2i(offset_random.randi_range(0, spacing - 1), offset_random.randi_range(0, spacing - 1))
+	return Vector2i(offset_random.randi_range(0, spacing - 1), offset_random.randi_range(0, spacing - 1))
+
+func _poi_anchor_tiles_in_rect(poi: POIDefinition, rect_start: Vector2i, rect_end: Vector2i) -> Array[Vector2i]:
+	var spacing := maxi(1, poi.min_spacing_tiles)
+	var offset := _poi_grid_offset(poi)
 	var first_cell := Vector2i(
 		floori(float(rect_start.x - offset.x) / float(spacing)),
 		floori(float(rect_start.y - offset.y) / float(spacing))
@@ -1023,6 +1121,316 @@ func _poi_anchor_tiles_in_rect(poi: POIDefinition, rect_start: Vector2i, rect_en
 					and anchor.y >= rect_start.y and anchor.y <= rect_end.y:
 				anchors.append(anchor)
 	return anchors
+
+## ---------------------------------------------------------------------------
+## Presence / coverage guarantee engine (WG-12)
+## ---------------------------------------------------------------------------
+## A POI opts in purely through data: it declares the required_environment_tags
+## its anchors need, a minimum number of world region cells that must be
+## eligible (Part 1, presence), a minimum number of placements per spacing cell
+## that contains an eligible region cell (Part 2, coverage), and optionally an
+## explicit fallback biome. Nothing below branches on a content name; adding a
+## POI that wants a guarantee is a data-only change.
+
+## (Re)build the small per-world guarantee state: the POIs that declare a
+## guarantee, each one's fallback biome, and the presence anchor for any POI
+## whose world does not already hold enough eligible region cells. Called once
+## per initialize() (hence per seed), after the noise layers are ready.
+func _recompute_guarantee_anchors() -> void:
+	_guarantee_presence_active.clear()
+	_guarantee_presence_anchors.clear()
+	_guarantee_fallback_biomes.clear()
+	_raw_cell_dominant_memo.clear()
+	_guarantee_spacing_eligible_memo.clear()
+	_guarantee_poi_list.clear()
+	# Record the registry this state was computed against. The overlay only
+	# applies while content_registry is this same instance; a later swap
+	# (fixture harnesses, or a content hot-reload) invalidates it.
+	_guarantee_registry = content_registry
+	if content_registry == null or content_registry.has_validation_errors():
+		return
+	var poi_ids := get_poi_definitions().keys()
+	poi_ids.sort()
+	for poi_id in poi_ids:
+		var poi := get_content_registry().get_poi(str(poi_id))
+		if poi == null:
+			continue
+		# No tag to key a guarantee off: with empty required_environment_tags
+		# there is no meaningful "eligible cell" to count, so a non-zero
+		# guarantee value on such a POI stays dormant.
+		if poi.required_environment_tags.is_empty():
+			continue
+		if poi.guarantee_min_eligible_cells <= 0 and poi.guarantee_per_spacing_cell <= 0:
+			continue
+		_guarantee_poi_list.append(poi)
+		_guarantee_fallback_biomes[str(poi.id)] = _derive_guarantee_fallback(poi)
+		if poi.guarantee_min_eligible_cells > 0:
+			_compute_presence_anchor(poi)
+
+## Resolve the biome a deficient anchor is forced onto: the POI's explicit
+## guarantee_fallback_biome when it is set and tag-consistent, otherwise the
+## tag-matching biome with the highest cave-entrance_suitability (the biome
+## that most "wants" an entrance). Memoized per POI in initialize.
+func _guarantee_fallback(poi: POIDefinition) -> String:
+	if poi == null:
+		return ""
+	if _guarantee_fallback_biomes.has(poi.id):
+		return str(_guarantee_fallback_biomes[poi.id])
+	return _derive_guarantee_fallback(poi)
+
+func _derive_guarantee_fallback(poi: POIDefinition) -> String:
+	if poi == null or poi.required_environment_tags.is_empty():
+		return ""
+	if poi.guarantee_fallback_biome != "":
+		var explicit := get_biome(poi.guarantee_fallback_biome)
+		if explicit != null and _biome_meets_poi_tags(explicit.id, poi):
+			return explicit.id
+		push_warning("[WorldGenerator] %s: guarantee_fallback_biome '%s' is missing or lacks the POI's tags; deriving from data." % [poi.id, poi.guarantee_fallback_biome])
+	var best := ""
+	var best_score := -1.0
+	for biome_id in get_biomes().keys():
+		var biome := get_biome(str(biome_id))
+		if biome == null or not _biome_meets_poi_tags(str(biome_id), poi):
+			continue
+		if biome.cave_entrance_suitability > best_score:
+			best_score = biome.cave_entrance_suitability
+			best = str(biome_id)
+	return best
+
+## Dominant biome over a region cell's LAND tiles, read from the RAW field
+## (never the coherent-region merge and never this guarantee's own overrides).
+## Memoized per cell so each cell is sampled once per world. Returns "" when the
+## cell is entirely water (no land tiles). A deliberately separate cache from
+## _region_cell_cache: feeding a forced tile back into the region stage's
+## dominant would let the guarantee change which cells its neighbours see, and
+## the map and a streamed chunk could then disagree.
+func _raw_cell_dominant(cell: Vector2i) -> String:
+	if _raw_cell_dominant_memo.has(cell):
+		return str(_raw_cell_dominant_memo[cell])
+	var cell_size := get_configuration().region_cell_size_tiles
+	if cell_size <= 0:
+		_raw_cell_dominant_memo[cell] = ""
+		return ""
+	var origin := cell * cell_size
+	var counts := {}
+	for dy in range(cell_size):
+		for dx in range(cell_size):
+			var world_x := origin.x + dx
+			var world_y := origin.y + dy
+			if not _is_tile_in_bounds(world_x, world_y):
+				continue
+			if is_water_at_world(world_x, world_y):
+				continue
+			var biome_id := _raw_biome_at_world(world_x, world_y)
+			if biome_id == "":
+				continue
+			counts[biome_id] = int(counts.get(biome_id, 0)) + 1
+	var best := ""
+	var best_count := -1
+	for biome_id in counts:
+		var count := int(counts[biome_id])
+		if count > best_count or (count == best_count and str(biome_id) < str(best)):
+			best_count = count
+			best = str(biome_id)
+	_raw_cell_dominant_memo[cell] = best
+	return best
+
+## Does the named biome carry every environment tag the POI requires?
+func _biome_meets_poi_tags(biome_id: String, poi: POIDefinition) -> bool:
+	if poi == null:
+		return false
+	if poi.required_environment_tags.is_empty():
+		return biome_id != ""
+	var biome := get_biome(biome_id)
+	if biome == null:
+		return false
+	for tag in poi.required_environment_tags:
+		if not biome.environment_tags.has(tag):
+			return false
+	return true
+
+## Part 1 — presence. The world must hold at least
+## guarantee_min_eligible_cells region cells whose dominant (raw) biome carries
+## the POI's tags (e.g. one "rocky" cell). A full-world count would sample the
+## entire field at boot, so the decision instead rests on a coarse lattice of
+## candidate cells (one every guarantee_candidate_grid_step cells) spread across
+## the whole world. If that lattice already holds enough eligible cells the
+## guarantee is a no-op; otherwise the nearest-to-centre land cell is forced onto
+## the fallback biome, which creates a rocky area where the world had none.
+## Returns null when the world already has enough.
+func _compute_presence_anchor(poi: POIDefinition) -> void:
+	if poi == null or poi.guarantee_min_eligible_cells <= 0:
+		return
+	if _guarantee_fallback(poi) == "":
+		return
+	var config := get_configuration()
+	var cell_size := config.region_cell_size_tiles
+	if cell_size <= 0:
+		return
+	var step := maxi(1, config.guarantee_candidate_grid_step)
+	var origin := config.world_origin_chunk * config.chunk_size_tiles
+	var extent := config.world_dimensions_chunks * config.chunk_size_tiles
+	var cell_min := Vector2i(floori(float(origin.x) / float(cell_size)),
+			floori(float(origin.y) / float(cell_size)))
+	var cell_max := Vector2i(floori(float(origin.x + extent.x - 1) / float(cell_size)),
+			floori(float(origin.y + extent.y - 1) / float(cell_size)))
+	var candidates: Array[Vector2i] = []
+	for cy in range(cell_min.y, cell_max.y + 1):
+		if posmod(cy, step) != 0:
+			continue
+		for cx in range(cell_min.x, cell_max.x + 1):
+			if posmod(cx, step) != 0:
+				continue
+			candidates.append(Vector2i(cx, cy))
+	# Nearest to the world centre (tile 0,0) first, so a forced rocky area sits
+	# where a player is most likely to be. Distance, then x, then y keeps the
+	# order total and seed-independent.
+	candidates.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		var da := a.x * a.x + a.y * a.y
+		var db := b.x * b.x + b.y * b.y
+		if da != db:
+			return da < db
+		if a.x != b.x:
+			return a.x < b.x
+		return a.y < b.y
+	)
+	var eligible := 0
+	var nearest_land := Vector2i.ZERO
+	var found_land := false
+	for cell in candidates:
+		var dominant := _raw_cell_dominant(cell)
+		if dominant == "":
+			continue
+		if not found_land:
+			nearest_land = cell
+			found_land = true
+		if _biome_meets_poi_tags(dominant, poi):
+			eligible += 1
+			if eligible >= poi.guarantee_min_eligible_cells:
+				break
+	if eligible >= poi.guarantee_min_eligible_cells:
+		return
+	if found_land:
+		_guarantee_presence_anchors[str(poi.id)] = nearest_land
+		_guarantee_presence_active[str(poi.id)] = true
+
+## Part 2 — coverage. True when the spacing cell that contains `tile` holds at
+## least one region cell the POI is eligible for (its raw dominant carries the
+## POI's tags) or the POI's Part 1 presence cell. Memoized per
+## (poi, spacing cell) and bounded to the region cells that overlap the cell.
+func _spacing_cell_eligible(poi: POIDefinition, tile: Vector2i) -> bool:
+	var spacing := maxi(1, poi.min_spacing_tiles)
+	var offset := _poi_grid_offset(poi)
+	var cell_x := floori(float(tile.x - offset.x) / float(spacing))
+	var cell_y := floori(float(tile.y - offset.y) / float(spacing))
+	var key := "%s:%d:%d" % [poi.id, cell_x, cell_y]
+	if _guarantee_spacing_eligible_memo.has(key):
+		return bool(_guarantee_spacing_eligible_memo[key])
+	var cell_size := get_configuration().region_cell_size_tiles
+	var result := false
+	if cell_size > 0:
+		var tile_x0 := cell_x * spacing + offset.x
+		var tile_y0 := cell_y * spacing + offset.y
+		var region_x0 := floori(float(tile_x0) / float(cell_size))
+		var region_x1 := floori(float(tile_x0 + spacing - 1) / float(cell_size))
+		var region_y0 := floori(float(tile_y0) / float(cell_size))
+		var region_y1 := floori(float(tile_y0 + spacing - 1) / float(cell_size))
+		var presence_active := bool(_guarantee_presence_active.get(poi.id, false))
+		for ry in range(region_y0, region_y1 + 1):
+			for rx in range(region_x0, region_x1 + 1):
+				var region_cell := Vector2i(rx, ry)
+				if presence_active and region_cell == _guarantee_presence_anchors[poi.id]:
+					result = true
+					break
+				if _biome_meets_poi_tags(_raw_cell_dominant(region_cell), poi):
+					result = true
+					break
+			if result:
+				break
+	_guarantee_spacing_eligible_memo[key] = result
+	return result
+
+## The single predicate that ties the biome override and the forced spawn roll
+## together: `tile` is one of the POI's spacing anchors, the spacing cell it
+## sits in is eligible (Part 2, or the Part 1 presence cell), the anchor is on
+## land, and the anchor would not otherwise place a POI. It is a pure function
+## of (poi, tile, raw world state), so the map path and the chunk path reach the
+## same answer and a guaranteed entrance appears in both at once.
+func _poi_forces_entrance(poi: POIDefinition, tile: Vector2i) -> bool:
+	# Dormant once the registry is swapped after initialize(): the predicate is
+	# only valid for the registry it was computed against, and it must stay in
+	# lock-step with the biome override (which carries the same guard) so a
+	# forced spawn and a forced biome never appear without the other.
+	if _guarantee_registry == null or _guarantee_registry != content_registry:
+		return false
+	if poi == null or poi.guarantee_per_spacing_cell <= 0:
+		return false
+	if _guarantee_fallback(poi) == "":
+		return false
+	var spacing := maxi(1, poi.min_spacing_tiles)
+	var offset := _poi_grid_offset(poi)
+	if posmod(tile.x - offset.x, spacing) != 0 or posmod(tile.y - offset.y, spacing) != 0:
+		return false
+	if is_water_at_world(tile.x, tile.y):
+		return false
+	if not _spacing_cell_eligible(poi, tile):
+		return false
+	return _anchor_is_deficient(poi, tile)
+
+## Would the anchor at `tile` fail to place a POI in the natural (non-forced)
+## world? This must reproduce _poi_candidate_from_anchor's spawn decision from
+## the RAW biome field — the same tile seed, the same suitability-weighted
+## chance, and the same first random draw — so the forced roll and the natural
+## roll agree exactly. (The caller already knows the anchor is on land.)
+func _anchor_is_deficient(poi: POIDefinition, tile: Vector2i) -> bool:
+	var biome := get_biome(_raw_biome_at_world(tile.x, tile.y))
+	if biome == null:
+		return false
+	if not _poi_allows_biome(poi, biome):
+		return true
+	var random := RandomNumberGenerator.new()
+	random.seed = generation_context.tile_seed(tile,
+			WorldGenerationContext.stable_string_seed(poi.id) ^ 0x45D9F3B)
+	if _has_cave_for_poi(poi.id):
+		var chance := clampf(biome.cave_entrance_suitability * maxf(0.0, poi.spawn_weight), 0.0, 1.0)
+		return random.randf() > chance
+	return random.randf() > clampf(poi.spawn_weight, 0.0, 1.0)
+
+## The overlay applied to a tile's natural (raw + region) biome. It returns the
+## POI's fallback biome for a tile the guarantee forces onto it and the natural
+## biome unchanged otherwise. Only the RAW `natural_id` is inspected (never an
+## already-overridden value), so the function is a pure coordinate function and
+## map, chunk, and diagnostics agree. Called once per tile in every stage.
+##
+## The overlay is only ever active for the registry it was computed against:
+## the guarantee state is rebuilt in initialize() against the registry that
+## initialize() discovered, and a later content_registry swap (fixture
+## harnesses, content hot-reload) invalidates it. When the two differ the
+## overlay is a no-op, so a fixture world that never ships a guaranteed POI is
+## byte-identical to one generated without the feature.
+func _guarantee_biome_override(world_x: int, world_y: int, natural_id: String) -> String:
+	if _guarantee_poi_list.is_empty() \
+			or _guarantee_registry == null or _guarantee_registry != content_registry:
+		return natural_id
+	var tile := Vector2i(world_x, world_y)
+	for poi in _guarantee_poi_list:
+		var fallback := str(_guarantee_fallback_biomes.get(poi.id, ""))
+		if fallback == "":
+			continue
+		# Part 1: this tile sits in the POI's forced presence cell and is not
+		# already eligible. (Land only — water tiles are left untouched.) The
+		# active flag is read with an explicit bool() and the anchor compared
+		# inline so no untyped variable is ever inferred from a Variant.
+		if bool(_guarantee_presence_active.get(poi.id, false)) \
+				and _cell_coords_for_tile(world_x, world_y) == _guarantee_presence_anchors[poi.id] \
+				and _is_tile_in_bounds(world_x, world_y) \
+				and not is_water_at_world(world_x, world_y) \
+				and not _biome_meets_poi_tags(natural_id, poi):
+			return fallback
+		# Part 2: this tile is a deficient spacing anchor in an eligible cell.
+		if _poi_forces_entrance(poi, tile) and not _biome_meets_poi_tags(natural_id, poi):
+			return fallback
+	return natural_id
 
 ## ---------------------------------------------------------------------------
 ## Terrain-feature candidate stage (WG-04)

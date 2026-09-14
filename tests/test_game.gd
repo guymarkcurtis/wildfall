@@ -2338,7 +2338,7 @@ func _run_checks() -> void:
 	SaveSystem.set_autosave_enabled(prev_auto)
 
 	# ------------------------------------------------- tool durability
-	_check(SaveSystem.SAVE_VERSION == 5, "Save format v5 persists tool durability")
+	_check(SaveSystem.SAVE_VERSION == 6, "Save format v6 records the world generation version (carrying forward v5 tool durability)")
 	var all_durations: Dictionary = item_database.get_all_durations()
 	_check(all_durations.size() > 0, "Item database knows which items are durable")
 	_check(int(all_durations.get("wooden_axe", 0)) == 50, "Wooden axe is defined at 50 durability")
