@@ -6,6 +6,7 @@
 script = ExtResource("1_def")
 id = "reinforced_wall"
 display_name = "Reinforced Wall"
+build_group = "structure"
 part_type = "wall"
 tier = "metal"
 technology_id = "metalworking"

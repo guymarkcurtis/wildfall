@@ -6,6 +6,7 @@
 script = ExtResource("1_def")
 id = "well"
 display_name = "Stone Well"
+build_group = "exterior"
 technology_id = "stone_building"
 requires_lower_support = false
 blocks_movement = true

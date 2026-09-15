@@ -3,6 +3,15 @@
 class_name BuildingDefinition
 extends Resource
 
+## The player-facing build-palette groups, in presentation order. This
+## vocabulary is structural (like the placement layers); which part belongs
+## to which group is DATA — the `build_group` field below — so a new part
+## needs no palette code, only a data assignment.
+const BUILD_GROUPS := [
+	"structure", "roof_cover", "stairs_rail", "doors_windows",
+	"furniture", "stations", "boundaries", "exterior",
+]
+
 ## Unique stable ID.
 @export var id: String = ""
 
@@ -82,6 +91,12 @@ extends Resource
 
 # --- Presentation ---
 
+## Build-palette group (see BUILD_GROUPS). The palette files parts into
+## these named groups and lets the player filter the list by one.
+## Presentation only: placement, support, and occupancy never read this
+## field. Empty = ungrouped (the palette lists it under "Other").
+@export var build_group: String = ""
+
 ## Visual family grouping material variants (e.g. "wood", "stone").
 @export var visual_family_id: String = ""
 
@@ -153,6 +168,8 @@ func validate() -> Array[String]:
 		errors.append("placement_layer '%s' is not a supported layer" % placement_layer)
 	if not atlas_cells.is_empty() and atlas_path.is_empty():
 		errors.append("atlas_cells is set but atlas_path is empty")
+	if not build_group.is_empty() and build_group not in BUILD_GROUPS:
+		errors.append("build_group '%s' is not one of %s (or leave it empty)" % [build_group, ", ".join(BUILD_GROUPS)])
 	for key in atlas_cells:
 		var orientation_name := str(key)
 		if orientation_name not in ["north", "east", "south", "west"]:

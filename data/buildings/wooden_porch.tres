@@ -6,6 +6,7 @@
 script = ExtResource("1_def")
 id = "wooden_porch"
 display_name = "Wood Porch"
+build_group = "exterior"
 part_type = "foundation"
 technology_id = "wood_building"
 requires_lower_support = false

@@ -1,17 +1,35 @@
 ## Small in-game build palette. It exposes the parts the player actually owns
 ## and explains the build controls instead of relying on an invisible wheel.
+## Parts are filed into the data-authored build groups (see
+## BuildingDefinition.BUILD_GROUPS) behind filter chips, so the catalogue
+## grows without touching this UI.
 class_name BuildPalette
 extends Control
 
 signal part_selected(item_id: String)
+
+## Player-facing spellings for the group vocabulary (presentation only; the
+## ids themselves are data). Unknown ids fall back to a capitalised id.
+const GROUP_LABELS := {
+	"structure": "Structure",
+	"roof_cover": "Roof / Cover",
+	"stairs_rail": "Stairs & Rail",
+	"doors_windows": "Doors & Windows",
+	"furniture": "Furniture",
+	"stations": "Stations",
+	"boundaries": "Boundaries",
+	"exterior": "Exterior",
+}
 
 var _manager: BuildingManager = null
 var _item_database: ItemDatabase = null
 var _window: PanelContainer = null
 var _story_label: Label = null
 var _status_label: Label = null
+var _chip_row: HFlowContainer = null
 var _parts_list: VBoxContainer = null
 var _last_signature := ""
+var _active_group := ""
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -70,7 +88,7 @@ func _build_ui() -> void:
 	column.add_child(_story_label)
 
 	var instructions := Label.new()
-	instructions.text = "Click a part to select it.  LMB places • wheel cycles • [ / ] changes story • B closes"
+	instructions.text = "Chips filter the list by group. Click a part to select it. LMB places • wheel cycles • [ / ] story • B closes"
 	instructions.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	instructions.add_theme_font_size_override("font_size", 12)
 	instructions.add_theme_color_override("font_color", Color(0.64, 0.69, 0.57))
@@ -79,8 +97,13 @@ func _build_ui() -> void:
 	var divider := HSeparator.new()
 	column.add_child(divider)
 
+	_chip_row = HFlowContainer.new()
+	_chip_row.add_theme_constant_override("h_separation", 4)
+	_chip_row.add_theme_constant_override("v_separation", 4)
+	column.add_child(_chip_row)
+
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(280.0, 270.0)
+	scroll.custom_minimum_size = Vector2(280.0, 210.0)
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(scroll)
 
@@ -108,7 +131,7 @@ func _on_build_story_changed(_story: int) -> void:
 func _refresh_if_changed() -> void:
 	if _manager == null:
 		return
-	var signature := "%d|%s|%s" % [_manager.selected_story, _manager.selected_item_id, ",".join(_manager.get_owned_building_items())]
+	var signature := "%d|%s|%s|%s" % [_manager.selected_story, _manager.selected_item_id, _manager.build_filter, ",".join(_manager.get_owned_building_items())]
 	if signature != _last_signature:
 		_refresh()
 
@@ -118,9 +141,11 @@ func _refresh() -> void:
 	if _manager == null:
 		_story_label.text = "Build system unavailable"
 		return
+	_active_group = _manager.build_filter
 	_story_label.text = "Story %d of %d" % [_manager.selected_story + 1, BuildingRecord.MAX_STORIES]
 	var items := _manager.get_owned_building_items()
-	_last_signature = "%d|%s|%s" % [_manager.selected_story, _manager.selected_item_id, ",".join(items)]
+	_last_signature = "%d|%s|%s|%s" % [_manager.selected_story, _manager.selected_item_id, _active_group, ",".join(items)]
+	_rebuild_chips(items)
 	for child in _parts_list.get_children():
 		child.queue_free()
 	if items.is_empty():
@@ -130,8 +155,85 @@ func _refresh() -> void:
 		empty.add_theme_color_override("font_color", Color(0.72, 0.66, 0.50))
 		_parts_list.add_child(empty)
 		return
-	for item_id in items:
-		_parts_list.add_child(_make_part_button(item_id))
+	if _active_group.is_empty():
+		# Unfiltered: a labelled section per non-empty group, in the
+		# canonical vocabulary order (presentation, not data).
+		for group in BuildingDefinition.BUILD_GROUPS:
+			var group_items: Array[String] = []
+			for item_id in items:
+				if _manager.get_build_group(item_id) == group:
+					group_items.append(item_id)
+			if group_items.is_empty():
+				continue
+			_parts_list.add_child(_make_group_header(group))
+			for item_id in group_items:
+				_parts_list.add_child(_make_part_button(item_id))
+	else:
+		# Filtered: the narrowed list only; the active chip already names
+		# the group, so no section header is needed here.
+		for item_id in _manager.get_visible_building_items():
+			_parts_list.add_child(_make_part_button(item_id))
+
+func _rebuild_chips(items: Array[String]) -> void:
+	if _chip_row == null or _manager == null:
+		return
+	for child in _chip_row.get_children():
+		child.queue_free()
+	_chip_row.add_child(_make_chip("", "All", _active_group.is_empty()))
+	for group in BuildingDefinition.BUILD_GROUPS:
+		var owned_in_group := 0
+		for item_id in items:
+			if _manager.get_build_group(item_id) == group:
+				owned_in_group += 1
+		if owned_in_group == 0:
+			continue
+		_chip_row.add_child(_make_chip(group, _group_label(group), _active_group == group))
+
+func _make_chip(group: String, label: String, active: bool) -> Button:
+	var chip := Button.new()
+	chip.text = label
+	chip.custom_minimum_size = Vector2(0.0, 26.0)
+	chip.button_pressed = active
+	chip.add_theme_font_size_override("font_size", 12)
+	chip.add_theme_color_override("font_color", Color(0.95, 0.95, 0.85) if active else Color(0.72, 0.76, 0.64))
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.36, 0.46, 0.30, 0.95) if active else Color(0.13, 0.16, 0.12, 0.95)
+	style.border_color = Color(0.50, 0.62, 0.38, 0.9) if active else Color(0.25, 0.30, 0.22, 0.9)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(5)
+	style.set_content_margin_all(4)
+	chip.add_theme_stylebox_override("normal", style)
+	chip.add_theme_stylebox_override("hover", style)
+	chip.add_theme_stylebox_override("pressed", style)
+	chip.add_theme_stylebox_override("focus", style)
+	chip.pressed.connect(_on_chip_pressed.bind(group, label))
+	return chip
+
+func _make_group_header(group: String) -> Label:
+	var header := Label.new()
+	header.text = _group_label(group)
+	header.add_theme_font_size_override("font_size", 13)
+	header.add_theme_color_override("font_color", Color(0.85, 0.88, 0.66))
+	return header
+
+func _group_label(group: String) -> String:
+	if GROUP_LABELS.has(group):
+		return str(GROUP_LABELS[group])
+	# Unknown group ids (a validate() error in the data) still render.
+	return group.replace("_", " ").capitalize()
+
+func _on_chip_pressed(group: String, label: String) -> void:
+	if _manager == null:
+		return
+	var requested := group
+	_manager.set_build_filter(requested)
+	if requested != "" and _manager.build_filter != requested:
+		# The manager fell back to the full list: no owned parts in it.
+		show_status("You own no %s parts right now — showing all parts" % label.to_lower())
+	elif requested == "":
+		show_status("Showing all owned building parts")
+	else:
+		show_status("Showing %s parts" % label)
 
 func _make_part_button(item_id: String) -> Button:
 	var button := Button.new()

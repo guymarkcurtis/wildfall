@@ -6,6 +6,7 @@
 script = ExtResource("1_def")
 id = "chair"
 display_name = "Wooden Chair"
+build_group = "furniture"
 technology_id = "wood_building"
 requires_lower_support = false
 blocks_movement = true

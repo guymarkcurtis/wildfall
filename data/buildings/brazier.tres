@@ -10,6 +10,7 @@
 script = ExtResource("5_def")
 id = "brazier"
 display_name = "Iron Brazier"
+build_group = "furniture"
 technology_id = "stone_building"
 requires_lower_support = false
 blocks_movement = true

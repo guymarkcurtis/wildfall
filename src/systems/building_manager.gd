@@ -46,7 +46,13 @@ var refund_inventory: InventoryComponent = null
 
 var _ghost: Polygon2D = null
 var _owned: PackedStringArray = []
+var _visible: PackedStringArray = []
 var _select_index := 0
+
+## Build-palette filter: the build_group the palette shows ("") = every
+## group. Presentation only — placement, support, and save data never read
+## it, and a saved game never records it (it resets to "" on next boot).
+var build_filter := ""
 
 signal building_placed(building_id: String, coords: Vector2i)
 signal building_removed(building_id: String, coords: Vector2i)
@@ -140,13 +146,13 @@ func _process(_delta: float) -> void:
 		_ghost.visible = false
 		return
 	_refresh_owned()
-	if _owned.is_empty():
+	if _visible.is_empty():
 		selected_item_id = ""
 		_ghost.visible = false
 		return
-	if selected_item_id == "" or not _owned.has(selected_item_id):
+	if selected_item_id == "" or not _visible.has(selected_item_id):
 		_select_index = 0
-		selected_item_id = _owned[0]
+		selected_item_id = _visible[0]
 		build_mode_changed.emit(true, selected_item_id)
 	var tile := _mouse_tile()
 	_ghost.position = Vector2(tile * TILE_SIZE)
@@ -212,9 +218,9 @@ func set_build_mode(enabled: bool) -> void:
 	build_mode = enabled
 	if build_mode:
 		_refresh_owned()
-		if not _owned.is_empty():
-			_select_index = clampi(_select_index, 0, _owned.size() - 1)
-			selected_item_id = _owned[_select_index]
+		if not _visible.is_empty():
+			_select_index = clampi(_select_index, 0, _visible.size() - 1)
+			selected_item_id = _visible[_select_index]
 		else:
 			selected_item_id = ""
 	else:
@@ -249,16 +255,19 @@ func set_active_story(story: int) -> void:
 
 func cycle_selection(step: int) -> void:
 	_refresh_owned()
-	if _owned.is_empty():
+	if _visible.is_empty():
 		selected_item_id = ""
 		return
-	_select_index = posmod(_select_index + step, _owned.size())
-	selected_item_id = _owned[_select_index]
+	if selected_item_id != "" and _visible.has(selected_item_id):
+		_select_index = posmod(_select_index + step, _visible.size())
+	else:
+		_select_index = 0
+	selected_item_id = _visible[_select_index]
 	build_mode_changed.emit(build_mode, selected_item_id)
 
 func select_item(item_id: String) -> bool:
 	_refresh_owned()
-	var index := _owned.find(item_id)
+	var index := _visible.find(item_id)
 	if index < 0:
 		return false
 	_select_index = index
@@ -266,10 +275,55 @@ func select_item(item_id: String) -> bool:
 	build_mode_changed.emit(build_mode, selected_item_id)
 	return true
 
+## Palette filter (M9): show only the parts in one build group; "" shows
+## every group. A group the player owns no parts of falls back to the full
+## list, so a filter can never leave build mode without a selectable part.
+func set_build_filter(group: String) -> void:
+	var next_filter := group
+	if not next_filter.is_empty():
+		var any_owned := false
+		for item_id in _owned:
+			if get_build_group(item_id) == next_filter:
+				any_owned = true
+				break
+		if not any_owned:
+			next_filter = ""
+	if next_filter == build_filter:
+		return
+	build_filter = next_filter
+	_refresh_owned()
+	_resync_selection()
+	build_mode_changed.emit(build_mode, selected_item_id)
+
+## Re-point the selection at the visible (filter-aware) list without
+## emitting; the caller publishes the change.
+func _resync_selection() -> void:
+	if _visible.is_empty():
+		selected_item_id = ""
+		return
+	if selected_item_id == "" or not _visible.has(selected_item_id):
+		_select_index = 0
+		selected_item_id = _visible[0]
+
+func get_build_group(item_id: String) -> String:
+	var definition: Variant = get_definition(item_id)
+	if definition == null:
+		return ""
+	return str(definition.get("build_group"))
+
 func get_owned_building_items() -> Array[String]:
 	_refresh_owned()
 	var result: Array[String] = []
 	for item_id in _owned:
+		result.append(item_id)
+	return result
+
+## The parts the palette currently shows: the owned set narrowed by the
+## active build-filter (empty filter = the full owned set).
+func get_visible_building_items() -> Array[String]:
+	_refresh_owned()
+	var result: Array[String] = []
+	for item_id in _visible:
 		result.append(item_id)
 	return result
 
@@ -649,6 +703,7 @@ func _mouse_tile() -> Vector2i:
 
 func _refresh_owned() -> void:
 	_owned = PackedStringArray()
+	_visible = PackedStringArray()
 	if player == null or player.inventory == null or item_database == null:
 		return
 	var items := player.inventory.get_all_items()
@@ -656,6 +711,20 @@ func _refresh_owned() -> void:
 		if definitions.has(str(item_id)) and int(items[item_id]) > 0 and _is_item_unlocked(str(item_id)):
 			_owned.append(str(item_id))
 	_owned.sort()
+	# A filter naming a group the player no longer owns (last part placed
+	# or refunded away) falls back to the full list so the selection and
+	# ghost never dead-end.
+	if not build_filter.is_empty():
+		var group_still_owned := false
+		for item_id in _owned:
+			if get_build_group(item_id) == build_filter:
+				group_still_owned = true
+				break
+		if not group_still_owned:
+			build_filter = ""
+	for item_id in _owned:
+		if build_filter.is_empty() or get_build_group(item_id) == build_filter:
+			_visible.append(item_id)
 
 func _is_item_unlocked(item_id: String) -> bool:
 	var definition: Variant = get_definition(item_id)

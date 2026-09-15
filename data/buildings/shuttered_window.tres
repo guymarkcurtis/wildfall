@@ -6,6 +6,7 @@
 script = ExtResource("1_def")
 id = "shuttered_window"
 display_name = "Shuttered Window"
+build_group = "doors_windows"
 part_type = "window"
 tier = "metal"
 technology_id = "metalworking"

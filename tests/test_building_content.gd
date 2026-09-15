@@ -25,6 +25,7 @@ func _initialize() -> void:
 	_test_pinned_definition_values()
 	_test_capability_profiles()
 	_test_placement_metadata()
+	_test_build_groups()
 	_test_registry_validation_failures()
 	_test_item_tags()
 	_test_inventory_storage()
@@ -149,6 +150,35 @@ func _test_placement_metadata() -> void:
 	_check(reinforced_wall != null and reinforced_wall.tier == "metal"
 			and reinforced_wall.technology_id == "metalworking",
 			"reinforced content is data-gated behind existing metalworking research")
+
+## M9 box 4: the build palette files parts into the data-authored
+## build groups. The vocabulary itself is structural (BuildingDefinition
+## .BUILD_GROUPS); validate() rejects unknown ids, so this test pins the
+## data half — every shipped def assigns a group, and the catalogue
+## distribution matches the palette contract.
+func _test_build_groups() -> void:
+	var registry := BuildingContentRegistry.new()
+	registry.discover()
+	var missing := PackedStringArray()
+	var counts := {}
+	for group in BuildingDefinition.BUILD_GROUPS:
+		counts[group] = 0
+	for item_id in registry.definitions:
+		var definition := registry.get_definition(item_id)
+		if definition == null or definition.build_group.is_empty():
+			missing.append(item_id)
+			continue
+		counts[definition.build_group] = int(counts.get(definition.build_group, 0)) + 1
+	_check(missing.is_empty(),
+			"Every building definition assigns a build_group (missing: %s)" % ", ".join(missing))
+	_check(int(counts['structure']) == 12, "Structure group holds 12 parts (got %d)" % int(counts['structure']))
+	_check(int(counts['roof_cover']) == 4, "Roof / cover group holds 4 parts (got %d)" % int(counts['roof_cover']))
+	_check(int(counts['stairs_rail']) == 11, "Stairs & rail group holds 11 parts (got %d)" % int(counts['stairs_rail']))
+	_check(int(counts['doors_windows']) == 5, "Doors & windows group holds 5 parts (got %d)" % int(counts['doors_windows']))
+	_check(int(counts['furniture']) == 14, "Furniture group holds 14 parts (got %d)" % int(counts['furniture']))
+	_check(int(counts['stations']) == 4, "Stations group holds 4 parts (got %d)" % int(counts['stations']))
+	_check(int(counts['boundaries']) == 5, "Boundaries group holds 5 parts (got %d)" % int(counts['boundaries']))
+	_check(int(counts['exterior']) == 13, "Exterior group holds 13 parts (got %d)" % int(counts['exterior']))
 
 func _test_registry_validation_failures() -> void:
 	var registry := BuildingContentRegistry.new()

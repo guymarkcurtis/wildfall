@@ -6,6 +6,7 @@
 script = ExtResource("1_def")
 id = "metal_fence"
 display_name = "Metal Fence"
+build_group = "boundaries"
 part_type = "wall"
 tier = "metal"
 technology_id = "metalworking"

@@ -73,6 +73,43 @@ func _run() -> void:
 	for _frame in range(4):
 		await process_frame
 	_check(is_equal_approx(player.hunger_component.current_hunger, hunger_before), "Sandbox pauses hunger drain for long build tests")
+	# M9 box 4: the palette's group filter is presentation state on the
+	# manager. The starter kit already owns wooden walls and a campfire,
+	# so the working set below is those plus the granted doors and window.
+	var palette: BuildPalette = _main.get_node("HUD/BuildPalette") as BuildPalette
+	_check(palette != null, "Sandbox exposes a build palette")
+	player.inventory.add_item("wooden_wall", 3)
+	player.inventory.add_item("wooden_door", 2)
+	player.inventory.add_item("wooden_window", 1)
+	buildings.set_build_mode(true)
+	_check(buildings.get_visible_building_items().size() == 4,
+		"An empty filter exposes every owned building part (starter walls + campfire + granted doors and window)")
+	_check(buildings.select_item("wooden_wall"), "Wall selection is possible in the full list")
+	buildings.set_build_filter("doors_windows")
+	_check(buildings.build_filter == "doors_windows", "Filtering narrows the working list to one group")
+	var visible_items := buildings.get_visible_building_items()
+	_check(visible_items.size() == 2 and visible_items.has("wooden_door") and visible_items.has("wooden_window")
+			and not visible_items.has("wooden_wall") and not visible_items.has("campfire"),
+		"doors_windows shows both openings and hides the wall and the campfire")
+	_check(str(palette.get("_active_group")) == "doors_windows",
+		"The palette mirrors the manager's active filter")
+	_check(buildings.selected_item_id != "wooden_wall"
+			and visible_items.has(buildings.selected_item_id),
+		"Filtering out the selected part re-points the selection into the visible list")
+	var cycle_stayed_visible := true
+	for _cycle in range(6):
+		buildings.cycle_selection(1)
+		if not visible_items.has(buildings.selected_item_id):
+			cycle_stayed_visible = false
+	_check(cycle_stayed_visible, "Wheel cycling stays inside the filtered list")
+	buildings.set_build_filter("boundaries")
+	_check(buildings.build_filter.is_empty(),
+		"Filtering into a group the player owns no parts of falls back to the full list")
+	_check(str(palette.get("_active_group")) == "" if palette != null else false,
+		"The palette mirrors the fallback back to the full list")
+	_check(buildings.get_visible_building_items().size() == 4,
+		"The fallback re-exposes the full owned list")
+	buildings.set_build_mode(false)
 	var toolbar: SandboxSaveToolbar = _main.get_node("HUD/SandboxSaveToolbar") as SandboxSaveToolbar
 	_check(toolbar.visible and not bool(toolbar.get("_expanded")), "Sandbox keeps its save controls collapsed by default")
 	toolbar.call("_toggle_drawer")

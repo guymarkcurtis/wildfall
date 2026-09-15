@@ -6,6 +6,7 @@
 script = ExtResource("1_def")
 id = "cabinet"
 display_name = "Stone Cabinet"
+build_group = "furniture"
 technology_id = "stone_building"
 requires_lower_support = false
 blocks_movement = true

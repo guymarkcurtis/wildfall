@@ -43,6 +43,27 @@ const DOWN_STAIR_COLUMN := 4
 # above were the only utilities moved off this sheet).
 const UTILITY_CELL_INDEX := {"torch": 0, "chest": 2}
 const STATION_CELL_INDEX := {"campfire": 0, "furnace": 1, "workbench": 2, "anvil": 3}
+# Build-palette group per managed id (BuildingDefinition.BUILD_GROUPS).
+# This is the per-def half of the data side of the M9 box-4 split: the
+# vocabulary list is structural, the assignment is content data. The
+# structural parts derive from their part type; the utility rows need the
+# id map (fence is a "wall" part type but belongs to the boundaries group).
+const BUILD_GROUP := {
+	"wooden_foundation": "structure", "wooden_floor": "structure",
+	"wooden_wall": "structure", "wooden_pillar": "structure",
+	"stone_foundation": "structure", "stone_floor": "structure",
+	"stone_wall": "structure", "stone_pillar": "structure",
+	"wooden_roof": "roof_cover", "stone_roof": "roof_cover",
+	"wooden_stairs": "stairs_rail", "wooden_stairs_down": "stairs_rail",
+	"wooden_ramp": "stairs_rail", "stone_stairs": "stairs_rail",
+	"stone_stairs_down": "stairs_rail", "stone_ramp": "stairs_rail",
+	"wooden_window": "doors_windows", "wooden_door": "doors_windows",
+	"stone_window": "doors_windows", "stone_door": "doors_windows",
+	"torch": "exterior", "farm_soil": "exterior",
+	"campfire": "stations", "furnace": "stations", "workbench": "stations",
+	"anvil": "stations", "chest": "furniture", "bed": "furniture",
+	"fence": "boundaries",
+}
 
 func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(BUILDINGS_DIR))
@@ -269,6 +290,11 @@ func _save_building(item_id: String, display_name: String, part_type: String, ti
 	# pass an explicit family (fence belongs to the wood boundary family
 	# even though it shares the plain utility gameplay defaults' tier).
 	definition.visual_family_id = visual_family if not visual_family.is_empty() else tier
+	# M9 box 4: build-palette group. Every managed id has an entry in the
+	# BUILD_GROUP map; an id missing one leaves the field empty and validate()
+	# in BuildingDefinition catches it at authoring time.
+	if BUILD_GROUP.has(item_id):
+		definition.build_group = str(BUILD_GROUP[item_id])
 	# M2 placement model: edge parts orient to the four tile edges; doors and
 	# windows are edge fixtures that may replace a plain wall on the same
 	# edge; supported parts require the "structure" tag below them. Stairs

@@ -10,6 +10,7 @@
 script = ExtResource("5_def")
 id = "yard_lantern"
 display_name = "Yard Lantern"
+build_group = "exterior"
 technology_id = "wood_building"
 requires_lower_support = false
 build_cost = Array[Dictionary]([{

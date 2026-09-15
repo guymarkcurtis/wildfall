@@ -464,7 +464,7 @@ yards, workshops, and furnished two-story homes without starvation.
 - [ ] Add every new image to `TexturePackManager.PACK_ASSETS`, stock contact
       card, exported manifest, editable refinement pack, and live refresh
       path; extend `tools/verify_texture_pack.gd` and harness contract checks.
-- [ ] Build-palette groups/filters: structure, roof/cover, stairs/rail,
+- [x] Build-palette groups/filters: structure, roof/cover, stairs/rail,
       doors/windows, furniture, stations, boundaries, exterior.
 - [ ] Orientation/rotation controls with visible compass/edge preview; rotate
       only when the definition permits; never reinterpret saved orientations.
@@ -581,3 +581,4 @@ Dated entries for deliberate deviations from the source plans.
 | 2026-09-14 | The bed ships M8 with no interaction profile. | The interactables plan defers bed/farm/door interactions to later profile assets, so M8's "migrate the bed onto capability references" box is satisfied by the bed being a profile-less decorative part — there is no parallel storage/fuel/light behaviour to remove. |
 | 2026-09-14 | Station atlas sprites intentionally stack on top of appearance sprites rather than replacing them. | The data migration keeps pre-migration rendering pixel-identical; M9 may fold the two into dedicated per-station sheets. |
 | 2026-09-14 | The sandbox test contract for the C panel is "every hand-crafted recipe is exposed", not a full recipe count. | M6 design: the C-key panel lists hand recipes only; station recipes are exposed through E-interaction station panels. The 19 new furniture recipes are all hand-crafted, so the existing count-based contract covers them without test edits. |
+| 2026-09-14 | Build-palette groups are data: a `build_group` field on `BuildingDefinition` against an 8-group structural vocabulary; the filter is presentation state on `BuildingManager` (never saved); wheel/selection cycle the narrowed list, and a filter on a group the player owns no parts of falls back to the full list so build mode never dead-ends. | Follows the `visual_family_id` precedent: the group vocabulary is structural presentation, the per-def assignment is content data — regrouping or adding a part is a `.tres` edit, and the content suite pins the group distribution. The palette's chip label spellings live in code as presentation (like family colours), not as a data contract. |

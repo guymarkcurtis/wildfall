@@ -18,6 +18,7 @@ max_health = 260
 allowed_orientations = PackedStringArray()
 support_tags = PackedStringArray("structure")
 required_support_tags = PackedStringArray("structure")
+build_group = "structure"
 visual_family_id = "stone"
 atlas_path = "res://assets/tiles/building/structural_stone.png"
 atlas_cell = Vector2i(1, 6)

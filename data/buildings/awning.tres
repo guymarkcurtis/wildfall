@@ -6,6 +6,7 @@
 script = ExtResource("1_def")
 id = "awning"
 display_name = "Canvas Awning"
+build_group = "roof_cover"
 part_type = "roof"
 technology_id = "wood_building"
 build_cost = Array[Dictionary]([{

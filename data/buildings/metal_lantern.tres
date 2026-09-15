@@ -10,6 +10,7 @@
 script = ExtResource("5_def")
 id = "metal_lantern"
 display_name = "Metal Lantern"
+build_group = "exterior"
 tier = "metal"
 technology_id = "metalworking"
 requires_lower_support = false

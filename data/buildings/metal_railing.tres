@@ -6,6 +6,7 @@
 script = ExtResource("1_def")
 id = "metal_railing"
 display_name = "Metal Railing"
+build_group = "stairs_rail"
 part_type = "wall"
 tier = "metal"
 technology_id = "metalworking"

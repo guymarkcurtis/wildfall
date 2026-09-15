@@ -221,7 +221,7 @@ All game content uses Resource subclasses:
 | BiomeDefinition | Biome config (6 biomes) | id, display_name, elevation_range, moisture_range, temperature_range, ground_color, rain_chance, snow_chance, resource_types, creature_types, vegetation_types |
 | CreatureDefinition | Creature data — **wired (Phase 3)** | id, type, health, speed, detection_range, hostile, allowed_biomes, loot_table, custom_data |
 | TechnologyDefinition | Research unlock — **wired** | id, prerequisites[], unlock_cost[], unlocks_recipes[] |
-| BuildingDefinition | Modular structural-part data — **wired** | id, width, height, part_type, tier, technology_id, build_cost[] |
+| BuildingDefinition | Modular structural-part data — **wired** | id, width, height, part_type, tier, technology_id, build_cost[], atlas_path/atlas_cell, build_group |
 
 `TechnologySystem` owns the three-tier research state (free wood
 construction → stone construction → metalworking), validates prerequisites
