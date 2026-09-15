@@ -45,7 +45,10 @@ var technology_system: TechnologySystem = null
 ## (test harnesses). Live play always refunds through player.inventory.
 var refund_inventory: InventoryComponent = null
 
-var _ghost: Polygon2D = null
+var _ghost: Node2D = null
+## (item | resolved orientation | story) signature of the built ghost, so
+## markers are rebuilt only when the placement contract actually changes.
+var _ghost_signature := ""
 var _orientation_label: Label = null
 var _owned: PackedStringArray = []
 var _visible: PackedStringArray = []
@@ -142,13 +145,8 @@ func _connector_record_at(world_position: Vector2, story: int) -> BuildingRecord
 
 func _ready() -> void:
 	_load_definitions()
-	_ghost = Polygon2D.new()
-	_ghost.polygon = PackedVector2Array([
-		Vector2(2, 2), Vector2(30, 2), Vector2(30, 30), Vector2(2, 30)
-	])
-	_ghost.color = Color(0.4, 0.9, 0.4, 0.35)
+	_ghost = Node2D.new()
 	_ghost.visible = false
-	_ghost.z_index = 40
 	add_child(_ghost)
 	_orientation_label = Label.new()
 	_orientation_label.add_theme_font_size_override("font_size", 14)
@@ -184,11 +182,17 @@ func _process(_delta: float) -> void:
 		selected_item_id = _visible[0]
 		build_mode_changed.emit(true, selected_item_id)
 	var tile := _mouse_tile()
+	var orientation := _placement_orientation(tile)
+	var signature := "%s|%s|%d" % [selected_item_id, orientation, selected_story]
+	if signature != _ghost_signature:
+		_ghost_signature = signature
+		_rebuild_ghost(selected_item_id, orientation, selected_story)
+	# The container anchors on the construction story's band; markers add
+	# their layer offset (and a story offset for stairwell landings).
 	_ghost.position = Vector2(tile * TILE_SIZE)
-	# The ghost floats just above the construction story's band.
-	_ghost.z_index = selected_story * BuildingRecord.STORY_Z_STRIDE + int(BuildingRecord.LAYER_Z.get("edge", 4)) + 1
+	_ghost.z_index = selected_story * BuildingRecord.STORY_Z_STRIDE
 	_ghost.visible = true
-	_ghost.color = Color(0.3, 0.85, 0.35, 0.4) if can_place(tile) else Color(0.85, 0.25, 0.2, 0.4)
+	_update_ghost_colors(tile)
 	_update_orientation_compass(tile)
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -660,26 +664,116 @@ func _make_record(definition: BuildingDefinition, item_id: String, tile: Vector2
 ## Conservative direct-support rule: every footprint cell needs a placed
 ## record directly below whose definition provides one of the required tags.
 func _support_ok(probe: BuildingRecord) -> bool:
-	var required: PackedStringArray = probe.definition.required_support_tags
 	for dx in range(probe.footprint.x):
 		for dy in range(probe.footprint.y):
-			var cell := probe.tile + Vector2i(dx, dy)
-			var supported := false
-			for layer in LAYER_QUERY_PRIORITY:
-				var below := get_record_at(cell, probe.story - 1, layer)
-				if below == null or below.definition == null:
-					continue
-				if required.is_empty():
-					supported = true
-				else:
-					for tag in required:
-						if below.definition.support_tags.has(tag):
-							supported = true
-				if supported:
-					break
-			if not supported:
+			if not _cell_supported(probe.definition, probe.tile + Vector2i(dx, dy), probe.story):
 				return false
 	return true
+
+## Per-cell version of the support rule, so the ghost can paint the specific
+## unsupported cells red rather than one all-or-nothing colour.
+func _cell_supported(definition: BuildingDefinition, cell: Vector2i, story: int) -> bool:
+	if story <= 0:
+		return true
+	var required: PackedStringArray = definition.required_support_tags
+	for layer in LAYER_QUERY_PRIORITY:
+		var below := get_record_at(cell, story - 1, layer)
+		if below == null or below.definition == null:
+			continue
+		if required.is_empty():
+			return true
+		for tag in required:
+			if below.definition.support_tags.has(tag):
+				return true
+	return false
+
+## M9 box 6: rebuild the ghost's child markers — one per reserved key — when
+## the (item, orientation, story) signature changes. The preview must show the
+## complete placement contract: every footprint cell, the exact edge an edge
+## part occupies, and the stairwell landing a connector reserves.
+func _rebuild_ghost(item_id: String, orientation: String, story: int) -> void:
+	for child in _ghost.get_children():
+		child.free()
+	_ghost_signature = "%s|%s|%d" % [item_id, orientation, story]
+	var definition := get_definition(item_id) as BuildingDefinition
+	if definition == null:
+		return
+	var probe := _make_record(definition, item_id, Vector2i.ZERO, story,
+			_resolve_orientation(definition, orientation))
+	for entry in probe.reserved_key_descriptions():
+		var layer := str(entry["layer"])
+		var cell := entry["tile"] as Vector2i
+		var marker_story := int(entry["story"])
+		var marker := Polygon2D.new()
+		if layer == "edge":
+			marker.polygon = _edge_strip_polygon(str(entry["side"]))
+		else:
+			marker.polygon = PackedVector2Array([
+				Vector2(2, 2), Vector2(TILE_SIZE - 2, 2),
+				Vector2(TILE_SIZE - 2, TILE_SIZE - 2), Vector2(2, TILE_SIZE - 2)
+			])
+		marker.position = Vector2(cell) * float(TILE_SIZE)
+		marker.z_index = (marker_story - story) * BuildingRecord.STORY_Z_STRIDE \
+				+ int(BuildingRecord.LAYER_Z.get(layer, 2)) + 1
+		marker.set_meta("ghost_kind", "landing" if (layer == "floor" and marker_story != story) else layer)
+		marker.set_meta("ghost_layer", layer)
+		marker.set_meta("ghost_story", marker_story)
+		marker.set_meta("ghost_side", str(entry["side"]))
+		_ghost.add_child(marker)
+
+## A 5px strip drawn on the given side of the anchor tile — the visual
+## answer to "which of the four edges will this part take?":
+func _edge_strip_polygon(side: String) -> PackedVector2Array:
+	match side:
+		"north":
+			return PackedVector2Array([
+				Vector2(0, 0), Vector2(TILE_SIZE, 0),
+				Vector2(TILE_SIZE, 5), Vector2(0, 5)
+			])
+		"south":
+			return PackedVector2Array([
+				Vector2(0, TILE_SIZE - 5), Vector2(TILE_SIZE, TILE_SIZE - 5),
+				Vector2(TILE_SIZE, TILE_SIZE), Vector2(0, TILE_SIZE)
+			])
+		"west":
+			return PackedVector2Array([
+				Vector2(0, 0), Vector2(5, 0),
+				Vector2(5, TILE_SIZE), Vector2(0, TILE_SIZE)
+			])
+		_:
+			return PackedVector2Array([
+				Vector2(TILE_SIZE - 5, 0), Vector2(TILE_SIZE, 0),
+				Vector2(TILE_SIZE, TILE_SIZE), Vector2(TILE_SIZE - 5, TILE_SIZE)
+			])
+
+## Per-frame ghost recolour: green while every reserved key is free (and
+## supported), red on the specific occupied or unsupported cells, and a
+## distinct blue for the stairwell landing a connector reserves.
+func _update_ghost_colors(tile: Vector2i) -> void:
+	var definition := get_definition(selected_item_id) as BuildingDefinition
+	for marker in _ghost.get_children():
+		var kind := str(marker.get_meta("ghost_kind", ""))
+		var layer := str(marker.get_meta("ghost_layer", ""))
+		var marker_story := int(marker.get_meta("ghost_story", 0))
+		# The marker's local offset is its cell's offset from the probe
+		# anchor, so the live key re-anchors it on the current mouse tile.
+		var delta := Vector2i(
+			int(marker.position.x / float(TILE_SIZE)),
+			int(marker.position.y / float(TILE_SIZE)))
+		var cell := tile + delta
+		var key := ""
+		if layer == "edge":
+			key = BuildingRecord.canonical_edge_key(cell, marker_story, str(marker.get_meta("ghost_side", "north")))
+		else:
+			key = BuildingRecord.tile_key(cell, marker_story, layer)
+		var occupied := get_record_for_key(key) != null
+		var unsupported := marker_story > 0 and definition != null \
+				and bool(definition.requires_lower_support) \
+				and not _cell_supported(definition, tile + delta, marker_story)
+		if kind == "landing":
+			marker.color = Color(0.85, 0.25, 0.2, 0.4) if (occupied or unsupported) else Color(0.45, 0.7, 1.0, 0.4)
+		else:
+			marker.color = Color(0.3, 0.85, 0.35, 0.4) if not (occupied or unsupported) else Color(0.85, 0.25, 0.2, 0.4)
 
 func _terrain_is_buildable(tile: Vector2i) -> bool:
 	if world_generator == null:
@@ -780,7 +874,7 @@ func _update_orientation_compass(tile: Vector2i) -> void:
 	var orientation := _placement_orientation(tile)
 	_orientation_label.text = orientation.substr(0, 1).to_upper()
 	_orientation_label.position = Vector2(tile * TILE_SIZE) + Vector2(6.0, -14.0)
-	_orientation_label.z_index = _ghost.z_index + 1
+	_orientation_label.z_index = int(_ghost.z_index) + int(BuildingRecord.LAYER_Z.get("overhead", 5)) + 2
 	_orientation_label.visible = true
 
 ## Fallback orientation for a live edge placement: the nearest tile edge

@@ -221,6 +221,36 @@ func reserved_keys() -> Array[String]:
 		keys.append(tile_key(tile, story + definition.connector_profile.upper_story_offset, "floor"))
 	return keys
 
+## Per-key descriptions of every reservation, for presentation (the build
+## ghost): the canonical key (the occupancy source of truth), the tile the
+## marker anchors on, the story it lives in, its placement layer, and — for
+## edge records — the physical side of the anchor tile the part occupies.
+## Ghost drawing must render this list, never re-derive reservations.
+func reserved_key_descriptions() -> Array:
+	var entries: Array = []
+	if layer == "edge":
+		entries.append({
+			"key": canonical_edge_key(tile, story, orientation),
+			"tile": tile, "story": story, "layer": "edge",
+			"side": orientation if orientation != "" else "north",
+		})
+		return entries
+	for dx in range(footprint.x):
+		for dy in range(footprint.y):
+			entries.append({
+				"key": tile_key(tile + Vector2i(dx, dy), story, layer),
+				"tile": tile + Vector2i(dx, dy), "story": story, "layer": layer,
+				"side": "",
+			})
+	if layer == "connector" and definition != null and definition.connector_profile != null \
+			and definition.connector_profile.reserve_stairwell:
+		entries.append({
+			"key": tile_key(tile, story + definition.connector_profile.upper_story_offset, "floor"),
+			"tile": tile, "story": story + definition.connector_profile.upper_story_offset,
+			"layer": "floor", "side": "",
+		})
+	return entries
+
 ## Stable identity for UI ownership and save `state` (extends the M1
 ## x:y:story key with the layer; edges append the normalized edge side).
 func placement_key() -> String:

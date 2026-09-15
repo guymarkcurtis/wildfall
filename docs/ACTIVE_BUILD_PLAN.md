@@ -452,24 +452,24 @@ yards, workshops, and furnished two-story homes without starvation.
 
 ## M9 — Art, UX, and presentation
 
-- [ ] Write `docs/BUILDING_ART_REQUESTS.md` naming every cell, dimensions,
+- [x] Write `docs/BUILDING_ART_REQUESTS.md` naming every cell, dimensions,
       orientation, transparency rule, reference assets, and consuming code —
       covering **both** the building families (structural/boundaries/interior/
       exterior atlases per the building plan) **and** the interactable state
       sheets (chest/campfire/furnace/workbench/torch frames per the
       interactables art brief; shared light mask is a Godot
       `GradientTexture2D`, not PixelLab art).
-- [ ] Produce all art through PixelLab with existing Wildfall sheets as style
+- [x] Produce all art through PixelLab with existing Wildfall sheets as style
       references; review at native camera zoom before packing; mechanical
       pack/crop only; verify transparency + exact dimensions before commit.
-- [ ] Add every new image to `TexturePackManager.PACK_ASSETS`, stock contact
+- [x] Add every new image to `TexturePackManager.PACK_ASSETS`, stock contact
       card, exported manifest, editable refinement pack, and live refresh
       path; extend `tools/verify_texture_pack.gd` and harness contract checks.
 - [x] Build-palette groups/filters: structure, roof/cover, stairs/rail,
       doors/windows, furniture, stations, boundaries, exterior.
 - [x] Orientation/rotation controls with visible compass/edge preview; rotate
       only when the definition permits; never reinterpret saved orientations.
-- [ ] Ghost previews show all reserved tiles/edges, support failures, stair
+- [x] Ghost previews show all reserved tiles/edges, support failures, stair
       endpoints, and roof cutaways — not just a green/red square.
 - [ ] Interaction highlight/focus, concise prompts, capacity/fuel errors,
       craft success/failure feedback, animation readable at 32 px.
@@ -584,3 +584,4 @@ Dated entries for deliberate deviations from the source plans.
 | 2026-09-14 | The sandbox test contract for the C panel is "every hand-crafted recipe is exposed", not a full recipe count. | M6 design: the C-key panel lists hand recipes only; station recipes are exposed through E-interaction station panels. The 19 new furniture recipes are all hand-crafted, so the existing count-based contract covers them without test edits. |
 | 2026-09-14 | Build-palette groups are data: a `build_group` field on `BuildingDefinition` against an 8-group structural vocabulary; the filter is presentation state on `BuildingManager` (never saved); wheel/selection cycle the narrowed list, and a filter on a group the player owns no parts of falls back to the full list so build mode never dead-ends. | Follows the `visual_family_id` precedent: the group vocabulary is structural presentation, the per-def assignment is content data — regrouping or adding a part is a `.tres` edit, and the content suite pins the group distribution. The palette's chip label spellings live in code as presentation (like family colours), not as a data contract. |
 | 2026-09-14 | M9 box 5: building rotation moves to R (clockwise) / Q (counter-clockwise) via new `build_rotate_cw`/`build_rotate_ccw` actions, and the sandbox roof toggle moves from R to F5 (amending the M3 row above). Camera view-rotation stays on `,` / `.` (the 4/6 keys are inventory tool slots). The sandbox save action moves F5 -> F4 to keep F5 free for the roof toggle (the F-key family is now F3 debug, F4 save, F5 roof toggle, F9 load; `SAVE_FORMAT.md` updated). The manager keeps a transient `pending_orientation` (reset on build-mode entry/exit and on selection change); the first R/Q press seeds it from the nearest mouse edge and it then sticks, placement and the ghost use the pending choice when set and the mouse edge otherwise, the ghost shows the resolved edge as a compass letter, and saved records are never reinterpreted. | The plan mandates "R/Q rotation with visible compass/edge preview". R/Q are free keys that do not collide with the camera's `,`/`.` view-rotation pair; F5 joined the sandbox F-key family, which required moving the save key one slot over to F4 (a free key; no test or code path pins the old F5 keycode); the sticky pending orientation gives R/Q a stable target while the mouse keeps steering the ghost tile. |
+| 2026-09-14 | M9 box 6: the ghost preview is now one marker per reserved key. `BuildingRecord.reserved_key_descriptions()` is the single source of truth for what a placement reserves (each footprint cell, the exact edge an edge part occupies, the stairwell landing a connector reserves); `BuildingManager` renders one marker per key (inset cell squares, a 5px strip on the placed edge side, a blue marker for the reserved landing) and rebuilds only when (item, orientation, story) changes. Per frame each marker is recoloured from the live records: green while free, red on the specific occupied or unsupported cell (the support rule splits into a per-cell `_cell_supported`), blue for a reserved stairwell landing. Markers carry the story band of their own key, so roof/overhead markers sit in the cutaway-consistent overhead band and landings in the landing story's band; the compass letter floats above the highest marker band. | The plan mandates "all reserved tiles/edges, support failures, stair endpoints, and roof cutaways — not just a green/red square". A key captured at rebuild time would anchor on the origin and stop following the mouse, so per-frame colouring re-derives each marker's canonical key from its offset plus the current mouse tile; red therefore always means exactly what `can_place` would reject, so the preview never lies about what the click will do. |

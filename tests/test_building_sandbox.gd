@@ -195,6 +195,91 @@ func _run() -> void:
 	await process_frame
 	_check(buildings.roofs_visible, "F5 shows the roof layer again")
 	buildings.set_build_mode(false)
+	# M9 box 6: the ghost shows the full placement contract — one marker per
+	# reserved key (each footprint cell, the exact edge an edge part occupies,
+	# the stairwell landing a connector reserves) — and per-marker colour
+	# names the specific failure.
+	buildings.set_build_mode(true)
+	player.inventory.add_item("awning", 1)
+	player.inventory.add_item("wooden_stairs", 1)
+	player.inventory.add_item("wooden_roof", 1)
+	player.inventory.add_item("wooden_wall", 2)
+	for _frame in range(3):
+		await process_frame
+	var ghost: Node2D = buildings.get("_ghost")
+	_check(ghost != null and ghost.visible, "The ghost is visible while build mode is active")
+	# Edge part: one strip on the pending side of the anchor tile.
+	_check(buildings.select_item("wooden_wall"), "The wall is selectable for the ghost checks")
+	buildings.pending_orientation = "east"
+	for _frame in range(3):
+		await process_frame
+	_check(ghost.get_child_count() == 1, "A wall reserves exactly one key, so the ghost has one marker")
+	var wall_marker := ghost.get_child(0) as Polygon2D
+	_check(str(wall_marker.get_meta("ghost_kind")) == "edge"
+			and str(wall_marker.get_meta("ghost_side")) == "east",
+			"The wall's marker sits on the pending (east) side of the tile")
+	_check(int(wall_marker.z_index) == 5, "The edge marker floats in the story-0 edge band")
+	# Multi-tile footprint: one marker per reserved cell.
+	var awning_def := buildings.get_definition("awning") as BuildingDefinition
+	_check(awning_def != null, "The awning definition loads for the white-box width probe")
+	awning_def.width = 2
+	buildings.select_item("awning")
+	for _frame in range(3):
+		await process_frame
+	_check(ghost.get_child_count() == 2, "A two-tile awning reserves two ghost cells")
+	var awning_cells := PackedVector2Array()
+	for _index in range(ghost.get_child_count()):
+		var cell_marker := ghost.get_child(_index) as Polygon2D
+		awning_cells.append(Vector2(int(cell_marker.position.x / 32.0), int(cell_marker.position.y / 32.0)))
+	_check(awning_cells.has(Vector2.ZERO) and awning_cells.has(Vector2(1, 0)),
+			"The awning's markers cover the anchor cell and its east neighbour")
+	_check(str(ghost.get_child(0).get_meta("ghost_layer")) == "overhead",
+			"Awning cells are overhead-layer markers")
+	awning_def.width = 1
+	# Stairwell: the connector's base plus the floor slot it reserves above.
+	buildings.select_item("wooden_stairs")
+	for _frame in range(3):
+		await process_frame
+	_check(ghost.get_child_count() == 2, "The stair ghost marks its base and its reserved landing")
+	var landing_marker := ghost.get_child(1) as Polygon2D
+	_check(str(landing_marker.get_meta("ghost_kind")) == "landing"
+			and int(landing_marker.get_meta("ghost_story")) == 1,
+			"The landing marker reserves the floor slot one story up")
+	_check(int(landing_marker.z_index) == 22
+			and landing_marker.position == (ghost.get_child(0) as Polygon2D).position,
+			"The landing marker sits in the story-1 band above the stair's own tile")
+	# Ghost colour mirrors the exact placement decision: an upper-story part
+	# with nothing supporting it is red.
+	var ghost_tile := buildings._mouse_tile()
+	buildings.set_selected_story(1)
+	buildings.select_item("wooden_roof")
+	for _frame in range(3):
+		await process_frame
+	var roof_marker := ghost.get_child(0) as Polygon2D
+	_check(buildings.can_place(ghost_tile, 1) == false, "A roof finds no support over an empty upper story")
+	_check(roof_marker.color == Color(0.85, 0.25, 0.2, 0.4),
+			"The roof ghost is red over an unsupported upper story")
+	buildings.set_selected_story(0)
+	# An occupied reserved key is red — and the ghost names that specific key.
+	_check(buildings.select_item("wooden_wall"), "Back to the wall for the occupancy colour check")
+	var free_side := ""
+	for candidate in ["north", "east", "south", "west"]:
+		if buildings.get_record_for_key(BuildingRecord.canonical_edge_key(ghost_tile, 0, str(candidate))) == null:
+			free_side = str(candidate)
+			break
+	_check(free_side != "", "At least one edge around the ghost tile is free")
+	buildings.pending_orientation = free_side
+	for _frame in range(3):
+		await process_frame
+	var wall_marker2 := ghost.get_child(0) as Polygon2D
+	_check(wall_marker2.color == Color(0.3, 0.85, 0.35, 0.4), "A free reserved edge shows a green marker")
+	_check(buildings.try_place_at(ghost_tile), "The wall places on the edge the ghost reserved")
+	for _frame in range(3):
+		await process_frame
+	_check(wall_marker2.color == Color(0.85, 0.25, 0.2, 0.4),
+			"The ghost marker turns red once its reserved edge is occupied")
+	buildings.set_build_mode(false)
+	_check(ghost != null and not ghost.visible, "Leaving build mode hides the ghost")
 	var toolbar: SandboxSaveToolbar = _main.get_node("HUD/SandboxSaveToolbar") as SandboxSaveToolbar
 	_check(toolbar.visible and not bool(toolbar.get("_expanded")), "Sandbox keeps its save controls collapsed by default")
 	toolbar.call("_toggle_drawer")
