@@ -88,7 +88,7 @@ func _build_ui() -> void:
 	column.add_child(_story_label)
 
 	var instructions := Label.new()
-	instructions.text = "Chips filter the list by group. Click a part to select it. LMB places • wheel cycles • [ / ] story • B closes"
+	instructions.text = "Chips filter the list by group. Click a part to select it. LMB places • wheel cycles • R/Q rotates • [ / ] story • B closes"
 	instructions.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	instructions.add_theme_font_size_override("font_size", 12)
 	instructions.add_theme_color_override("font_color", Color(0.64, 0.69, 0.57))

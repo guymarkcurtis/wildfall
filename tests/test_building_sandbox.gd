@@ -110,6 +110,91 @@ func _run() -> void:
 	_check(buildings.get_visible_building_items().size() == 4,
 		"The fallback re-exposes the full owned list")
 	buildings.set_build_mode(false)
+	# M9 box 5: R rotates the pending orientation clockwise and Q
+	# counter-clockwise; the first press seeds it from the live mouse-edge
+	# default, and the choice sticks until the selection changes or build
+	# mode is (re)entered. F5 (formerly R) toggles roof visibility.
+	var allowed_edges := ["north", "east", "south", "west"]
+	_check(_action_keycode("build_rotate_cw") == KEY_R, "R is bound to clockwise building rotation")
+	_check(_action_keycode("build_rotate_ccw") == KEY_Q, "Q is bound to counter-clockwise building rotation")
+	_check(_action_keycode("toggle_roofs") == KEY_F5, "F5 (not R) toggles roof visibility")
+	buildings.set_build_mode(true)
+	_check(buildings.select_item("wooden_wall"), "The orientable starter wall is selectable for rotation")
+	await process_frame
+	_check(bool(buildings.get("_orientation_label").visible), "The ghost shows a compass letter for an orientable part")
+	_check(String(buildings.get("_orientation_label").text) in ["N", "E", "S", "W"], "The compass letter names the resolved edge")
+	_press_key("build_rotate_cw")
+	var seeded := ""
+	for _frame in range(20):
+		await process_frame
+		if not buildings.pending_orientation.is_empty():
+			seeded = str(buildings.pending_orientation)
+			break
+	_release_key("build_rotate_cw")
+	await process_frame
+	_check(not seeded.is_empty() and allowed_edges.has(seeded),
+			"First R press seeds the pending orientation from the live mouse edge")
+	_press_key("build_rotate_cw")
+	for _frame in range(20):
+		await process_frame
+		if not buildings.pending_orientation.is_empty() and buildings.pending_orientation != seeded:
+			break
+	_release_key("build_rotate_cw")
+	await process_frame
+	var advanced := str(buildings.pending_orientation)
+	_check(advanced != seeded and allowed_edges.has(advanced), "Second R press advances the pending orientation")
+	_press_key("build_rotate_ccw")
+	for _frame in range(20):
+		await process_frame
+		if str(buildings.pending_orientation) == seeded:
+			break
+	_release_key("build_rotate_ccw")
+	await process_frame
+	_check(str(buildings.pending_orientation) == seeded, "Q walks the pending orientation back to the seeded edge")
+	# The key-rotated choice is what the live placement consumes.
+	_check(buildings.get_record_at(Vector2i(5, 2), 0, "edge", seeded) == null,
+			"The test tile is free on the rotated edge before placement")
+	_check(buildings.try_place_at(Vector2i(5, 2)), "The key-rotated pending orientation places successfully")
+	var placed_wall := buildings.get_record_at(Vector2i(5, 2), 0, "edge", seeded)
+	_check(placed_wall != null and str(placed_wall.orientation) == seeded,
+			"The placed record keeps exactly the orientation the player rotated to")
+	# Later rotations never reinterpret an already-saved orientation.
+	var other_edge := "north"
+	for edge in allowed_edges:
+		if str(edge) != seeded:
+			other_edge = str(edge)
+			break
+	buildings.pending_orientation = other_edge
+	_check(buildings.try_place_at(Vector2i(7, 2)), "A second wall places with the new rotation choice")
+	_check(placed_wall != null and is_instance_valid(placed_wall) and str(placed_wall.orientation) == seeded,
+			"Rotating a later placement never reinterprets an already-saved orientation")
+	# A non-orientable part is a rotation no-op and shows no compass.
+	_check(buildings.select_item("campfire"), "The non-orientable campfire is selectable")
+	_press_key("build_rotate_cw")
+	for _frame in range(4):
+		await process_frame
+	_release_key("build_rotate_cw")
+	await process_frame
+	_check(buildings.pending_orientation.is_empty(), "Rotating a non-orientable part is a no-op")
+	_check(not bool(buildings.get("_orientation_label").visible), "A non-orientable part shows no compass letter")
+	# F5 (repointed from R) still toggles the sandbox roof layer.
+	_press_key("toggle_roofs")
+	for _frame in range(20):
+		await process_frame
+		if not buildings.roofs_visible:
+			break
+	_release_key("toggle_roofs")
+	await process_frame
+	_check(not buildings.roofs_visible, "F5 hides the roof layer in the sandbox")
+	_press_key("toggle_roofs")
+	for _frame in range(20):
+		await process_frame
+		if buildings.roofs_visible:
+			break
+	_release_key("toggle_roofs")
+	await process_frame
+	_check(buildings.roofs_visible, "F5 shows the roof layer again")
+	buildings.set_build_mode(false)
 	var toolbar: SandboxSaveToolbar = _main.get_node("HUD/SandboxSaveToolbar") as SandboxSaveToolbar
 	_check(toolbar.visible and not bool(toolbar.get("_expanded")), "Sandbox keeps its save controls collapsed by default")
 	toolbar.call("_toggle_drawer")
@@ -127,3 +212,34 @@ func _check(condition: bool, label: String) -> void:
 	else:
 		_failures += 1
 		push_error("[FAIL] %s" % label)
+
+## The first keycode bound to an input action (KEY_* value; -1 when the
+## action is missing or carries no key event).
+func _action_keycode(action: String) -> int:
+	if not InputMap.has_action(action):
+		return -1
+	for event in InputMap.action_get_events(action):
+		if event is InputEventKey:
+			var key := event as InputEventKey
+			if key.keycode != 0:
+				return int(key.keycode)
+	return -1
+
+## Inject a real key event for the first InputEventKey bound to `action`
+## so the manager's _unhandled_input path runs exactly as it would for a
+## physical key.
+func _press_key(action: String, pressed: bool = true) -> void:
+	if not InputMap.has_action(action):
+		return
+	for event in InputMap.action_get_events(action):
+		if event is InputEventKey:
+			var source := event as InputEventKey
+			var injected := InputEventKey.new()
+			injected.keycode = source.keycode
+			injected.unicode = source.unicode
+			injected.pressed = pressed
+			Input.parse_input_event(injected)
+			return
+
+func _release_key(action: String) -> void:
+	_press_key(action, false)

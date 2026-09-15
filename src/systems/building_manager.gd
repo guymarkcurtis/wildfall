@@ -31,7 +31,8 @@ var selected_story := 0
 ## palette's `selected_story` stays an independent construction value.
 var active_story := 0
 
-## Sandbox-only roof visibility override (R key in Building Sandbox).
+## Sandbox-only roof visibility override (F5 key in Building Sandbox; R was
+## repointed at building rotation by M9 box 5).
 var roofs_visible := true
 
 var _connector_under_player: BuildingRecord = null
@@ -45,6 +46,7 @@ var technology_system: TechnologySystem = null
 var refund_inventory: InventoryComponent = null
 
 var _ghost: Polygon2D = null
+var _orientation_label: Label = null
 var _owned: PackedStringArray = []
 var _visible: PackedStringArray = []
 var _select_index := 0
@@ -53,6 +55,14 @@ var _select_index := 0
 ## group. Presentation only — placement, support, and save data never read
 ## it, and a saved game never records it (it resets to "" on next boot).
 var build_filter := ""
+
+## The orientation the player explicitly chose with R/Q while the current
+## part is selected ("") = follow the nearest tile edge under the cursor.
+## Transient presentation state: live placement and the ghost compass
+## consume it, and it resets when build mode is (re)entered or the
+## selection changes. Saved building records always keep the orientation
+## they were placed with — rotation never reinterprets a placed part.
+var pending_orientation := ""
 
 signal building_placed(building_id: String, coords: Vector2i)
 signal building_removed(building_id: String, coords: Vector2i)
@@ -140,17 +150,36 @@ func _ready() -> void:
 	_ghost.visible = false
 	_ghost.z_index = 40
 	add_child(_ghost)
+	_orientation_label = Label.new()
+	_orientation_label.add_theme_font_size_override("font_size", 14)
+	_orientation_label.add_theme_color_override("font_color", Color(0.95, 0.95, 0.9))
+	var label_style := StyleBoxFlat.new()
+	label_style.bg_color = Color(0.06, 0.1, 0.08, 0.78)
+	label_style.set_corner_radius_all(4)
+	label_style.content_margin_left = 5.0
+	label_style.content_margin_right = 5.0
+	label_style.content_margin_top = 2.0
+	label_style.content_margin_bottom = 2.0
+	_orientation_label.add_theme_stylebox_override("normal", label_style)
+	_orientation_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_orientation_label.visible = false
+	_orientation_label.z_index = 41
+	add_child(_orientation_label)
 
 func _process(_delta: float) -> void:
 	if not build_mode:
 		_ghost.visible = false
+		_orientation_label.visible = false
 		return
 	_refresh_owned()
 	if _visible.is_empty():
 		selected_item_id = ""
+		pending_orientation = ""
 		_ghost.visible = false
+		_orientation_label.visible = false
 		return
 	if selected_item_id == "" or not _visible.has(selected_item_id):
+		pending_orientation = ""
 		_select_index = 0
 		selected_item_id = _visible[0]
 		build_mode_changed.emit(true, selected_item_id)
@@ -160,6 +189,7 @@ func _process(_delta: float) -> void:
 	_ghost.z_index = selected_story * BuildingRecord.STORY_Z_STRIDE + int(BuildingRecord.LAYER_Z.get("edge", 4)) + 1
 	_ghost.visible = true
 	_ghost.color = Color(0.3, 0.85, 0.35, 0.4) if can_place(tile) else Color(0.85, 0.25, 0.2, 0.4)
+	_update_orientation_compass(tile)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_build"):
@@ -171,8 +201,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	# Building Sandbox debug controls: the [ / ] keys move the ACTIVE story
-	# when the build palette is closed, and R toggles roof visibility. Never
-	# available in survival — a normal player must not phase through floors.
+	# when the build palette is closed, and F5 toggles roof visibility.
+	# Never available in survival — a normal player must not phase through
+	# floors. (R/Q became building-rotation controls in M9 box 5.)
 	if GameSession.is_building_sandbox() and not build_mode:
 		if event.is_action_pressed("build_level_up"):
 			set_active_story(active_story + 1)
@@ -188,6 +219,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if not build_mode:
+		return
+	# R/Q rotate the pending orientation of the selected part (M9 box 5).
+	# Works in every mode while the build palette is open; the compass
+	# above the ghost shows the edge the next placement will use.
+	if event.is_action_pressed("build_rotate_cw"):
+		rotate_build_orientation(1)
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("build_rotate_ccw"):
+		rotate_build_orientation(-1)
+		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("build_level_up"):
 		set_selected_story(selected_story + 1)
@@ -216,6 +258,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func set_build_mode(enabled: bool) -> void:
 	build_mode = enabled
+	# Every fresh build session (or return to normal play) starts from the
+	# live mouse-edge default; a stuck rotation choice is a dead end.
+	pending_orientation = ""
 	if build_mode:
 		_refresh_owned()
 		if not _visible.is_empty():
@@ -227,6 +272,8 @@ func set_build_mode(enabled: bool) -> void:
 		selected_item_id = ""
 		if _ghost:
 			_ghost.visible = false
+		if _orientation_label:
+			_orientation_label.visible = false
 	# Build mode switches the presentation focus between the construction
 	# story (blueprint view) and the active story.
 	_apply_presentation()
@@ -255,6 +302,8 @@ func set_active_story(story: int) -> void:
 
 func cycle_selection(step: int) -> void:
 	_refresh_owned()
+	# A new part means a new rotation context.
+	pending_orientation = ""
 	if _visible.is_empty():
 		selected_item_id = ""
 		return
@@ -270,6 +319,8 @@ func select_item(item_id: String) -> bool:
 	var index := _visible.find(item_id)
 	if index < 0:
 		return false
+	# A new part means a new rotation context.
+	pending_orientation = ""
 	_select_index = index
 	selected_item_id = item_id
 	build_mode_changed.emit(build_mode, selected_item_id)
@@ -300,8 +351,11 @@ func set_build_filter(group: String) -> void:
 func _resync_selection() -> void:
 	if _visible.is_empty():
 		selected_item_id = ""
+		pending_orientation = ""
 		return
 	if selected_item_id == "" or not _visible.has(selected_item_id):
+		# The re-pointed part is a new rotation context.
+		pending_orientation = ""
 		_select_index = 0
 		selected_item_id = _visible[0]
 
@@ -386,12 +440,17 @@ func get_record_for_building(building: Building) -> BuildingRecord:
 # --- Placement ---
 
 func can_place(tile: Vector2i, story: int = selected_story) -> bool:
-	return _placement_failure(selected_item_id, tile, story, _orientation_for_mouse(tile)) == ""
+	return _placement_failure(selected_item_id, tile, story, _placement_orientation(tile)) == ""
 
-## Place the selected structural part on the active construction story,
-## orienting edge parts to the nearest tile edge under the cursor.
+## Playerless harness managers (tests) have no player to own the item, so
+## the check falls back to the refund inventory — the same fallback chain
+## the refund path uses.
+
+## Place the selected structural part on the active construction story.
+## Edge parts use the player's pending R/Q orientation when one is set,
+## otherwise the nearest tile edge under the cursor.
 func try_place_at(tile: Vector2i) -> bool:
-	var orientation := _orientation_for_mouse(tile)
+	var orientation := _placement_orientation(tile)
 	var reason := _placement_failure(selected_item_id, tile, selected_story, orientation)
 	if reason != "":
 		placement_failed.emit(reason)
@@ -533,7 +592,7 @@ func clear_all() -> void:
 ## The exact placement failure reason, or "" when the placement would
 ## succeed. Everything is checked before anything mutates.
 func _placement_failure(item_id: String, tile: Vector2i, story: int, orientation: String) -> String:
-	var inv: InventoryComponent = player.inventory if player != null else null
+	var inv: InventoryComponent = player.inventory if player != null else refund_inventory
 	return _placement_failure_for(item_id, tile, story, orientation, inv)
 
 func _placement_failure_for(item_id: String, tile: Vector2i, story: int, orientation: String, inv: InventoryComponent) -> String:
@@ -677,8 +736,55 @@ func _demolition_is_blocked(record: BuildingRecord) -> bool:
 	demolition_blocked.emit(record, reason)
 	return true
 
-## Orientation for a live edge placement: the nearest tile edge under the
-## cursor (deterministic; API placements default to north).
+## The orientation a live placement (and its ghost/compass) uses: the
+## player's pending R/Q choice when one is set and the selected definition
+## allows it, otherwise the nearest tile edge under the cursor.
+func _placement_orientation(tile: Vector2i) -> String:
+	if not pending_orientation.is_empty():
+		var definition := get_definition(selected_item_id) as BuildingDefinition
+		if definition != null and definition.allowed_orientations.has(pending_orientation):
+			return pending_orientation
+	return _orientation_for_mouse(tile)
+
+## Rotate the pending orientation of the selected part through its allowed
+## orientations (R clockwise step +1, Q counter-clockwise step -1). The
+## first press seeds the pending orientation from the live mouse-edge
+## default so the compass and the placement stay honest; the choice then
+## sticks — mouse movement no longer steers it — until the selection
+## changes or build mode is (re)entered. Non-orientable parts are a no-op.
+func rotate_build_orientation(step: int) -> void:
+	if not build_mode:
+		return
+	var definition := get_definition(selected_item_id) as BuildingDefinition
+	if definition == null or definition.allowed_orientations.is_empty():
+		return
+	if pending_orientation.is_empty():
+		pending_orientation = _orientation_for_mouse(_mouse_tile())
+	var allowed := definition.allowed_orientations
+	var index := allowed.find(pending_orientation)
+	if index < 0:
+		index = 0
+	pending_orientation = allowed[posmod(index + step, allowed.size())]
+
+## Compass/edge preview (M9 box 5): while an orientable part is selected,
+## float the resolved edge letter (N/E/S/W) above the ghost tile. It
+## follows the mouse while no pending rotation is set and the pending
+## choice once R/Q has been used.
+func _update_orientation_compass(tile: Vector2i) -> void:
+	if _orientation_label == null:
+		return
+	var definition := get_definition(selected_item_id) as BuildingDefinition
+	if definition == null or definition.allowed_orientations.is_empty():
+		_orientation_label.visible = false
+		return
+	var orientation := _placement_orientation(tile)
+	_orientation_label.text = orientation.substr(0, 1).to_upper()
+	_orientation_label.position = Vector2(tile * TILE_SIZE) + Vector2(6.0, -14.0)
+	_orientation_label.z_index = _ghost.z_index + 1
+	_orientation_label.visible = true
+
+## Fallback orientation for a live edge placement: the nearest tile edge
+## under the cursor (deterministic; API placements default to north).
 func _orientation_for_mouse(tile: Vector2i) -> String:
 	var definition := get_definition(selected_item_id) as BuildingDefinition
 	if definition == null or definition.allowed_orientations.is_empty():

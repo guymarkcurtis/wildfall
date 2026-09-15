@@ -20,6 +20,7 @@ func _run() -> void:
 	_test_collision_rules()
 	_test_save_round_trip()
 	_test_container_persistence_and_safe_demolition()
+	_test_orientation_rotation()
 	print("Building placement failures: %d (%d checks)" % [_failures, _checks])
 	quit(_failures)
 
@@ -331,4 +332,76 @@ func _test_container_persistence_and_safe_demolition() -> void:
 			"Malformed saved container fields are rejected safely without reshaping storage")
 	restored_manager.queue_free()
 	malformed_manager.queue_free()
+	manager.queue_free()
+
+# --- Orientation rotation (M9 box 5) ---
+#
+# The manager here has no player, so the live mouse-edge fallback
+# resolves deterministically to "west" (zero cursor offset). The
+# key-driven end-to-end flow lives in the sandbox suite.
+
+func _test_orientation_rotation() -> void:
+	var manager := _make_manager()
+	var inventory := _make_inventory({"wooden_wall": 4})
+	manager.refund_inventory = inventory
+	# A non-orientable part never takes a pending orientation.
+	manager.set_build_mode(true)
+	manager.selected_item_id = "wooden_floor"
+	manager.rotate_build_orientation(1)
+	manager.rotate_build_orientation(-1)
+	_check(manager.pending_orientation == "", "Rotating a non-orientable part is a no-op")
+	# The first R press seeds from the live mouse-edge default (deterministically
+	# "west" with no player) and advances clockwise; further presses keep
+	# cycling the definition's allowed list in both directions.
+	manager.selected_item_id = "wooden_wall"
+	manager.rotate_build_orientation(1)
+	_check(manager.pending_orientation == "north", "First R press seeds from the mouse-edge default and advances clockwise")
+	manager.rotate_build_orientation(1)
+	_check(manager.pending_orientation == "east", "R keeps advancing through the allowed orientations")
+	manager.rotate_build_orientation(3)
+	_check(manager.pending_orientation == "north", "Rotation wraps around the allowed orientation list")
+	manager.rotate_build_orientation(-1)
+	_check(manager.pending_orientation == "west", "Q walks the pending orientation backwards")
+	# Selection changes and build-mode re-entry reset the rotation context.
+	manager.selected_item_id = "wooden_wall"
+	manager.pending_orientation = "east"
+	manager.cycle_selection(1)
+	_check(manager.pending_orientation == "", "Changing the selection resets the rotation context")
+	manager.selected_item_id = "wooden_wall"
+	manager.pending_orientation = "east"
+	manager.set_build_mode(false)
+	manager.set_build_mode(true)
+	manager.selected_item_id = "wooden_wall"
+	_check(manager.pending_orientation == "", "Re-entering build mode resets the rotation context")
+	# Live placement and the ghost consume the pending orientation instead of
+	# the mouse edge; with no pending choice the mouse-edge default applies.
+	manager.pending_orientation = "east"
+	_check(manager._placement_orientation(Vector2i(10, 10)) == "east", "Live placement uses the pending orientation over the mouse edge")
+	manager.pending_orientation = "north"
+	_check(manager._placement_orientation(Vector2i(10, 10)) == "north", "A changed pending orientation takes effect immediately")
+	manager.pending_orientation = ""
+	_check(manager._placement_orientation(Vector2i(10, 10)) == "west", "With no pending orientation the mouse-edge default applies")
+	manager.selected_item_id = "wooden_floor"
+	manager.pending_orientation = "east"
+	_check(manager._placement_orientation(Vector2i(10, 10)) == "",
+			"A pending orientation a non-orientable part cannot use is ignored, not forced")
+	# The ghost's occupancy check follows the pending orientation: the
+	# occupied edge fails while a free edge of the same tile still passes.
+	manager.selected_item_id = "wooden_wall"
+	manager.pending_orientation = "east"
+	_check(manager.place_record("wooden_wall", Vector2i(10, 10), inventory, 0, "east"), "An east-oriented wall places on the east edge")
+	_check(not manager.can_place(Vector2i(10, 10)), "The pending orientation makes the occupied edge fail the ghost check")
+	# The east edge of (10,10) IS the west edge of (11,10) (canonical edge
+	# keys); the same physical edge must fail placement under either spelling.
+	_check(not manager.place_record("wooden_wall", Vector2i(11, 10), inventory, 0, "west"),
+			"The same edge spelled from the other tile fails placement")
+	manager.pending_orientation = "west"
+	_check(manager.can_place(Vector2i(10, 10)), "The same tile is still buildable on its free west edge")
+	# Saved orientations are never reinterpreted: a later rotation choice
+	# placed elsewhere leaves the first record's stored orientation intact.
+	_check(manager.place_record("wooden_wall", Vector2i(9, 10), inventory, 0, "west"), "A second wall places west-oriented on a neighbouring tile")
+	var first := manager.get_record_at(Vector2i(10, 10), 0, "edge", "east")
+	var second := manager.get_record_at(Vector2i(9, 10), 0, "edge", "west")
+	_check(first != null and first.orientation == "east" and second != null and second.orientation == "west",
+			"Saved records keep the orientation they were placed with")
 	manager.queue_free()

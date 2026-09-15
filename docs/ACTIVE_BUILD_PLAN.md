@@ -251,7 +251,8 @@ occupancy untouched; old saves load.
       catalogue — decision log). The save model already carries any future
       connector (ladders, hatches, portals) without a schema change.
 - [x] Implement automatic roof cutaway plus a sandbox-only visibility/debug
-      control (`toggle_roofs`, R, Building Sandbox only); upper-story
+      control (`toggle_roofs`, F5 — R from M9 box 5, Building Sandbox only);
+      upper-story
       collision lives on per-story bits, so it can never block a
       ground-story player.
 - [x] HUD/build-palette indicator distinguishing active story from selected
@@ -466,7 +467,7 @@ yards, workshops, and furnished two-story homes without starvation.
       path; extend `tools/verify_texture_pack.gd` and harness contract checks.
 - [x] Build-palette groups/filters: structure, roof/cover, stairs/rail,
       doors/windows, furniture, stations, boundaries, exterior.
-- [ ] Orientation/rotation controls with visible compass/edge preview; rotate
+- [x] Orientation/rotation controls with visible compass/edge preview; rotate
       only when the definition permits; never reinterpret saved orientations.
 - [ ] Ghost previews show all reserved tiles/edges, support failures, stair
       endpoints, and roof cutaways — not just a green/red square.
@@ -582,3 +583,4 @@ Dated entries for deliberate deviations from the source plans.
 | 2026-09-14 | Station atlas sprites intentionally stack on top of appearance sprites rather than replacing them. | The data migration keeps pre-migration rendering pixel-identical; M9 may fold the two into dedicated per-station sheets. |
 | 2026-09-14 | The sandbox test contract for the C panel is "every hand-crafted recipe is exposed", not a full recipe count. | M6 design: the C-key panel lists hand recipes only; station recipes are exposed through E-interaction station panels. The 19 new furniture recipes are all hand-crafted, so the existing count-based contract covers them without test edits. |
 | 2026-09-14 | Build-palette groups are data: a `build_group` field on `BuildingDefinition` against an 8-group structural vocabulary; the filter is presentation state on `BuildingManager` (never saved); wheel/selection cycle the narrowed list, and a filter on a group the player owns no parts of falls back to the full list so build mode never dead-ends. | Follows the `visual_family_id` precedent: the group vocabulary is structural presentation, the per-def assignment is content data — regrouping or adding a part is a `.tres` edit, and the content suite pins the group distribution. The palette's chip label spellings live in code as presentation (like family colours), not as a data contract. |
+| 2026-09-14 | M9 box 5: building rotation moves to R (clockwise) / Q (counter-clockwise) via new `build_rotate_cw`/`build_rotate_ccw` actions, and the sandbox roof toggle moves from R to F5 (amending the M3 row above). Camera view-rotation stays on `,` / `.` (the 4/6 keys are inventory tool slots). The sandbox save action moves F5 -> F4 to keep F5 free for the roof toggle (the F-key family is now F3 debug, F4 save, F5 roof toggle, F9 load; `SAVE_FORMAT.md` updated). The manager keeps a transient `pending_orientation` (reset on build-mode entry/exit and on selection change); the first R/Q press seeds it from the nearest mouse edge and it then sticks, placement and the ghost use the pending choice when set and the mouse edge otherwise, the ghost shows the resolved edge as a compass letter, and saved records are never reinterpreted. | The plan mandates "R/Q rotation with visible compass/edge preview". R/Q are free keys that do not collide with the camera's `,`/`.` view-rotation pair; F5 joined the sandbox F-key family, which required moving the save key one slot over to F4 (a free key; no test or code path pins the old F5 keycode); the sticky pending orientation gives R/Q a stable target while the mouse keeps steering the ghost tile. |

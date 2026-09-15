@@ -34,7 +34,9 @@ The project main scene is `scenes/title.tscn`.
 
 `GameSession` is a static class (not an autoload). Main consumes the load
 flag once in `_ready`. In-game: **Esc** pause menu (Continue / Save / Load /
-Options / Return to Title / Quit). F5 save, F9 load still work.
+Options / Return to Title / Quit). F4 save, F9 load still work (the quick
+save moved from F5 in M9 box 5, which took F5 for the Building Sandbox roof
+toggle; F5 in normal play is inert).
 
 ## Version history
 
