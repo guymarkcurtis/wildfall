@@ -53,6 +53,7 @@ const CAVE_SPACE_ORIGIN := Vector2(1000000.0, 1000000.0)
 @onready var performance_overlay: PerformanceOverlay = $PerformanceOverlay
 @onready var sandbox_store_panel: SandboxStorePanel = $HUD/SandboxStorePanel
 @onready var sandbox_save_toolbar: SandboxSaveToolbar = $HUD/SandboxSaveToolbar
+@onready var sandbox_tutorial_card: SandboxTutorialCardPanel = $HUD/SandboxTutorialCard
 
 var _world_seed: int = 0
 var _debug_enabled: bool = false
@@ -1255,6 +1256,8 @@ func _apply_game_mode_presentation() -> void:
 			sandbox_store_panel.close()
 		if sandbox_save_toolbar != null:
 			sandbox_save_toolbar.visible = false
+		if sandbox_tutorial_card != null:
+			sandbox_tutorial_card.visible = false
 		if _sandbox_store != null and is_instance_valid(_sandbox_store):
 			_sandbox_store.queue_free()
 		_sandbox_store = null
@@ -1273,6 +1276,13 @@ func _apply_game_mode_presentation() -> void:
 		sandbox_store_panel.configure(player.inventory, item_database)
 	if sandbox_save_toolbar != null:
 		sandbox_save_toolbar.visible = true
+	if sandbox_tutorial_card != null:
+		sandbox_tutorial_card.visible = true
+		sandbox_tutorial_card.open_card()
+
+func show_sandbox_tutorial_card() -> void:
+	if sandbox_tutorial_card != null:
+		sandbox_tutorial_card.visible = true
 
 func _ensure_building_sandbox_fixtures() -> void:
 	if not GameSession.is_building_sandbox() or building_manager == null:

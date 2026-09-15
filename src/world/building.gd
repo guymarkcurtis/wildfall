@@ -54,6 +54,14 @@ var _body: Polygon2D = null
 var _part_sprite: Sprite2D = null
 var _appearance_sprite: Sprite2D = null
 var _appearance_state: String = ""
+## Position within the current state's frame strip (0-based). Looping states
+## advance this every frame from authored fps data; one-shot transition states
+## are stepped by the open/close coroutine instead.
+var _state_frame_index: int = 0
+var _state_frame_accumulator: float = 0.0
+## Bumped on every state change; in-flight transition coroutines abort when
+## the token moves (a fast close must cancel a pending settle, not fight it).
+var _transition_token: int = 0
 var _light: PointLight2D = null
 static var _shared_light_texture: GradientTexture2D = null
 ## BuildingManager owns the global nearest-first cap. Individual buildings
@@ -89,8 +97,9 @@ func setup(item_id: String, item_name: String, tile: Vector2i, hp: int = 50, sto
 	_setup_collision()
 	_setup_light()
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_update_light()
+	_advance_appearance_frames(delta)
 
 func _id_blocks(item_id: String) -> bool:
 	return item_id.ends_with("wall") or item_id == "fence" or item_id == "wooden_door"
@@ -227,22 +236,102 @@ func set_appearance_state(state_name: String) -> void:
 	if typeof(state) != TYPE_DICTIONARY:
 		return
 	_appearance_state = state_name
-	if _appearance_sprite != null:
-		var first_frame := int(state.get("first_frame", 0))
-		_appearance_sprite.region_rect = Rect2(0.0, float(first_frame * profile.frame_size.y),
-				float(profile.frame_size.x), float(profile.frame_size.y))
+	_state_frame_index = 0
+	_state_frame_accumulator = 0.0
+	_apply_appearance_frame()
+
+## Paint the current state's current frame from its authored strip position.
+func _apply_appearance_frame() -> void:
+	if _appearance_sprite == null or _appearance_state == "":
+		return
+	if definition == null or definition.appearance_profile == null:
+		return
+	var profile: AppearanceProfile = definition.appearance_profile
+	var state: Variant = profile.states.get(_appearance_state, null)
+	if typeof(state) != TYPE_DICTIONARY:
+		return
+	var first_frame := int(state.get("first_frame", 0))
+	_appearance_sprite.region_rect = Rect2(0.0,
+			float((first_frame + _state_frame_index) * profile.frame_size.y),
+			float(profile.frame_size.x), float(profile.frame_size.y))
+
+## Step the current state one authored frame forward (wraps inside its own
+## frame_count). Shared by the looping playback in _process and the
+## transition coroutine.
+func _advance_appearance_step() -> void:
+	if _appearance_state == "":
+		return
+	if definition == null or definition.appearance_profile == null:
+		return
+	var state: Variant = definition.appearance_profile.states.get(_appearance_state, null)
+	if typeof(state) != TYPE_DICTIONARY:
+		return
+	var frame_count := int(state.get("frame_count", 1))
+	if frame_count <= 0:
+		return
+	_state_frame_index = (_state_frame_index + 1) % frame_count
+	_apply_appearance_frame()
+
+## Looping multi-frame states (a burning fire, a flickering torch) play from
+## their own _process using the authored fps — this is what keeps the
+## presentation alive at 32 px. One-frame states and one-shot transitions do
+## nothing here; a transition coroutine or a static frame owns them.
+func _advance_appearance_frames(delta: float) -> void:
+	if _appearance_sprite == null or _appearance_state == "":
+		return
+	if definition == null or definition.appearance_profile == null:
+		return
+	var state: Variant = definition.appearance_profile.states.get(_appearance_state, null)
+	if typeof(state) != TYPE_DICTIONARY:
+		return
+	var frame_count := int(state.get("frame_count", 1))
+	if frame_count <= 1 or not bool(state.get("loop", false)):
+		return
+	var fps := float(state.get("fps", 0.0))
+	if fps <= 0.0:
+		return
+	_state_frame_accumulator += delta
+	var frame_duration := 1.0 / fps
+	while _state_frame_accumulator >= frame_duration:
+		_state_frame_accumulator -= frame_duration
+		_advance_appearance_step()
 
 ## Inform a profile-driven appearance that its interaction has opened or
-## closed. Opening begins before the panel is marked open; forced closes take
-## the same authored close path. UI openness itself is never serialized.
+## closed. The authored transition state plays frame by frame at its own fps
+## (a hold when it is a single frame) and then settles into the resting state;
+## a fast re-trigger bumps the token and cancels the in-flight settle. Opening
+## begins before the panel is marked open; forced closes take the same
+## authored path. UI openness itself is never serialized.
 func set_interaction_open(is_open: bool) -> void:
 	if definition == null or definition.appearance_profile == null:
 		return
 	var profile: AppearanceProfile = definition.appearance_profile
 	var transition := profile.interaction_opening_state if is_open else profile.interaction_closing_state
 	var resting := profile.interaction_open_state if is_open else profile.interaction_closed_state
+	_transition_token += 1
+	if transition.is_empty():
+		if not resting.is_empty():
+			set_appearance_state(resting)
+		return
+	var token := _transition_token
 	set_appearance_state(transition)
-	set_appearance_state(resting)
+	var state: Variant = profile.states.get(transition, null)
+	if typeof(state) == TYPE_DICTIONARY:
+		var fps := float(state.get("fps", 0.0))
+		var frame_count := maxi(int(state.get("frame_count", 1)), 1)
+		var frame_duration := 0.1
+		if fps > 0.0:
+			frame_duration = 1.0 / fps
+		for i in range(frame_count):
+			if is_inside_tree():
+				await get_tree().create_timer(frame_duration).timeout
+			if token != _transition_token or not is_inside_tree():
+				return
+			_advance_appearance_step()
+	# Settle only while the transition still owns the presentation: another
+	# profile-driven switch (e.g. a station's in-use state) wins the fight.
+	if not resting.is_empty() and _appearance_state == transition:
+		set_appearance_state(resting)
 
 ## Toggle the profile's in-use presentation (e.g. a workbench being worked)
 ## for as long as the player's station panel stays open. Fully data-driven:
@@ -256,7 +345,13 @@ func set_crafting_active(is_active: bool) -> void:
 		if not profile.crafting_state.is_empty():
 			set_appearance_state(profile.crafting_state)
 	elif not profile.initial_state.is_empty():
-		set_appearance_state(profile.initial_state)
+		# The manager calls set_interaction_open(false) and this in the same
+		# tick: while an authored interaction transition (opening/closing)
+		# still owns the presentation, the transition coroutine settles into
+		# the resting state — snapping here would skip the closing frame.
+		if _appearance_state != profile.interaction_opening_state \
+				and _appearance_state != profile.interaction_closing_state:
+			set_appearance_state(profile.initial_state)
 
 ## Nudge direction for edge parts so their oriented side reads from above.
 func _edge_visual_offset() -> Vector2:

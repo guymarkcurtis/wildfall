@@ -10,6 +10,18 @@ extends Node2D
 signal panel_closed(reason: String)
 
 const RANGE_MARGIN_PX := 12.0
+## Human wording for StationCrafting failure reasons; unknown reasons fall
+## back to the raw reason so no failure is ever silently swallowed.
+const CRAFT_FAILURE_MESSAGES := {
+	"technology_locked": "Technology locked — research it first",
+	"unpowered": "The station is unpowered",
+	"missing_inputs": "Missing ingredients — fill the input slots",
+	"output_full": "Output is full — collect the result first",
+	"missing_surface": "Missing a surface for this recipe",
+	"wrong_station": "This recipe belongs to another station",
+	"not_a_station": "This object has no station",
+	"invalid": "Invalid craft request",
+}
 
 var building_manager: BuildingManager = null
 var player: Player = null
@@ -17,6 +29,9 @@ var current_target: Building = null
 var open_building: Building = null
 var open_record: BuildingRecord = null
 var open_panel: InteractablePanel = null
+## Gold frame around the tile of the interactable the player would act on.
+## One generic marker for every profile-driven object — no per-station code.
+var _focus_marker: Node2D = null
 
 var _view_builders: Dictionary = {} # ui_kind -> Callable(building, record, panel) -> bool
 var _open_close_handlers: Array = []
@@ -34,6 +49,7 @@ func _ready() -> void:
 	register_view_builder("container", Callable(self, "_build_container_view"))
 	register_view_builder("station", Callable(self, "_build_station_view"))
 	_ensure_building_manager_binding()
+	_build_focus_marker()
 
 ## A view builder returns true when it opened content for the panel.
 func register_view_builder(ui_kind: String, builder: Callable) -> void:
@@ -46,6 +62,7 @@ func _process(_delta: float) -> void:
 		close("pause")
 	_refresh_target()
 	_publish_prompt()
+	_update_focus_marker()
 	_close_if_out_of_range()
 
 func ui_blocks_world() -> bool:
@@ -93,6 +110,9 @@ func open(building: Building) -> bool:
 	var hud := get_parent().get_node_or_null("HUD")
 	(hud if hud != null else self).add_child(panel)
 	panel.close_requested.connect(close)
+	# Panel-side rejection feedback (capacity, filters, swaps) rides the same
+	# HUD toast lane as mission/tool feedback.
+	panel.toast_requested.connect(_on_panel_toast)
 	if not bool(builder.call(building, record, panel)):
 		panel.queue_free()
 		return false
@@ -178,6 +198,66 @@ func _publish_prompt() -> void:
 	if hud != null and hud.has_method("set_interaction_prompt"):
 		hud.set_interaction_prompt(current_prompt())
 
+## The gold frame around the current target's tile. It rides the target's
+## own render band (story base + layer offset + 1) so it always draws over the
+## object it points at, and it hides whenever nothing is targetable — which
+## also includes every panel-open frame, since _refresh_target skips then.
+func _update_focus_marker() -> void:
+	if _focus_marker == null:
+		return
+	if current_target == null or not is_instance_valid(current_target):
+		_focus_marker.visible = false
+		return
+	_focus_marker.visible = true
+	_focus_marker.position = Vector2(current_target.tile_coords) * Building.TILE_SIZE
+	_focus_marker.z_index = int(current_target.z_index) + 1
+
+## One generic focus frame for every interactable: four thin strips just
+## outside the 32 px tile, tinted to the HUD prompt gold. The object keeps its
+## own data-authored presentation (a station's in-range glow, ...) underneath.
+func _build_focus_marker() -> void:
+	if _focus_marker != null:
+		return
+	_focus_marker = Node2D.new()
+	_focus_marker.name = "FocusMarker"
+	_focus_marker.z_index = 6
+	_focus_marker.visible = false
+	add_child(_focus_marker)
+	var color := Color(0.95, 0.93, 0.66, 0.55)
+	for side in ["north", "south", "west", "east"]:
+		var polygon := Polygon2D.new()
+		polygon.polygon = _frame_strip(side)
+		polygon.color = color
+		_focus_marker.add_child(polygon)
+
+## A 2 px strip just outside one tile edge (the frame's cross-section).
+func _frame_strip(side: String) -> PackedVector2Array:
+	match side:
+		"north":
+			return PackedVector2Array([Vector2(-2, -2), Vector2(34, -2),
+					Vector2(34, 0), Vector2(-2, 0)])
+		"south":
+			return PackedVector2Array([Vector2(-2, 32), Vector2(34, 32),
+					Vector2(34, 34), Vector2(-2, 34)])
+		"west":
+			return PackedVector2Array([Vector2(-2, -2), Vector2(0, -2),
+					Vector2(0, 34), Vector2(-2, 34)])
+		_:
+			return PackedVector2Array([Vector2(32, -2), Vector2(34, -2),
+					Vector2(34, 34), Vector2(32, 34)])
+
+## Route a panel rejection message ("No room in that slot", ...) to the HUD
+## toast lane. Test worlds without a HUD simply drop the toast.
+func _on_panel_toast(text: String) -> void:
+	if text.is_empty():
+		return
+	var parent := get_parent()
+	if parent == null:
+		return
+	var hud := parent.get_node_or_null("HUD")
+	if hud != null and hud.has_method("show_toast"):
+		hud.show_toast(text)
+
 func _close_if_out_of_range() -> void:
 	if open_panel == null or open_building == null or not is_instance_valid(open_building):
 		return
@@ -224,7 +304,7 @@ func _build_container_view(building: Building, record: BuildingRecord, panel: In
 		storage.stack_sizes = player.inventory.get_stack_sizes()
 		storage.max_durations = player.inventory.get_duration_caps()
 	var title := building.get_interaction_prompt().capitalize()
-	var help := "Left click to select, click the other side to move. Shift click quick-moves, right click splits half. Esc closes."
+	var help := "Click to select, click to move. Shift sends the whole stack; right-click splits half. Esc closes."
 	panel.open_for(title, help, storage, player.inventory.get_storage())
 	var changed := Callable(self, "_on_open_storage_changed")
 	if not storage.changed.is_connected(changed):
@@ -252,7 +332,7 @@ func _build_station_view(building: Building, record: BuildingRecord, panel: Inte
 	if building.definition.station_profile.requires_power:
 		power_note = " Powered: %s." % ("yes" if bool(record.capability_state.get("enabled", false)) else "no")
 	panel.open_station(building.get_interaction_prompt().capitalize(),
-			"Move ingredients into input slots, then choose a recipe. Output is read-only." + power_note,
+			"Add ingredients, then pick a recipe. Esc closes." + power_note,
 			inputs, outputs, player.inventory.get_storage(), recipes)
 	panel.station_craft_requested.connect(_on_station_craft_requested.bind(record))
 	for storage in [inputs, outputs]:
@@ -268,7 +348,7 @@ func _build_fuel_view(building: Building, record: BuildingRecord, panel: Interac
 	if storage == null:
 		return false
 	storage.stack_sizes = player.inventory.get_stack_sizes()
-	panel.open_for(building.get_interaction_prompt().capitalize(), "Fuel slot accepts only authored fuel tags.", storage, player.inventory.get_storage())
+	panel.open_for(building.get_interaction_prompt().capitalize(), "Insert a fuel the station accepts, then turn it on.", storage, player.inventory.get_storage())
 	_setup_fuel_controls(record, panel)
 	return true
 
@@ -312,7 +392,10 @@ func _on_station_craft_requested(recipe_id: String, record: BuildingRecord) -> v
 	var unlocked: bool = GameSession.is_creative() or technology == null or technology.is_unlocked(recipe.technology_id)
 	StationCrafting.fill_inputs(record, player.inventory.get_storage(), recipe)
 	var result := StationCrafting.craft(record, player.inventory.get_storage(), recipe, unlocked)
-	var hud := get_parent().get_node_or_null("HUD")
-	if hud != null and hud.has_method("show_toast"):
-		hud.show_toast("Crafted %s" % recipe.result_item_id.replace("_", " ") if bool(result.success) else "Crafting: %s" % str(result.reason).replace("_", " "))
+	# Craft feedback rides the panel's single toast lane; the manager owns the wording.
+	if open_panel != null and is_instance_valid(open_panel):
+		if bool(result.success):
+			open_panel.toast_requested.emit("Crafted %dx %s" % [recipe.result_quantity, recipe.result_item_id.replace("_", " ").capitalize()])
+		else:
+			open_panel.toast_requested.emit(str(CRAFT_FAILURE_MESSAGES.get(str(result.reason), "Crafting failed")))
 	_on_open_storage_changed()

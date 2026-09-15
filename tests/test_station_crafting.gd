@@ -194,15 +194,43 @@ func _test_station_panel_interaction() -> void:
 	player.global_position = Vector2(144, 144)
 	_check(manager.open(bench) and manager.open_panel != null and manager.open_panel.output_grid != null,
 			"E-interaction opens a station panel with persistent input, output, and player surfaces")
+	var toasts: Array[String] = []
+	manager.open_panel.toast_requested.connect(func(text: String) -> void: toasts.append(text))
 	manager.open_panel.station_craft_requested.emit("wooden_hammer")
 	_check(manager.open_record.get_station_output_storage().quantity_of("wooden_hammer") == 1,
 			"Station panel recipe action fills inputs and crafts into visible output")
+	_check(toasts == ["Crafted 1x Wooden Hammer"],
+			"A successful craft announces itself on the panel's toast lane")
+	# The first craft consumed the player's planks and stone, so this repeat
+	# has nothing left to fill with: the failure names the missing inputs.
+	manager.open_panel.station_craft_requested.emit("wooden_hammer")
+	_check(toasts.size() == 2 and toasts[1] == "Missing ingredients — fill the input slots",
+			"A starved repeat craft names the missing ingredients")
 	manager.close("test")
 	buildings.place_record("torch", Vector2i(7, 4), player.inventory, 0)
 	var torch_record := buildings.get_record_at(Vector2i(7, 4), 0, "object")
 	player.global_position = Vector2(240, 144)
 	_check(manager.open(torch_record.node) and manager.open_panel.fuel_grid != null,
 			"A fuel-only interactable opens the shared panel with its filtered fuel slot")
+	var torch_toasts: Array[String] = []
+	manager.open_panel.toast_requested.connect(func(text: String) -> void: torch_toasts.append(text))
+	# The craft above left the player with wood but no planks; hand them one
+	# so the filter has something to refuse.
+	player.inventory.add_item("plank", 1)
+	var plank_slot := player.inventory.get_storage().first_index_of("plank")
+	manager.open_panel._on_grid_slot_pressed("player", plank_slot, MOUSE_BUTTON_LEFT)
+	manager.open_panel._on_grid_slot_pressed("fuel", 0, MOUSE_BUTTON_LEFT)
+	_check(torch_toasts == ["That fuel slot only accepts: fuel"],
+			"A non-fuel item refused by the fuel slot names the accepted tags")
+	# A failed transfer keeps the selection, so re-click the plank to deselect,
+	# then select the wood (an accepted fuel) and move it in.
+	manager.open_panel._on_grid_slot_pressed("player", plank_slot, MOUSE_BUTTON_LEFT)
+	var wood_slot := player.inventory.get_storage().first_index_of("wood")
+	manager.open_panel._on_grid_slot_pressed("player", wood_slot, MOUSE_BUTTON_LEFT)
+	manager.open_panel._on_grid_slot_pressed("fuel", 0, MOUSE_BUTTON_LEFT)
+	_check(torch_toasts.size() == 1, "An accepted fuel enters the slot silently")
+	_check(torch_record.get_fuel_storage().quantity_of("wood") == 1,
+			"The accepted fuel actually landed in the fuel storage")
 	var enabled_before := bool(torch_record.capability_state.get("enabled", false))
 	manager.open_panel.fuel_toggle_requested.emit()
 	_check(bool(torch_record.capability_state.get("enabled", false)) != enabled_before,

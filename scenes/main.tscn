@@ -1,4 +1,4 @@
-[gd_scene load_steps=35 format=3]
+[gd_scene load_steps=36 format=3]
 
 [ext_resource type="Script" path="res://src/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://src/core/game_event_bus.gd" id="2_eventbus"]
@@ -34,6 +34,7 @@
 [ext_resource type="Script" path="res://src/ui/sandbox_store_panel.gd" id="32_sandbox_store"]
 [ext_resource type="Script" path="res://src/ui/sandbox_save_toolbar.gd" id="33_sandbox_toolbar"]
 [ext_resource type="Script" path="res://src/systems/interaction_manager.gd" id="34_interaction"]
+[ext_resource type="Script" path="res://src/ui/sandbox_tutorial_card_panel.gd" id="35_tutorial_card"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -250,6 +251,14 @@ anchor_left = 0.5
 anchor_right = 0.5
 grow_horizontal = 2
 script = ExtResource("33_sandbox_toolbar")
+
+[node name="SandboxTutorialCard" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 0
+script = ExtResource("35_tutorial_card")
 
 [node name="Title" type="Label" parent="HUD/CraftingPanel"]
 layout_mode = 1

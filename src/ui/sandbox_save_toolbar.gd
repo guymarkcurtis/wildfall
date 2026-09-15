@@ -6,6 +6,7 @@ extends Control
 
 var _main: Node = null
 var _toggle: Button = null
+var _help_button: Button = null
 var _drawer: PanelContainer = null
 var _picker: OptionButton = null
 var _time_picker: OptionButton = null
@@ -61,6 +62,13 @@ func _build() -> void:
 	_toggle.custom_minimum_size = Vector2(144.0, 34.0)
 	_toggle.pressed.connect(_toggle_drawer)
 	add_child(_toggle)
+
+	# Quiet "?" next to the toggle reopens the tutorial card after dismissal.
+	_help_button = MenuStyle.make_button("?", 34.0)
+	_help_button.custom_minimum_size = Vector2(34.0, 34.0)
+	_help_button.tooltip_text = "Show the Building Sandbox tutorial card"
+	_help_button.pressed.connect(_on_help)
+	add_child(_help_button)
 
 	_drawer = PanelContainer.new()
 	_drawer.size = Vector2(430.0, 160.0)
@@ -132,15 +140,22 @@ func _apply_layout() -> void:
 		offset_right = 442.0
 		offset_bottom = -12.0
 		_toggle.position = Vector2(0.0, 168.0)
+		_help_button.position = Vector2(152.0, 168.0)
 		_drawer.position = Vector2.ZERO
 		_drawer.visible = true
 	else:
 		offset_left = 12.0
 		offset_top = -46.0
-		offset_right = 156.0
+		offset_right = 198.0
 		offset_bottom = -12.0
 		_toggle.position = Vector2.ZERO
+		_help_button.position = Vector2(152.0, 0.0)
 		_drawer.visible = false
+
+func _on_help() -> void:
+	if _main == null:
+		return
+	_main.show_sandbox_tutorial_card()
 
 func _on_time_selected(index: int) -> void:
 	if _main == null or index < 0:

@@ -16,6 +16,11 @@ func _run() -> void:
 	_test_targeting_and_prompt()
 	_test_open_close_matrix()
 	_test_switching_and_transfers()
+	_test_focus_marker()
+	_test_transfer_feedback()
+	# Last: it awaits real-time transition timers, so it must not block the
+	# quit that the synchronous tests above are counted for.
+	await _test_open_close_animation()
 	print("Interaction router failures: %d (%d checks)" % [_failures, _checks])
 	quit(_failures)
 
@@ -266,6 +271,161 @@ func _test_switching_and_transfers() -> void:
 	buildings.demolish_at(Vector2i(51, 50), 0)
 	_check(manager.open_panel == null and buildings.get_record_at(Vector2i(51, 50), 0, "object") != null,
 			"Protected non-empty container demolition closes its panel without deleting contents")
+	player.queue_free()
+	manager.queue_free()
+	buildings.queue_free()
+
+# M9 box 7: the manager paints one generic gold frame on the target the
+# player is about to act on, centred on its tile and one render band above
+# it, and hides the frame whenever nothing is in range.
+func _test_focus_marker() -> void:
+	var world := _make_world(Vector2i(60, 60))
+	var manager: InteractionManager = world[0]
+	var buildings: BuildingManager = world[1]
+	var player: Player = world[2]
+	_register_test_crate(buildings)
+	var marker: Node2D = manager._focus_marker
+	_check(marker != null, "The manager owns a focus marker")
+	manager._refresh_target()
+	manager._update_focus_marker()
+	_check(marker != null and not marker.visible,
+			"The focus marker is hidden before anything is targetable")
+	var inventory := _make_inventory(3)
+	var crate := _place_crate(buildings, Vector2i(61, 60), inventory)
+	manager._refresh_target()
+	manager._update_focus_marker()
+	_check(marker.visible, "The focus marker appears when an interactable enters range")
+	_check(marker.position == Vector2(61, 60) * 32.0,
+			"The focus marker is centred on the target's tile")
+	_check(marker.z_index == int(crate.z_index) + 1,
+			"The focus marker rides one render band above the target")
+	player.global_position = _tile_center(Vector2i(80, 80))
+	manager._refresh_target()
+	manager._update_focus_marker()
+	_check(not marker.visible, "The focus marker hides when the target leaves range")
+	player.queue_free()
+	manager.queue_free()
+	buildings.queue_free()
+
+# M9 box 7: refused transfers explain themselves on the panel's toast lane
+# with wording that fits the grid ("No room in that slot" on a full slot,
+# the filter wording on a filtered slot), and a successful transfer stays
+# silent. The tin is a second runtime-registered container (two slots,
+# seeded with 64 wood at the stack cap) so the pattern is proven generic.
+func _test_transfer_feedback() -> void:
+	var world := _make_world(Vector2i(70, 70))
+	var manager: InteractionManager = world[0]
+	var buildings: BuildingManager = world[1]
+	var player: Player = world[2]
+	var tin_def := BuildingDefinition.new()
+	tin_def.id = "test_tin"
+	tin_def.display_name = "Test Tin"
+	tin_def.part_type = "utility"
+	tin_def.tier = "primitive"
+	tin_def.max_health = 40
+	tin_def.interaction_profile = InteractionProfile.new()
+	tin_def.interaction_profile.verb = "Open"
+	tin_def.interaction_profile.range_px = 64.0
+	tin_def.interaction_profile.ui_kind = "container"
+	tin_def.container_profile = ContainerProfile.new()
+	tin_def.container_profile.slot_count = 2
+	tin_def.container_profile.max_weight = 200.0
+	tin_def.container_profile.default_contents = [
+			{"item_id": "wood", "quantity": 64}]
+	buildings.definitions["test_tin"] = tin_def
+	var tin_seed := InventoryComponent.new()
+	tin_seed.set_stack_sizes({"test_tin": 1})
+	tin_seed.add_item("test_tin", 1)
+	var tin := _place_tin(buildings, Vector2i(70, 70), tin_seed)
+	manager.open(tin)
+	var panel: InteractablePanel = manager.open_panel
+	var toasts: Array[String] = []
+	panel.toast_requested.connect(func(text: String) -> void: toasts.append(text))
+	player.inventory.add_item("wood", 64)
+	# The player's real inventory is weight-capped with a starting loadout,
+	# so read back how many units actually landed instead of assuming 64.
+	var held := player.inventory.get_item_quantity("wood")
+	var wood_slot := player.inventory.get_storage().first_index_of("wood")
+	# The tin's seeded slot 0 already holds 64 wood at the stack cap.
+	panel._on_grid_slot_pressed("player", wood_slot, MOUSE_BUTTON_LEFT)
+	panel._on_grid_slot_pressed("object", 0, MOUSE_BUTTON_LEFT)
+	_check(toasts == ["No room in that slot"],
+			"A full slot explains a refused transfer: 'No room in that slot'")
+	# A filtered slot uses the filter wording; a plain container has no fuel
+	# hint, so the generic phrasing applies.
+	var tin_record := buildings.get_record_for_building(tin)
+	var tin_storage := tin_record.get_container_storage()
+	tin_storage.set_slot_filter(0, func(item_id: String) -> bool: return item_id == "stone")
+	# The failed move kept the player slot selected: click it once to
+	# deselect, once to re-select, then try the filtered slot again.
+	panel._on_grid_slot_pressed("player", wood_slot, MOUSE_BUTTON_LEFT)
+	panel._on_grid_slot_pressed("player", wood_slot, MOUSE_BUTTON_LEFT)
+	panel._on_grid_slot_pressed("object", 0, MOUSE_BUTTON_LEFT)
+	_check(toasts.size() == 2 and toasts[1] == "That slot only accepts specific items",
+			"A filtered slot explains itself: 'That slot only accepts specific items'")
+	# With the filter gone, the same stack moves into the free slot silently.
+	tin_storage.clear_slot_filter(0)
+	panel._on_grid_slot_pressed("player", wood_slot, MOUSE_BUTTON_LEFT)
+	panel._on_grid_slot_pressed("player", wood_slot, MOUSE_BUTTON_LEFT)
+	panel._on_grid_slot_pressed("object", 1, MOUSE_BUTTON_LEFT)
+	_check(toasts.size() == 2, "A successful transfer emits no toast")
+	_check(player.inventory.get_item_quantity("wood") == 0
+			and tin_storage.quantity_of("wood") == 64 + held,
+			"The successful transfer moves the whole stack")
+	player.queue_free()
+	manager.queue_free()
+	buildings.queue_free()
+
+func _place_tin(buildings: BuildingManager, tile: Vector2i, inventory: InventoryComponent) -> Building:
+	buildings.place_record("test_tin", tile, inventory, 0)
+	return buildings.get_record_at(tile, 0, "object").node
+
+# M9 box 7: opening runs the data-driven transition state at its authored fps
+# and settles on the resting state; closing does the same on the way back.
+# A runtime profile reuses the shipped chest sheet (32x32 frames: closed f0,
+# transition f1, open f2), one frame per state, 20 fps per transition.
+func _test_open_close_animation() -> void:
+	var world := _make_world(Vector2i(70, 70))
+	var manager: InteractionManager = world[0]
+	var buildings: BuildingManager = world[1]
+	var player: Player = world[2]
+	_register_test_crate(buildings)
+	var profile := AppearanceProfile.new()
+	profile.sheet_path = "res://assets/tiles/interactables/wood_chest.png"
+	profile.frame_size = Vector2i(32, 32)
+	profile.initial_state = "closed"
+	profile.states = {
+		"closed": {"first_frame": 0, "frame_count": 1, "fps": 0.0, "loop": false},
+		"opening": {"first_frame": 1, "frame_count": 1, "fps": 20.0, "loop": false},
+		"open": {"first_frame": 2, "frame_count": 1, "fps": 0.0, "loop": false},
+		"closing": {"first_frame": 1, "frame_count": 1, "fps": 20.0, "loop": false},
+	}
+	profile.interaction_opening_state = "opening"
+	profile.interaction_open_state = "open"
+	profile.interaction_closing_state = "closing"
+	profile.interaction_closed_state = "closed"
+	buildings.definitions["test_crate"].appearance_profile = profile
+	_check(profile.validate().is_empty(), "The runtime test profile is valid data")
+	var crate := _place_crate(buildings, Vector2i(70, 70), _make_inventory(1))
+	_check(crate._appearance_state == "closed", "The crate spawns in its authored resting state")
+	manager.open(crate)
+	_check(crate._appearance_state == "opening",
+			"Opening switches to the authored transition state immediately")
+	for i in range(120):
+		await process_frame
+		if crate._appearance_state == "open":
+			break
+	_check(crate._appearance_state == "open",
+			"The transition settles on the open resting state")
+	manager.close("test")
+	_check(crate._appearance_state == "closing",
+			"Closing switches to the authored closing transition immediately")
+	for i in range(120):
+		await process_frame
+		if crate._appearance_state == "closed":
+			break
+	_check(crate._appearance_state == "closed",
+			"The closing transition settles back on the closed resting state")
 	player.queue_free()
 	manager.queue_free()
 	buildings.queue_free()

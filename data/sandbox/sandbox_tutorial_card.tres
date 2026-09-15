@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="SandboxTutorialCard" format=3]
+
+[ext_resource type="Script" path="res://resources/sandbox_tutorial_card.gd" id="1_card"]
+
+[resource]
+resource_name = "sandbox_tutorial_card"
+script = ExtResource("1_card")
+title = "Building Sandbox"
+lines = {
+"Build mode": "B toggles build mode: pick a part, aim with the mouse, click to place.",
+"Layers": "Ground, floor, object, connector, edge, overhead — parts reserve their own cells and edges.",
+"Ghost preview": "Green is free, red is blocked or unsupported, blue marks a reserved stair landing.",
+"Orientation": "Q / R rotate the part when its definition allows; the compass letter previews the placed edge.",
+"Construction story": "In build mode, [ and ] raise or lower the story you are building on.",
+"Active story": "Outside build mode, [ and ] switch the story you act in; other stories render as blueprints.",
+"Stairs": "Stairs connect stories and reserve a landing one story above their base.",
+"Roof cutaway": "F5 hides roof layers so upper stories stay visible.",
+"Demolish / refund": "F demolishes the part under the cursor and refunds its items to you.",
+"Save / load": "F4 saves this sandbox; F9 or the Sandbox drawer lists and restores saves."
+}

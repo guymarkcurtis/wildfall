@@ -11,6 +11,10 @@ extends Control
 signal close_requested(reason: String)
 signal station_craft_requested(recipe_id: String)
 signal fuel_toggle_requested
+## Human wording for a refused transfer ("No room in that slot", ...). The
+## InteractionManager routes it to the HUD toast lane; the panel itself only
+## owns the wording, never the presentation.
+signal toast_requested(text: String)
 
 var object_grid: StorageGridView = null
 var player_grid: StorageGridView = null
@@ -31,6 +35,7 @@ var _output_storage: InventoryStorage = null
 var _fuel_storage: InventoryStorage = null
 var _station_recipe_box: VBoxContainer = null
 var _selected: Dictionary = {} # {grid: String, index: int} or empty
+var _fuel_accepted_hint := "" # accepted fuel tags, for the filtered-slot toast
 
 const SLOT_COLUMNS := 9
 
@@ -172,6 +177,7 @@ func open_station(title: String, help: String, input_storage: InventoryStorage,
 func configure_fuel(storage: InventoryStorage, enabled: bool, seconds_remaining: float,
 		accepted_fuel_hint: String = "") -> void:
 	_fuel_storage = storage
+	_fuel_accepted_hint = accepted_fuel_hint
 	if fuel_grid != null:
 		fuel_grid.queue_free()
 	fuel_grid = StorageGridView.new()
@@ -229,8 +235,13 @@ func _on_grid_slot_pressed(grid_id: String, index: int, mouse_button: int) -> vo
 		var item_id := from_storage.item_id_at(index)
 		var half := maxi(1, quantity / 2)
 		var target_slot := to_storage.find_receiving_slot_for(item_id, half)
-		if target_slot >= 0:
-			InventoryTransfer.transfer(from_storage, index, to_storage, target_slot, half)
+		if target_slot < 0:
+			_toast_for_rejection(grid_id, "no_space")
+		else:
+			var outcome := InventoryTransfer.transfer(from_storage, index, to_storage,
+					target_slot, half)
+			if int(outcome[InventoryTransfer.RESULT_MOVED]) <= 0:
+				_toast_for_rejection(grid_id, str(outcome[InventoryTransfer.RESULT_REJECTED]))
 		_selected.clear()
 		_refresh()
 		return
@@ -251,6 +262,8 @@ func _on_grid_slot_pressed(grid_id: String, index: int, mouse_button: int) -> vo
 			to_storage, index, from_storage.quantity_at(int(_selected["index"])))
 	if int(outcome[InventoryTransfer.RESULT_MOVED]) > 0 or bool(outcome[InventoryTransfer.RESULT_SWAPPED]):
 		_selected.clear()
+	else:
+		_toast_for_rejection(grid_id, str(outcome[InventoryTransfer.RESULT_REJECTED]))
 	_refresh()
 
 ## Shift-click: move the whole stack to the other grid (first slots that
@@ -263,8 +276,10 @@ func _on_quick_transfer(grid_id: String, index: int) -> void:
 	var item_id := from_storage.item_id_at(index)
 	if item_id == "":
 		return
-	InventoryTransfer.transfer_between(from_storage, to_storage, item_id,
+	var outcome := InventoryTransfer.transfer_between(from_storage, to_storage, item_id,
 			from_storage.quantity_at(index))
+	if int(outcome[InventoryTransfer.RESULT_MOVED]) <= 0:
+		_toast_for_rejection(grid_id, str(outcome[InventoryTransfer.RESULT_REJECTED]))
 	_selected.clear()
 	_refresh()
 
@@ -273,10 +288,37 @@ func _on_drag_transfer(from_grid: String, from_index: int, to_grid: String, to_i
 	var to_storage := _storage_for(to_grid)
 	if from_storage == null or to_storage == null:
 		return
-	InventoryTransfer.transfer(from_storage, from_index, to_storage, to_index,
+	var outcome := InventoryTransfer.transfer(from_storage, from_index, to_storage, to_index,
 			from_storage.quantity_at(from_index))
+	if int(outcome[InventoryTransfer.RESULT_MOVED]) <= 0 \
+			and not bool(outcome[InventoryTransfer.RESULT_SWAPPED]):
+		_toast_for_rejection(to_grid, str(outcome[InventoryTransfer.RESULT_REJECTED]))
 	_selected.clear()
 	_refresh()
+
+## Translate the transfer layer's rejection codes into the words a player
+## hears. The transfer layer stays generic (no presentation); the panel owns
+## the wording. Grid context matters: the same "filtered" code on a fuel slot
+## names the accepted tags, on a plain container it does not.
+func _toast_for_rejection(grid_id: String, reason: String) -> void:
+	var text := ""
+	match reason:
+		"full", "occupied":
+			text = "No room in that slot"
+		"filtered":
+			if grid_id == "fuel" and not _fuel_accepted_hint.is_empty():
+				text = "That fuel slot only accepts: %s" % _fuel_accepted_hint
+			else:
+				text = "That slot only accepts specific items"
+		"cannot_swap":
+			text = "Those two stacks can't swap"
+		"no_space":
+			text = "No room on the other side"
+		_:
+			if reason != "":
+				text = "Can't move that"
+	if text != "":
+		toast_requested.emit(text)
 
 func _storage_for(grid_id: String) -> InventoryStorage:
 	if grid_id == "object":

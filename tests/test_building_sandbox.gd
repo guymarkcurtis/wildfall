@@ -285,6 +285,23 @@ func _run() -> void:
 	toolbar.call("_toggle_drawer")
 	_check(bool(toolbar.get("_expanded")) and (toolbar.get("_drawer") as Control).visible,
 		"Sandbox save button expands to reveal save controls and time selection")
+	# M9 box 7: the sandbox ships a data-authored tutorial card, visible at
+	# start, dismissible with X, re-openable from the drawer's ? button.
+	var card: SandboxTutorialCardPanel = _main.get_node("HUD/SandboxTutorialCard") as SandboxTutorialCardPanel
+	_check(card != null, "The sandbox scene carries the tutorial card")
+	_check(card != null and card.visible, "The tutorial card is visible when the sandbox starts")
+	var card_data := load("res://data/sandbox/sandbox_tutorial_card.tres") as SandboxTutorialCard
+	_check(card_data != null and card_data.validate().is_empty(),
+		"The tutorial card data resource is valid")
+	var expected_headings: Array[String] = []
+	for heading in card_data.lines:
+		expected_headings.append(str(heading))
+	_check(card.heading_labels() == expected_headings,
+		"Every data-authored line renders, in authored order")
+	card._close_button.pressed.emit()
+	_check(not card.visible, "The X button dismisses the tutorial card")
+	toolbar._help_button.pressed.emit()
+	_check(card.visible, "The drawer's ? button reopens the tutorial card")
 	_main.queue_free()
 	await process_frame
 	GameSession.set_game_mode(GameSession.MODE_SURVIVAL)
