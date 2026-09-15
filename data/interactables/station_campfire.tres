@@ -6,5 +6,5 @@
 resource_name = "station_campfire"
 script = ExtResource("1_b62y3")
 recipe_group = "campfire"
-input_slot_count = 1
+input_slot_count = 3
 requires_power = true

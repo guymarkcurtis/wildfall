@@ -24,6 +24,7 @@ var _phase: int = 0
 var _phase_frame: int = 0
 var _crafted_press_sent: bool = false
 var _walk_start: Vector2 = Vector2.ZERO
+var _interaction_layout_preview: InteractablePanel = null
 
 func _init() -> void:
 	# Instantiate and attach first: the _ready chain runs synchronously on
@@ -37,6 +38,27 @@ func _process(_delta: float) -> bool:
 	if _frames == 5 and not _done:
 		_run_checks()
 		_done = true
+	# Control anchors settle after their first rendered layout pass. Verify
+	# dynamic and hidden-then-opened modals on the same frame players see.
+	if _frames == 6 and _interaction_layout_preview != null:
+		var journal_panel: MissionPanel = _main.get_node_or_null("HUD/MissionPanel") as MissionPanel
+		if journal_panel != null:
+			journal_panel.toggle()
+	elif _frames == 7 and _interaction_layout_preview != null:
+		var viewport_center := _main.get_viewport().get_visible_rect().get_center()
+		var interaction_window: Control = _interaction_layout_preview.get("_window") as Control
+		var interaction_center: Vector2 = interaction_window.get_global_rect().get_center() if interaction_window != null else Vector2.ZERO
+		_check(interaction_window != null and interaction_center.distance_to(viewport_center) < 1.0,
+				"Shared object-interaction panels are centred in the viewport (%s vs %s)" % [str(interaction_center), str(viewport_center)])
+		var journal_panel: MissionPanel = _main.get_node_or_null("HUD/MissionPanel") as MissionPanel
+		var journal_window: Control = journal_panel.get_node_or_null("MissionWindow") as Control if journal_panel != null else null
+		var journal_center: Vector2 = journal_window.get_global_rect().get_center() if journal_window != null else Vector2.ZERO
+		_check(journal_window != null and journal_center.distance_to(viewport_center) < 1.0,
+				"Mission journal is centred in the viewport (%s vs %s)" % [str(journal_center), str(viewport_center)])
+		if journal_panel != null:
+			journal_panel.toggle()
+		_interaction_layout_preview.queue_free()
+		_interaction_layout_preview = null
 	if not _done:
 		return false
 	match _phase:
@@ -255,6 +277,13 @@ func _run_checks() -> void:
 		var panel_center := map_window.get_global_rect().get_center() if map_window != null else Vector2.ZERO
 		_check(map_window != null and panel_center.distance_to(viewport_center) < 1.0,
 			"World map panel is centred in the viewport (%s, %s vs %s)" % [str(map_window.get_global_rect() if map_window != null else Rect2()), str(panel_center), str(viewport_center)])
+		var crafting_center: Vector2 = crafting_panel.get_global_rect().get_center() if crafting_panel != null else Vector2.ZERO
+		_check(crafting_panel != null and crafting_center.distance_to(viewport_center) < 1.0,
+			"Crafting panel is centred in the viewport (%s vs %s)" % [str(crafting_center), str(viewport_center)])
+		var interaction_preview := InteractablePanel.new()
+		main.get_node("HUD").add_child(interaction_preview)
+		interaction_preview.open_for("Layout check", "", player.inventory.get_storage(), player.inventory.get_storage())
+		_interaction_layout_preview = interaction_preview
 		_check(player.call("_ui_blocks_world_input"), "Open world map blocks player movement and world actions")
 		_check(world_map.get_revealed_chunk_count() > 0 and world_map.get_revealed_chunk_count() <= 25,
 			"Map reveals only the compact loaded chunk neighbourhood around the player")

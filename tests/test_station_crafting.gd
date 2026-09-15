@@ -1,5 +1,6 @@
-## Focused M6 coverage for profile-driven station groups, persistent input /
-## output inventories, and transactional immediate crafting.
+## Focused M6+ coverage for profile-driven station groups, persistent input /
+## output inventories, transactional crafting, timed craft jobs, and the
+## overhauled interaction panel (recipe fill, take-only output).
 ## Run: godot --headless --path . --script tests/test_station_crafting.gd
 extends SceneTree
 
@@ -12,6 +13,7 @@ func _initialize() -> void:
 func _run() -> void:
 	_test_station_panel_interaction()
 	_test_fuel_tick()
+	_test_timed_crafting()
 	var database := ItemDatabase.new()
 	database.initialize()
 	var inventory := InventoryComponent.new()
@@ -196,15 +198,35 @@ func _test_station_panel_interaction() -> void:
 			"E-interaction opens a station panel with persistent input, output, and player surfaces")
 	var toasts: Array[String] = []
 	manager.open_panel.toast_requested.connect(func(text: String) -> void: toasts.append(text))
+	manager.open_panel.station_fill_requested.emit("wooden_hammer")
+	_check(manager.open_record.get_station_input_storage().quantity_of("plank") == 4
+			and manager.open_record.get_station_input_storage().quantity_of("stone") == 2,
+			"The panel fill action pulls the recipe's ingredients onto the station surface")
+	_check(toasts == ["Filled 6 ingredients from your inventory"],
+			"Filling announces how many ingredients moved")
 	manager.open_panel.station_craft_requested.emit("wooden_hammer")
-	_check(manager.open_record.get_station_output_storage().quantity_of("wooden_hammer") == 1,
-			"Station panel recipe action fills inputs and crafts into visible output")
-	_check(toasts == ["Crafted 1x Wooden Hammer"],
-			"A successful craft announces itself on the panel's toast lane")
+	_check(StationCrafting.job_of(manager.open_record).get("recipe_id", "") == "wooden_hammer"
+			and manager.open_record.get_station_input_storage().occupied_count() == 0,
+			"Crafting consumes the input slots and starts a timed job on the record")
+	_check(toasts.size() == 2 and toasts[1] == "Crafting 1x Wooden Hammer — 5s",
+			"A started craft announces itself with its craft time")
+	StationCrafting.tick(manager.open_record, 2.0, database)
+	_check(float(StationCrafting.job_of(manager.open_record).get("remaining", -1.0)) > 0.0
+			and manager.open_record.get_station_output_storage().occupied_count() == 0,
+			"A timed job is not finished before its craft time elapses")
+	StationCrafting.tick(manager.open_record, 3.0, database)
+	_check(StationCrafting.job_of(manager.open_record).is_empty()
+			and manager.open_record.get_station_output_storage().quantity_of("wooden_hammer") == 1,
+			"The finished job writes its result to the visible output slot")
+	var held_hammers := player.inventory.get_item_quantity("wooden_hammer")
+	manager.open_panel._on_grid_slot_pressed("output", 0, MOUSE_BUTTON_LEFT)
+	_check(player.inventory.get_item_quantity("wooden_hammer") == held_hammers + 1
+			and manager.open_record.get_station_output_storage().occupied_count() == 0,
+			"Output slots are take-only: a click picks the result up into the player inventory")
 	# The first craft consumed the player's planks and stone, so this repeat
-	# has nothing left to fill with: the failure names the missing inputs.
+	# has nothing to start from: the failure names the missing inputs.
 	manager.open_panel.station_craft_requested.emit("wooden_hammer")
-	_check(toasts.size() == 2 and toasts[1] == "Missing ingredients — fill the input slots",
+	_check(toasts.size() == 3 and toasts[2] == "Missing ingredients — fill the input slots",
 			"A starved repeat craft names the missing ingredients")
 	manager.close("test")
 	buildings.place_record("torch", Vector2i(7, 4), player.inventory, 0)
@@ -237,6 +259,73 @@ func _test_station_panel_interaction() -> void:
 			"Fuel-panel on/off controls mutate only the record's generic enabled state")
 	manager.close("test")
 	world.queue_free()
+
+## Timed crafting: multi-ingredient fills on the widened surface, job
+## progression, power pauses, already-crafting refusal, mid-craft save/load,
+## and the shorter-array input migration.
+func _test_timed_crafting() -> void:
+	var database := ItemDatabase.new()
+	database.initialize()
+	var inventory := InventoryComponent.new()
+	var stack_sizes: Dictionary = {}
+	for item_id in database.items:
+		stack_sizes[item_id] = int(database.items[item_id].stack_size)
+	inventory.set_stack_sizes(stack_sizes)
+	inventory.add_item("furnace", 1)
+	inventory.add_item("sand", 8)
+	inventory.add_item("coal", 8)
+	var manager := BuildingManager.new()
+	root.add_child(manager)
+	_check(manager.place_record("furnace", Vector2i(20, 20), inventory, 0),
+			"A data-authored furnace places through the normal record path")
+	var record := manager.get_record_at(Vector2i(20, 20), 0, "object")
+	_check(record.get_station_input_storage().slot_count() == 3,
+			"The furnace's authored input surface provides three ingredient slots")
+	var glass_recipe := database.get_recipe("glass")
+	var filled := StationCrafting.fill_inputs(record, inventory.get_storage(), glass_recipe)
+	_check(int(filled.moved) == 3 and record.get_station_input_storage().quantity_of("sand") == 2
+			and record.get_station_input_storage().quantity_of("coal") == 1,
+			"Two distinct ingredients fill separate input slots for one recipe")
+	var refused := StationCrafting.start_craft(record, inventory.get_storage(), glass_recipe)
+	_check(not bool(refused.success) and str(refused.reason) == "unpowered",
+			"An unpowered station refuses to start a craft without consuming inputs")
+	record.capability_state["enabled"] = true
+	var started := StationCrafting.start_craft(record, inventory.get_storage(), glass_recipe)
+	_check(bool(started.success) and record.get_station_input_storage().occupied_count() == 0
+			and not StationCrafting.job_of(record).is_empty(),
+			"Starting a timed craft consumes the inputs and opens a job")
+	var again := StationCrafting.start_craft(record, inventory.get_storage(), glass_recipe)
+	_check(not bool(again.success) and str(again.reason) == "already_crafting",
+			"A second start while a job runs is refused as already crafting")
+	StationCrafting.tick(record, 2.0, database)
+	record.capability_state["enabled"] = false
+	var before_pause := float(StationCrafting.job_of(record).get("remaining", -1.0))
+	StationCrafting.tick(record, 60.0, database)
+	_check(is_equal_approx(float(StationCrafting.job_of(record).get("remaining", -1.0)), before_pause),
+			"Losing power pauses the job without progress or loss")
+	record.capability_state["enabled"] = true
+	var payload := manager.serialize()
+	var restored_manager := BuildingManager.new()
+	root.add_child(restored_manager)
+	restored_manager.deserialize(payload)
+	var restored := restored_manager.get_record_at(Vector2i(20, 20), 0, "object")
+	_check(float(StationCrafting.job_of(restored).get("remaining", -1.0)) > 0.0,
+			"A mid-craft job persists in the building's v8 state payload")
+	StationCrafting.tick(restored, 5.0, database)
+	_check(StationCrafting.job_of(restored).is_empty()
+			and restored.get_station_output_storage().quantity_of("glass") == 1,
+			"The resumed job finishes into the output slot after reload")
+	# Old saves carried a one-slot input surface: the shorter array restores,
+	# then pads up to the authored count instead of being dropped.
+	var legacy := BuildingRecord.new()
+	legacy.definition = record.definition
+	legacy.capability_state["station"] = {"inputs": {"slots": [
+			{"item_id": "iron_ore", "quantity": 2}]}}
+	var legacy_inputs := legacy.get_station_input_storage()
+	_check(legacy_inputs.slot_count() == 3 and legacy_inputs.quantity_of("iron_ore") == 2,
+			"Station inputs saved with fewer slots restore and pad to the authored count")
+	restored_manager.queue_free()
+	manager.queue_free()
 
 func _check(condition: bool, label: String) -> void:
 	_checks += 1

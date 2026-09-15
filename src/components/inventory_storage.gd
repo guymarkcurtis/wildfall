@@ -335,6 +335,16 @@ func deserialize(data: Dictionary) -> void:
 	max_weight = maxf(float(data.get("max_weight", max_weight)), 0.0)
 	changed.emit()
 
+## Load migration entry: grow the slot array up to `total` (never shrink),
+## padding with empty slots. Used when an authored profile gains slots and an
+## older save carries a shorter validated array (e.g. station inputs widened
+## from 1 to 3) — the profile, not the save, owns the final slot count.
+func pad_slots(total: int) -> void:
+	if total <= slots.size():
+		return
+	slots.resize(total)
+	changed.emit()
+
 ## Migration entry: takes a prebuilt array of validated slot dictionaries
 ## (or nulls) in deterministic order — the owner converts legacy shapes.
 func load_slots(incoming: Array, weight_capacity: float = -1.0) -> void:

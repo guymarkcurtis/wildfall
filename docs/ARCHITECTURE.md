@@ -162,11 +162,13 @@ plus a name label and a mini health bar. Loot rolls on death.
 
 ### Buildings / weather / day-night / statuses
 `BuildingManager` places data-driven structural items on the 32px grid. A
-map tile can hold one item per story across four construction stories. In
-build mode, `[` / `]` selects the active story; the cutaway hides stories
-above it and fades stories below it. Upper stories require structural support
-directly below. `BuildPalette` exposes owned parts, selection, story controls,
-and placement-failure feedback; it is wired under the HUD.
+map tile can hold independent ground, floor, edge, object, overhead, and
+connector records across four construction stories; physical edges use stable
+canonical keys. In build mode, `[` / `]` selects the construction story,
+while stairs change the player's active story; the cutaway hides stories above
+and fades stories below. Upper stories require authored direct support.
+`BuildPalette` exposes owned parts, data-authored groups, rotation, story
+controls, and placement-failure feedback; it is wired under the HUD.
 `DayNightCycle` drives a `CanvasModulate`. `WeatherSystem` tints a
 overlay and can apply wet/cold statuses. `StatusEffectSystem` ticks
 poison/heal/slow on the player.
@@ -216,8 +218,8 @@ All game content uses Resource subclasses:
 
 | Resource | Purpose | Key Fields (actual) |
 |----------|---------|------------|
-| ItemDefinition | Item data (78 items) | item_id, display_name, category, stack_size, weight, rarity, health_bonus, hunger_bonus, damage_bonus, durability, tool_type |
-| RecipeDefinition | Crafting recipe (56 recipes) | recipe_id, result_item_id, result_quantity, crafting_station, required_items {id: qty}, craft_time, technology_id, unlocked |
+| ItemDefinition | Item data (119 items) | item_id, display_name, category, stack_size, weight, rarity, tags, health_bonus, hunger_bonus, damage_bonus, durability, tool_type |
+| RecipeDefinition | Crafting recipe (96 recipes) | recipe_id, result_item_id, result_quantity, crafting_station, required_items {id: qty}, craft_time, technology_id, unlocked |
 | BiomeDefinition | Biome config (6 biomes) | id, display_name, elevation_range, moisture_range, temperature_range, ground_color, rain_chance, snow_chance, resource_types, creature_types, vegetation_types |
 | CreatureDefinition | Creature data — **wired (Phase 3)** | id, type, health, speed, detection_range, hostile, allowed_biomes, loot_table, custom_data |
 | TechnologyDefinition | Research unlock — **wired** | id, prerequisites[], unlock_cost[], unlocks_recipes[] |

@@ -22,7 +22,9 @@ extends Resource
 ## When true the station only crafts while its fuel/toggle state is enabled.
 @export var requires_power: bool = false
 
-## "immediate" this pass; timed queues are a documented later extension.
+## Single-job policy: one craft runs at a time — a timed `craft_job` payload
+## (see StationCrafting) or an instant result for zero-time recipes.
+## Multi-item queues remain a documented later extension.
 @export var queue_policy: String = "immediate"
 
 func validate() -> Array[String]:

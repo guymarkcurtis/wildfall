@@ -20,6 +20,7 @@ func _run() -> void:
 	_test_collision_rules()
 	_test_save_round_trip()
 	_test_container_persistence_and_safe_demolition()
+	_test_m10_mixed_house_round_trip()
 	_test_orientation_rotation()
 	print("Building placement failures: %d (%d checks)" % [_failures, _checks])
 	quit(_failures)
@@ -230,6 +231,17 @@ func _test_collision_rules() -> void:
 			shape = child
 	_check(shape != null and absf(shape.shape.size.y - 8.0) < 0.01,
 			"The edge wall's collision is a thin strip along the edge, not the tile")
+	var name_label: Label = null
+	var health_bar: ProgressBar = null
+	for child in wall.node.get_children():
+		if child is Label:
+			name_label = child
+		elif child is ProgressBar:
+			health_bar = child
+	_check(name_label != null and not name_label.visible and health_bar != null and not health_bar.visible,
+			"Pristine buildings keep name and health UI out of the room view")
+	wall.node.take_damage(1)
+	_check(health_bar.visible, "Damaged buildings reveal health feedback")
 	manager.place_record("wooden_door", Vector2i(50, 51), inventory, 0, "north")
 	var door := manager.get_record_at(Vector2i(50, 51), 0, "edge", "north")
 	_check(door != null and door.node != null and door.node.collision_layer == 0,
@@ -332,6 +344,82 @@ func _test_container_persistence_and_safe_demolition() -> void:
 			"Malformed saved container fields are rejected safely without reshaping storage")
 	restored_manager.queue_free()
 	malformed_manager.queue_free()
+	manager.queue_free()
+
+## --- M10 release gate: one mixed, stateful multi-story house survives a save ---
+
+func _test_m10_mixed_house_round_trip() -> void:
+	var manager := _make_manager()
+	var inventory := _make_inventory({
+		"wooden_foundation": 3, "stone_foundation": 1, "stone_floor": 1,
+		"wooden_wall": 1, "stone_wall": 1, "wooden_stairs_down": 1,
+		"chest": 1, "campfire": 1, "workbench": 1, "wood": 24,
+		"plank": 4, "wooden_hammer": 1,
+	})
+	manager.refund_inventory = inventory
+	# Story 0 supports a mixed-material upper floor. The down stair is placed
+	# on story 1 and reserves its landing on story 0, exercising the negative
+	# connector offset through serialization as well as normal placement.
+	var base := Vector2i(90, 90)
+	_check(manager.place_record("wooden_foundation", base, inventory, 0)
+			and manager.place_record("stone_foundation", base + Vector2i(1, 0), inventory, 0)
+			and manager.place_record("wooden_foundation", base + Vector2i(2, 0), inventory, 0),
+			"M10 mixed house foundations place on the ground story")
+	_check(manager.place_record("wooden_stairs_down", base, inventory, 1, "east")
+			and manager.place_record("stone_floor", base + Vector2i(1, 0), inventory, 1)
+			and manager.place_record("wooden_wall", base, inventory, 1, "east")
+			and manager.place_record("stone_wall", base + Vector2i(1, 0), inventory, 1, "north"),
+			"M10 mixed upper story places a descending connector, floor, and oriented walls")
+	_check(manager.place_record("chest", base + Vector2i(1, 0), inventory, 1)
+			and manager.place_record("campfire", base + Vector2i(2, 0), inventory, 0)
+			and manager.place_record("workbench", base + Vector2i(3, 0), inventory, 0),
+			"M10 mixed house places furnished container, fuelled station, and workbench")
+
+	var wooden_wall := manager.get_record_at(base, 1, "edge", "east")
+	wooden_wall.health = 37
+	var chest := manager.get_record_at(base + Vector2i(1, 0), 1, "object")
+	var chest_storage := chest.get_container_storage()
+	chest_storage.stack_sizes = inventory.get_stack_sizes()
+	chest_storage.add_item("wood", 12)
+	var campfire := manager.get_record_at(base + Vector2i(2, 0), 0, "object")
+	var fuel_storage := campfire.get_fuel_storage()
+	fuel_storage.stack_sizes = inventory.get_stack_sizes()
+	fuel_storage.add_item("wood", 3)
+	campfire.capability_state["enabled"] = true
+	campfire.capability_state["fuel_seconds_remaining"] = 41.5
+	var workbench := manager.get_record_at(base + Vector2i(3, 0), 0, "object")
+	var inputs := workbench.get_station_input_storage()
+	var outputs := workbench.get_station_output_storage()
+	inputs.stack_sizes = inventory.get_stack_sizes()
+	outputs.stack_sizes = inventory.get_stack_sizes()
+	inputs.add_item("plank", 4)
+	outputs.add_item("wooden_hammer", 1)
+
+	var payload := manager.serialize()
+	var restored_manager := _make_manager()
+	restored_manager.deserialize(payload)
+	var restored_stairs := restored_manager.get_record_at(base, 1, "connector")
+	var restored_wall := restored_manager.get_record_at(base, 1, "edge", "east")
+	var restored_chest := restored_manager.get_record_at(base + Vector2i(1, 0), 1, "object")
+	var restored_fire := restored_manager.get_record_at(base + Vector2i(2, 0), 0, "object")
+	var restored_bench := restored_manager.get_record_at(base + Vector2i(3, 0), 0, "object")
+	_check(restored_manager.get_building_count() == manager.get_building_count()
+			and restored_wall != null and restored_wall.health == 37
+			and restored_wall.orientation == "east",
+			"M10 round-trip preserves every mixed-house record plus wall health and orientation")
+	_check(restored_stairs != null and restored_stairs.definition.connector_profile.upper_story_offset == -1
+			and restored_manager.get_record_for_key(BuildingRecord.tile_key(base, 0, "floor")) == restored_stairs,
+			"M10 round-trip preserves the descending stair's paired landing reservation")
+	_check(restored_chest != null and restored_chest.get_container_storage().quantity_of("wood") == 12,
+			"M10 round-trip preserves furnished-container contents")
+	_check(restored_fire != null and bool(restored_fire.capability_state.get("enabled", false))
+			and is_equal_approx(float(restored_fire.capability_state.get("fuel_seconds_remaining", 0.0)), 41.5)
+			and restored_fire.get_fuel_storage().quantity_of("wood") == 3,
+			"M10 round-trip preserves active fuel state and indexed fuel")
+	_check(restored_bench != null and restored_bench.get_station_input_storage().quantity_of("plank") == 4
+			and restored_bench.get_station_output_storage().quantity_of("wooden_hammer") == 1,
+			"M10 round-trip preserves visible station inputs and outputs")
+	restored_manager.queue_free()
 	manager.queue_free()
 
 # --- Orientation rotation (M9 box 5) ---

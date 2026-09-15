@@ -96,8 +96,9 @@ edge-layer + `edge_fixture` replacement contract as the wood/stone windows;
 `metal_stair` reuses the existing stair `connector_profile`; `metal_fence`
 is an oriented edge boundary with no lower-support requirement;
 `signal_pole`, `metal_lantern` (walkable), `workshop_cabinet`, and
-`metal_locker` are object-layer props — the cabinet and locker get no
-container profile in M8; storage expansion is a later milestone.
+`metal_locker` are object-layer props — the cabinet and locker intentionally
+have no container profile in this pass; a future storage variant is an
+asset-only profile reference, not a separate runtime path.
 
 Every new part carries a native 32×32 pickup icon in
 `TexturePackManager.PACK_ASSETS` and a hand-crafted recipe, so each is

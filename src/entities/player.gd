@@ -19,6 +19,9 @@ const JUMP_COOLDOWN: float = 0.38
 var inventory: InventoryComponent = null
 var health_component: HealthComponent = null
 var hunger_component: HungerComponent = null
+## Character equipment (armour / clothing / light source). The light slot
+## drives the held light; toggled with L, persisted with the player.
+var equipment: EquipmentComponent = null
 
 # State
 @export var starting_inventory: Array[Dictionary] = []
@@ -67,6 +70,7 @@ func _ready() -> void:
 	_setup_collision()
 	_setup_facing()
 	_setup_character_visual()
+	_setup_held_light()
 	_spawn_at(Vector2(0, 0))
 	_populate_initial_inventory()
 	populate_hotbar_from_inventory()
@@ -84,6 +88,16 @@ func _init_components() -> void:
 	# InventoryComponent is a RefCounted (not a Node), so it is held, not added.
 	inventory = InventoryComponent.new()
 
+	# Equipment slots are generic InventoryStorages with tag filters; the
+	# tag query runs through the ItemDatabase (a sibling node).
+	equipment = EquipmentComponent.new()
+	equipment.tag_checker = func(item_id: String, tag: String) -> bool:
+		var item := item_database.get_item(item_id) if item_database != null else null
+		return item != null and item.has_tag(tag)
+	equipment.apply_filters()
+	equipment.changed.connect(_update_held_light)
+	equipment.light_changed.connect(_update_held_light)
+
 	# Connect signals
 	health_component.health_changed.connect(_on_health_changed)
 	hunger_component.hunger_changed.connect(_on_hunger_changed)
@@ -91,6 +105,64 @@ func _init_components() -> void:
 	inventory.durability_changed.connect(_on_tool_durability_changed)
 	inventory.tool_broken.connect(_on_tool_broken)
 	health_component.died.connect(_on_died)
+
+## The held light: one PointLight2D that mirrors the character screen's
+## light slot — visible only while a light_source item is equipped AND the
+## L-toggle is on. Presentation (colour, energy, radius) comes from the
+## item's data fields, so future lanterns need no new code.
+var _held_light: PointLight2D = null
+
+func _setup_held_light() -> void:
+	_held_light = PointLight2D.new()
+	_held_light.name = "HeldLight"
+	_held_light.texture = _make_light_texture()
+	_held_light.visible = false
+	_held_light.blend_mode = Light2D.BLEND_MODE_ADD
+	add_child(_held_light)
+	_update_held_light()
+
+static var _held_light_texture: GradientTexture2D = null
+
+static func _make_light_texture() -> GradientTexture2D:
+	if _held_light_texture != null:
+		return _held_light_texture
+	var gradient := Gradient.new()
+	gradient.set_color(0, Color(1, 1, 1, 1))
+	gradient.set_color(1, Color(1, 1, 1, 0))
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.width = 128
+	texture.height = 128
+	texture.fill = GradientTexture2D.FILL_RADIAL
+	texture.fill_from = Vector2(0.5, 0.5)
+	texture.fill_to = Vector2(0.5, 0.0)
+	_held_light_texture = texture
+	return texture
+
+## Re-sync the held light with the equipment state (called on any equipment
+## or light-toggle change).
+func _update_held_light() -> void:
+	if _held_light == null or equipment == null:
+		return
+	var item_id := equipment.light_item_id()
+	var item: ItemDefinition = item_database.get_item(item_id) \
+			if item_database != null and item_id != "" else null
+	_held_light.visible = item != null and equipment.light_enabled
+	if item != null:
+		_held_light.color = item.light_color
+		_held_light.energy = item.light_energy
+		_held_light.texture_scale = maxf(item.light_radius_px, 32.0) * 2.0 / 128.0
+
+## L at the character: flip the equipped light's toggle. Returns a
+## human-readable outcome for the HUD toast lane ("", "lit", "doused",
+## or "empty" when nothing usable is equipped).
+func toggle_held_light() -> String:
+	if equipment == null:
+		return "empty"
+	var was_enabled := equipment.light_enabled
+	if not equipment.toggle_light():
+		return "empty"
+	return "doused" if was_enabled else "lit"
 
 ## Spawn player at world position.
 func _spawn_at(position: Vector2) -> void:
@@ -594,6 +666,9 @@ func _ui_blocks_world_input() -> bool:
 		return true
 	var inv_panel: Node = parent.get_node_or_null("HUD/InventoryPanel")
 	if inv_panel != null and inv_panel.has_method("is_open") and inv_panel.is_open():
+		return true
+	var character_panel: Node = parent.get_node_or_null("HUD/CharacterPanel")
+	if character_panel != null and bool(character_panel.get("is_open")):
 		return true
 	var craft_panel: Node = parent.get_node_or_null("HUD/CraftingPanel")
 	if craft_panel != null and craft_panel.visible:

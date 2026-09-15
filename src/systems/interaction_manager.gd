@@ -20,6 +20,7 @@ const CRAFT_FAILURE_MESSAGES := {
 	"missing_surface": "Missing a surface for this recipe",
 	"wrong_station": "This recipe belongs to another station",
 	"not_a_station": "This object has no station",
+	"already_crafting": "Already crafting — wait for it to finish",
 	"invalid": "Invalid craft request",
 }
 
@@ -36,6 +37,10 @@ var _focus_marker: Node2D = null
 var _view_builders: Dictionary = {} # ui_kind -> Callable(building, record, panel) -> bool
 var _open_close_handlers: Array = []
 var _bound_building_manager: BuildingManager = null
+## Presentation-only: whether a timed craft job was running on the open
+## record at the previous frame, so completion can toast once.
+var _job_was_running := false
+var _last_job_recipe_id := ""
 
 func _ready() -> void:
 	var parent := get_parent()
@@ -64,6 +69,7 @@ func _process(_delta: float) -> void:
 	_publish_prompt()
 	_update_focus_marker()
 	_close_if_out_of_range()
+	_push_station_runtime()
 
 func ui_blocks_world() -> bool:
 	return open_panel != null and is_instance_valid(open_panel) and open_panel.blocks_world_input()
@@ -106,6 +112,15 @@ func open(building: Building) -> bool:
 	var record := building_manager.get_record_for_building(building)
 	if record == null:
 		return false
+	# The device panel hosts the player's inventory grid, so the standalone
+	# inventory window would only duplicate it (and its dimmer) — close it.
+	# The character screen's drag sources leave with it, for the same reason.
+	var inventory_panel := get_parent().get_node_or_null("HUD/InventoryPanel") as InventoryPanel
+	if inventory_panel != null and inventory_panel.is_open():
+		inventory_panel.close()
+	var character_panel: Node = get_parent().get_node_or_null("HUD/CharacterPanel")
+	if character_panel != null and bool(character_panel.get("is_open")):
+		character_panel.call("close_panel")
 	var panel := InteractablePanel.new()
 	var hud := get_parent().get_node_or_null("HUD")
 	(hud if hud != null else self).add_child(panel)
@@ -161,6 +176,8 @@ func close(reason: String) -> void:
 	open_panel = null
 	open_building = null
 	open_record = null
+	_job_was_running = false
+	_last_job_recipe_id = ""
 	panel_closed.emit(reason)
 
 # --- Internals ---
@@ -304,7 +321,7 @@ func _build_container_view(building: Building, record: BuildingRecord, panel: In
 		storage.stack_sizes = player.inventory.get_stack_sizes()
 		storage.max_durations = player.inventory.get_duration_caps()
 	var title := building.get_interaction_prompt().capitalize()
-	var help := "Click to select, click to move. Shift sends the whole stack; right-click splits half. Esc closes."
+	var help := "Click to select and click again to move, drag between grids, shift-click a whole stack, right-click splits half. Esc closes."
 	panel.open_for(title, help, storage, player.inventory.get_storage())
 	var changed := Callable(self, "_on_open_storage_changed")
 	if not storage.changed.is_connected(changed):
@@ -330,15 +347,25 @@ func _build_station_view(building: Building, record: BuildingRecord, panel: Inte
 	var recipes := database.get_recipes_for_station(building.definition.station_profile.recipe_group)
 	var power_note := ""
 	if building.definition.station_profile.requires_power:
-		power_note = " Powered: %s." % ("yes" if bool(record.capability_state.get("enabled", false)) else "no")
+		power_note = " The station needs fuel and its switch on to craft."
+	# Reopening resumes the in-progress job's selection; otherwise the first
+	# recipe is preselected so the ingredient contract is visible at once.
+	var selected_recipe_id := str(StationCrafting.job_of(record).get("recipe_id",
+			recipes[0].recipe_id if not recipes.is_empty() else ""))
 	panel.open_station(building.get_interaction_prompt().capitalize(),
-			"Add ingredients, then pick a recipe. Esc closes." + power_note,
-			inputs, outputs, player.inventory.get_storage(), recipes)
+			"Drag ingredients into their slots, then press Craft. Shift-click moves whole stacks; Esc closes." + power_note,
+			inputs, outputs, player.inventory.get_storage(), recipes,
+			{"requires_power": building.definition.station_profile.requires_power,
+			"selected_recipe_id": selected_recipe_id})
 	panel.station_craft_requested.connect(_on_station_craft_requested.bind(record))
+	panel.station_fill_requested.connect(_on_station_fill_requested.bind(record))
 	for storage in [inputs, outputs]:
 		if not storage.changed.is_connected(_on_open_storage_changed):
 			storage.changed.connect(_on_open_storage_changed)
 	_setup_fuel_controls(record, panel)
+	panel.update_station_runtime(_station_runtime_state(record))
+	_job_was_running = not StationCrafting.job_of(record).is_empty()
+	_last_job_recipe_id = str(StationCrafting.job_of(record).get("recipe_id", ""))
 	return true
 
 func _build_fuel_view(building: Building, record: BuildingRecord, panel: InteractablePanel) -> bool:
@@ -348,8 +375,12 @@ func _build_fuel_view(building: Building, record: BuildingRecord, panel: Interac
 	if storage == null:
 		return false
 	storage.stack_sizes = player.inventory.get_stack_sizes()
-	panel.open_for(building.get_interaction_prompt().capitalize(), "Insert a fuel the station accepts, then turn it on.", storage, player.inventory.get_storage())
+	# No object storage: the device column is the fuel section itself.
+	panel.open_for(building.get_interaction_prompt().capitalize(),
+			"Insert a fuel the object accepts, then turn it on. Esc closes.",
+			null, player.inventory.get_storage())
 	_setup_fuel_controls(record, panel)
+	panel.update_station_runtime(_station_runtime_state(record))
 	return true
 
 func _setup_fuel_controls(record: BuildingRecord, panel: InteractablePanel) -> void:
@@ -390,12 +421,64 @@ func _on_station_craft_requested(recipe_id: String, record: BuildingRecord) -> v
 		return
 	var technology := get_parent().get_node_or_null("TechnologySystem")
 	var unlocked: bool = GameSession.is_creative() or technology == null or technology.is_unlocked(recipe.technology_id)
-	StationCrafting.fill_inputs(record, player.inventory.get_storage(), recipe)
-	var result := StationCrafting.craft(record, player.inventory.get_storage(), recipe, unlocked)
-	# Craft feedback rides the panel's single toast lane; the manager owns the wording.
+	# Timed crafting: inputs are already on the station surface; starting
+	# consumes them and ticks the job forward via BuildingManager.
+	var result := StationCrafting.start_craft(record, player.inventory.get_storage(), recipe, unlocked)
 	if open_panel != null and is_instance_valid(open_panel):
 		if bool(result.success):
-			open_panel.toast_requested.emit("Crafted %dx %s" % [recipe.result_quantity, recipe.result_item_id.replace("_", " ").capitalize()])
+			var seconds := int(ceil(float(recipe.craft_time)))
+			var timing := "%ds" % seconds if seconds > 0 else "instant"
+			open_panel.toast_requested.emit("Crafting %dx %s — %s" % [
+					recipe.result_quantity,
+					recipe.result_item_id.replace("_", " ").capitalize(), timing])
 		else:
 			open_panel.toast_requested.emit(str(CRAFT_FAILURE_MESSAGES.get(str(result.reason), "Crafting failed")))
 	_on_open_storage_changed()
+
+## "Fill ingredients": pulls the selected recipe's missing inputs from the
+## player inventory onto the station surface (never over-fills).
+func _on_station_fill_requested(recipe_id: String, record: BuildingRecord) -> void:
+	if open_record != record or player == null or player.inventory == null:
+		return
+	var database := get_parent().get_node_or_null("ItemDatabase") as ItemDatabase
+	var recipe := database.get_recipe(recipe_id) if database != null else null
+	if recipe == null:
+		return
+	var result := StationCrafting.fill_inputs(record, player.inventory.get_storage(), recipe)
+	if open_panel != null and is_instance_valid(open_panel):
+		var moved := int(result.get("moved", 0))
+		if moved > 0:
+			open_panel.toast_requested.emit("Filled %d ingredient%s from your inventory"
+					% [moved, "" if moved == 1 else "s"])
+		else:
+			open_panel.toast_requested.emit("Nothing to add — gather the ingredients first")
+	_on_open_storage_changed()
+
+## Per-frame device truth for the open panel: power/fuel state plus the live
+## craft job. Also toasts once when a job finishes while the panel is open.
+func _push_station_runtime() -> void:
+	if open_panel == null or not is_instance_valid(open_panel) or open_record == null \
+			or open_record.definition == null:
+		return
+	if open_record.definition.station_profile == null \
+			and open_record.definition.fuel_profile == null:
+		return # plain container: nothing device-side to push
+	var job := StationCrafting.job_of(open_record)
+	if _job_was_running and job.is_empty():
+		var database := get_parent().get_node_or_null("ItemDatabase") as ItemDatabase
+		var recipe := database.get_recipe(_last_job_recipe_id) if database != null else null
+		var result_name := _last_job_recipe_id.replace("_", " ").capitalize()
+		if recipe != null and recipe.result_item_id != "":
+			result_name = str(recipe.result_item_id).replace("_", " ").capitalize()
+		open_panel.toast_requested.emit("%s finished — collect it from the output" % result_name)
+	_job_was_running = not job.is_empty()
+	_last_job_recipe_id = str(job.get("recipe_id", _last_job_recipe_id))
+	open_panel.update_station_runtime(_station_runtime_state(open_record))
+
+func _station_runtime_state(record: BuildingRecord) -> Dictionary:
+	return {
+		"powered": bool(record.capability_state.get("enabled", false)),
+		"enabled": bool(record.capability_state.get("enabled", false)),
+		"fuel_seconds": float(record.capability_state.get("fuel_seconds_remaining", 0.0)),
+		"job": StationCrafting.job_of(record),
+	}

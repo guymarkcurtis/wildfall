@@ -139,6 +139,10 @@ func _setup_visuals() -> void:
 	_label.text = "%s  L%d" % [display_name, story + 1]
 	_label.position = Vector2(0.0, -16.0)
 	_label.add_theme_font_size_override("font_size", 10)
+	# The world already identifies usable objects through the focused
+	# interaction prompt. Persistent labels turn a furnished room into an
+	# unreadable wall of text, so names are not drawn over normal play.
+	_label.visible = false
 	add_child(_label)
 
 	_health_bar = ProgressBar.new()
@@ -148,6 +152,9 @@ func _setup_visuals() -> void:
 	_health_bar.custom_minimum_size = Vector2(TILE_SIZE, 4)
 	_health_bar.position = Vector2(0.0, -6.0)
 	_health_bar.show_percentage = false
+	# A pristine structure needs no combat-style health UI. Reveal this only
+	# after damage, where it is actionable feedback rather than visual noise.
+	_health_bar.visible = health < max_health
 	add_child(_health_bar)
 
 func reload_visual_texture() -> void:
@@ -465,6 +472,7 @@ func take_damage(amount: float) -> bool:
 	health = maxi(0, health - int(amount))
 	if _health_bar:
 		_health_bar.value = health
+		_health_bar.visible = health < max_health
 	building_damaged.emit(health, max_health)
 	if health <= 0:
 		building_destroyed.emit()

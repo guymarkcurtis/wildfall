@@ -1,6 +1,7 @@
 # Building & Interactable Art Requests (M9)
 
-Status: **active** — M9, "Art, UX, and presentation". This file is the
+Status: **complete** — M9 art was packed and M10 release-verified on
+2026-09-15. This file is the
 authoritative per-cell production contract for every new raster asset the
 milestone ships. Before generation, re-read §1 (pipeline) and §2 (global
 rules); every prompt in §3/§4 starts from the shared style preamble in §2.3.

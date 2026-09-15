@@ -3,7 +3,8 @@
 ## CURRENT MILESTONE
 
 **Phase 2 (Resource Harvesting) COMPLETE, Phase 3 Gameplay COMPLETE,
-Phase 4 core (tool durability + mission system) COMPLETE.**
+Phase 4 core (tool durability + mission system) COMPLETE, and the combined
+buildings/interactables pass (M0–M10) COMPLETE as of 2026-09-15.**
 
 Building Sandbox is now available from New Game. It is a dedicated 5×3-chunk
 land-only test yard (about four screens) with no generated resources,
@@ -108,9 +109,9 @@ remain only as a fallback when an art file is missing), and added the
 two new atlases to the texture-pack export. All requests in
 `docs/ART_REQUESTS.md` are DONE.
 
-## CURRENT TEST RESULTS (2026-09-14)
+## CURRENT TEST RESULTS (2026-09-15)
 
-Automated headless run of the real main scene — **436/436 checks passed,
+Automated headless run of the real main scene — **440/440 checks passed,
 0 failures, 0 script errors**:
 
 | Test | Status |
@@ -118,7 +119,7 @@ Automated headless run of the real main scene — **436/436 checks passed,
 | Scene loading + 9 required nodes | PASS (9/9) |
 | World generation (chunk data, 4× pixel/chunk coordinate math, biome variety) | PASS (4 biomes sampled) |
 | Terrain rendering (12,544 tiles) + resource spawn | PASS |
-| Item database (78 items, 56 recipes) | PASS |
+| Item database (119 items, 96 recipes) | PASS |
 | Crafting + stations + research (scrollable recipe list, nearby station gates, starting recipes, paid research unlocks) | PASS |
 | Camera follow (target set, lerp converges) | PASS |
 | Seed input (T opens, pre-fill, Escape cancels) | PASS |
@@ -148,7 +149,7 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - **Player Movement**: World-relative WASD (W north, A west, S south, D east) + Sprint and a short aimed Space-bar jump. Faces the pointer, which controls tool and ranged aim. Rocky ground is walkable; water retains terrain collision.
 - **Camera**: Smooth follow; `,`/`.` snap-rotate, middle-mouse free rotate, Home resets north-up.
 - **Ranged combat**: Face the cursor; LMB fires the wooden bow (consumes arrows).
-- **Buildings**: B opens the build palette. Select an owned part, LMB places it, wheel cycles parts, F demolishes, and [ / ] selects one of four stackable cutaway stories. Wood is available immediately; stone parts require Stone Construction research.
+- **Buildings**: B opens the grouped build palette. Select an owned part, LMB places it, wheel cycles parts, F demolishes, and [ / ] selects one of four construction stories. R/Q rotate an orientable preview; floors, objects, edges, roofs, and connectors share a layered tile model. The player moves between active stories through stairs; Building Sandbox additionally offers F5 roof visibility and [ / ] active-story recovery outside build mode.
 - **World clock / weather / statuses**: DayNightCycle + WeatherSystem + StatusEffectSystem, shown on the HUD.
 - **World Generation**: Deterministic seed-based generation using 3 FastNoiseLite layers
 - **Chunk System**: 16×16 tile chunks, radius-3 (7×7) viewport streaming; reloads are deterministic (B3)
@@ -160,14 +161,14 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - **Debug Overlay**: FPS, position, chunk, seed, biome, noise values
 - **Seed Input**: T opens the editor (buffer pre-filled), Enter confirms + full world regeneration, Escape cancels; seed 0–999999
 - **HUD**: Health bar, hunger bar, seed label (all wired to real nodes)
-- **Texture Packs**: Options and Pause → Options can export stock art/contact cards plus a plain JSON image manifest (name, purpose, game use, atlas layout, edit note), create editable override packs, and switch terrain/resource/player/creature/station presentation live. Active pack terrain uses its native 32px-per-tile source resolution. Select a pack then press Apply; a water/sand/grass preview visibly confirms the active art even at the title screen. Eight seamless biome-ground images, the building parts + utilities atlases, and a four-cell crafting-station atlas are included in every export.
+- **Texture Packs**: Options and Pause → Options export stock art/contact cards plus a JSON image manifest, create editable override packs, and refresh terrain, world entities, placed buildings, and their state sheets live. The stock contract includes the M9 building/interactable pack: 10 building atlas sheets and six state sheets, all at documented 32px cell/frame geometry.
 - **Event Bus**: Centralized signal-based communication (plain node, no autoload)
 - **Inventory System**: Stack-based with weight limits, `inventory_full`, persistent 1–9 quick bar, and expandable click/drag inventory UI
 - **Technology System**: U opens research. Free Wood Construction leads to paid Stone Construction (20 wood, 30 stone), then Metalworking; unlocks gate recipes and building placement and persist in saves.
-- **Crafting System**: 56 recipes; every unlocked recipe has an obtainable ingredient chain. Campfires, furnaces, workbenches, and anvils are placeable and gate their nearby recipes within 72 pixels. The panel labels nearby stations, disables unavailable recipes, and the game revalidates the requirement on crafting.
+- **Crafting System**: 96 recipes; hand recipes stay on C while station recipes open from E-interaction with the authored station profile. Inputs, outputs, fuel, on/off state, and local lights are profile-driven and persist in v8 building state.
 - **Creature System (Phase 3)**: per-chunk deterministic spawning (7 creature types, biome-gated; fish only in water), IDLE/PATROL/FLEE AI, E-to-kill with per-creature loot tables (meat, fish, hide, feather, bone)
 - **Title screen**: New Game (Survival / Creative, locked per world), Load Game, Options, Quit. Esc pause in-game.
-- **Save System**: Versioned module JSON under `user://saves/` — unlimited timestamped manual saves plus rotating autosaves (last 2). A compact spawn-tile ledger preserves destroyed resources and creatures while retaining deterministic chunk generation; placed buildings retain their item, story, and health. Load Game lists both. Options toggles autosave.
+- **Save System**: Versioned module JSON under `user://saves/` — unlimited timestamped manual saves plus rotating autosaves (last 2). v8 stores layered building records, orientation, connector reservations, and only non-default container/fuel/station state while retaining deterministic world regeneration.
 
 ## ARCHITECTURE
 
@@ -179,7 +180,7 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - `src/systems/` — SaveSystem, ItemDatabase, BuildingManager, TechnologySystem, TexturePackManager, CreatureSpawner, MissionManager (Phase 4)
 - `resources/` — ItemDefinition, RecipeDefinition, BiomeDefinition, CreatureDefinition, BuildingDefinition, TechnologyDefinition (wired)
 - `scenes/` — `main.tscn` is the only wired scene (see dead-code inventory in ARCHITECTURE.md)
-- `tests/` — `test_game.gd` headless harness (426 checks)
+- `tests/` — `test_game.gd` headless harness (440 checks), plus focused content/placement/sandbox/stairs/interaction/station/art suites
 - `docs/` — Project documentation
 
 ## RECENTLY COMPLETED (2026-09-10 review)
@@ -526,13 +527,11 @@ buildings/interactables deployment plan (layered multilevel building system +
 interaction, storage, stations, fuel, and lighting). It supersedes the
 schedules of `TOP_DOWN_MULTILEVEL_BUILDING_PLAN.md` and
 `INTERACTABLES_STORAGE_AND_LIGHTING_PLAN.md`, which remain as design
-references. Current milestone: M9 (art, UX, and presentation); M1–M8 are
-complete, including persistent storage, station crafting, profile-driven
-fuel/local lighting, and the full build catalogue: 65 data-defined building
-parts across the timber/stone/metal tiers, the 19-piece furniture set with
-pickup icons and sandbox-verified metal costs, and per-definition atlas
-visuals with family placeholder tints. Track progress in
-that plan's progress log.
+references. M0–M10 are complete: 68 data-defined building parts across the
+timber/stone/metal tiers, persistent storage, station crafting, profile-driven
+fuel/local lighting, the 16-sheet M9 art pack, and release verification of
+mixed multi-story stateful saves. The plan remains the historical evidence and
+authoring reference for this completed pass.
 
 Queued after the active build:
 

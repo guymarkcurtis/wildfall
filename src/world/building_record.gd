@@ -132,8 +132,12 @@ func _get_station_storage(state_key: String, inputs: bool) -> InventoryStorage:
 	var saved_storage: Variant = station_state.get(state_key, null) if typeof(station_state) == TYPE_DICTIONARY else null
 	if typeof(saved_storage) == TYPE_DICTIONARY:
 		var slots: Variant = saved_storage.get("slots", null)
-		if typeof(slots) == TYPE_ARRAY and slots.size() == slot_count:
+		# Saves written before a profile gained slots carry a shorter array:
+		# restore then pad up to the authored count. Oversized arrays stay
+		# rejected — the profile, not the save, owns the slot count.
+		if typeof(slots) == TYPE_ARRAY and slots.size() <= slot_count:
 			storage.deserialize({"slots": slots, "max_weight": profile.max_weight})
+			storage.pad_slots(slot_count)
 		else:
 			# Preserve unrelated station state while rejecting only the malformed
 			# indexed surface.

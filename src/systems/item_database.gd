@@ -158,12 +158,22 @@ func _load_items() -> void:
 	items["potion_mana"] = _create_item("potion_mana", "Mana Potion", "consumable", 16, 0.3, "", 0, 5)
 
 	# Item tags: burnables carry the generic "fuel" tag so fuelled profiles can
-	# query acceptance by tag. Never replace this with a named item list in
-	# gameplay code — see docs/INTERACTABLE_AUTHORING.md.
+	# query acceptance by tag. Handheld lights carry "light_source" so the
+	# character screen's light slot queries acceptance the same generic way.
+	# Never replace this with a named item list in gameplay code — see
+	# docs/INTERACTABLE_AUTHORING.md.
 	for fuel_item_id in ["wood", "coal", "charcoal"]:
 		var fuel_item := get_item(fuel_item_id)
 		if fuel_item != null:
 			fuel_item.tags = PackedStringArray(["fuel"])
+	# The wooden torch is the shipped light source; its glow presentation
+	# lives here in data so future lanterns need no new code.
+	var torch_item := get_item("torch")
+	if torch_item != null:
+		torch_item.tags.append("light_source")
+		torch_item.light_color = Color(1.0, 0.82, 0.55)
+		torch_item.light_energy = 1.25
+		torch_item.light_radius_px = 200.0
 
 ## Load all recipe definitions.
 func _load_recipes() -> void:
@@ -185,7 +195,7 @@ func _load_recipes() -> void:
 	recipes["gold_ingot"] = _create_recipe("gold_ingot", "gold_ingot", 1, "furnace", {
 		"gold_ore": 2,
 		"coal": 1
-	}, 10.0)
+	}, 14.0)
 	recipes["copper_ingot"] = _create_recipe("copper_ingot", "copper_ingot", 1, "furnace", {
 		"copper_ore": 2,
 		"coal": 1
@@ -251,19 +261,20 @@ func _load_recipes() -> void:
 	recipes["wooden_hammer"] = _create_recipe("wooden_hammer", "wooden_hammer", 1, "workbench", {
 		"plank": 4,
 		"stone": 2
-	})
+	}, 5.0)
 	recipes["stone_hammer"] = _create_recipe("stone_hammer", "stone_hammer", 1, "", {
 		"plank": 3,
 		"stone": 5
 	})
 	
-	# Food
+	# Food. Craft times scale with tier: raw cooking is quick, multi-
+	# ingredient dishes and refined potions take longer.
 	recipes["cooked_meat"] = _create_recipe("cooked_meat", "cooked_meat", 1, "campfire", {
 		"meat": 1
-	}, 5.0)
+	}, 4.0)
 	recipes["cooked_fish"] = _create_recipe("cooked_fish", "cooked_fish", 1, "campfire", {
 		"fish": 1
-	}, 5.0)
+	}, 4.0)
 	recipes["bread"] = _create_recipe("bread", "bread", 2, "", {
 		"flour": 2,
 		"berry": 1
@@ -448,12 +459,12 @@ func _load_recipes() -> void:
 	recipes["potion_health"] = _create_recipe("potion_health", "potion_health", 1, "furnace", {
 		"herb": 3,
 		"glass": 1
-	}, 5.0)
+	}, 6.0)
 	recipes["potion_mana"] = _create_recipe("potion_mana", "potion_mana", 1, "furnace", {
 		"herb": 2,
 		"glass": 1,
 		"berry": 1
-	}, 5.0)
+	}, 8.0)
 
 	# Phase 3 (creatures & hunting): close the last obtainability gaps.
 	# Stone brick gives stone walls a source; flour (milled from wheat,

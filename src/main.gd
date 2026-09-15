@@ -34,6 +34,7 @@ const CAVE_SPACE_ORIGIN := Vector2(1000000.0, 1000000.0)
 @onready var seed_input: SeedInput = $SeedInput
 @onready var hud: HUD = $HUD
 @onready var inventory_panel: InventoryPanel = $HUD/InventoryPanel
+@onready var character_panel: CharacterPanel = $HUD/CharacterPanel
 @onready var build_palette: Variant = $HUD/BuildPalette
 @onready var technology_panel: Variant = $HUD/TechnologyPanel
 @onready var mission_manager: MissionManager = $MissionManager
@@ -197,6 +198,13 @@ func _ready() -> void:
 	player.inventory.set_item_durations(item_database.get_all_durations())
 	_apply_game_mode_presentation()
 
+	# Character screen: the panel reads the player's equipment slots; its
+	# feedback (rejections, light hints) rides the same HUD toast lane.
+	if character_panel != null:
+		character_panel.configure(player, item_database)
+		character_panel.toast_requested.connect(func(text: String) -> void: hud.show_toast(text))
+		character_panel.light_toggle_requested.connect(_toggle_player_light)
+
 	# SeedInput._ready already emitted its own random seed (before the
 	# connections above existed). Push Main's chosen seed so the world is
 	# generated exactly once, for the seed that is displayed — unless the
@@ -206,6 +214,14 @@ func _ready() -> void:
 			seed_input.set_seed(_world_seed)
 	else:
 		seed_input.set_seed(_world_seed)
+		# A fresh survival game ships one torch so the character screen's
+		# light slot (K) has something to equip and light with L. Sandbox is
+		# excluded: a torch in the inventory would also appear as an owned
+		# placeable building part there (torch.tres) and change the palette.
+		if player != null and player.inventory != null \
+				and not GameSession.is_building_sandbox():
+			player.inventory.add_item("torch", 1)
+			player.populate_hotbar_from_inventory()
 
 	_refresh_ui()
 	if sandbox_save_toolbar != null:
@@ -889,6 +905,26 @@ func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("toggle_technology"):
 		if technology_panel != null:
 			technology_panel.toggle()
+	if Input.is_action_just_pressed("toggle_character") and character_panel != null:
+		character_panel.toggle()
+	if Input.is_action_just_pressed("toggle_light"):
+		_toggle_player_light()
+
+## L at the character: flips the equipped light source's lit state. The
+## outcome (with the item's real name) rides the HUD toast lane.
+func _toggle_player_light() -> void:
+	if player == null:
+		return
+	var outcome := player.toggle_held_light()
+	if hud == null:
+		return
+	match outcome:
+		"lit", "doused":
+			var item_id := player.equipment.light_item_id()
+			hud.show_toast("%s %s" % [item_database.get_item_display_name(item_id),
+					"lit" if outcome == "lit" else "doused"])
+		"empty":
+			hud.show_toast("Equip a light source first (K)")
 
 func _update_world_presentation(_delta: float) -> void:
 	if weather_system != null and status_effects != null:
@@ -1338,6 +1374,8 @@ func _collect_player() -> Dictionary:
 		payload["hunger"] = player.hunger_component.serialize()
 	if player.inventory:
 		payload["inventory"] = player.inventory.serialize()
+	if player.equipment != null:
+		payload["equipment"] = player.equipment.serialize()
 	payload["equipped_tool"] = player.equipped_tool
 	payload["hotbar"] = player.get_hotbar_items()
 	payload["active_hotbar_slot"] = player.active_hotbar_slot
@@ -1355,6 +1393,12 @@ func _apply_player(data: Variant) -> void:
 		player.hunger_component.deserialize(player_data["hunger"])
 	if player.inventory != null and player_data.has("inventory"):
 		player.inventory.deserialize(player_data["inventory"])
+	if player.equipment != null and player_data.has("equipment"):
+		# Tolerant: saves from before the character screen simply have no
+		# equipment payload and keep empty slots. Filters are runtime-only,
+		# so they are re-applied over the restored slot contents.
+		player.equipment.deserialize(player_data["equipment"])
+		player.equipment.apply_filters()
 	if player_data.has("hotbar"):
 		var stored_hotbar: Array[String] = []
 		for item_id in player_data.get("hotbar", []):

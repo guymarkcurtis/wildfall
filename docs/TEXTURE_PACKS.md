@@ -39,12 +39,38 @@ broad colour blocks.
 The stock contact card includes these backgrounds before the original sheets.
 Creating the refinement pack again adds missing files without replacing edits.
 
+When the game gains new icons, sprites, or atlas sheets, synchronize an
+existing comparison pack without replacing its art:
+
+```text
+godot --headless --path . --script tools/sync_texture_pack.gd -- pixellab_comparison
+```
+
+The command fills only missing contract files—including the discoverable
+Trailblazer direction/animation sprites—and refreshes the pack manifest.
+
 ```text
 assets/tiles/wildfall-terrain-atlas.png
 assets/tiles/wildfall-water-animation.png
 assets/tiles/wildfall-resources-atlas.png
 assets/tiles/wildfall-ground-details.png
 assets/tiles/wildfall-crafting-stations.png
+assets/tiles/building/structural_wood.png
+assets/tiles/building/structural_stone.png
+assets/tiles/building/structural_metal.png
+assets/tiles/building/boundaries_wood.png
+assets/tiles/building/boundaries_stone.png
+assets/tiles/building/boundaries_metal.png
+assets/tiles/building/interior_wood.png
+assets/tiles/building/interior_stone.png
+assets/tiles/building/interior_metal.png
+assets/tiles/building/exterior_props.png
+assets/tiles/interactables/wood_chest.png
+assets/tiles/interactables/campfire.png
+assets/tiles/interactables/furnace.png
+assets/tiles/interactables/workbench.png
+assets/tiles/interactables/torch.png
+assets/tiles/interactables/hearth.png
 assets/resources/wildfall-forage-plants.png
 assets/resources/tree-large.png
 assets/resources/tree-shake/frame_01.png
@@ -97,6 +123,14 @@ drawings.
 order: **campfire, furnace, workbench, anvil**. These are the visuals for the
 placeable stations that enable nearby crafting recipes. The manifest repeats
 this ordering for image tools, and it must be preserved when refining the art.
+
+The M9 building/interactable pack adds **16** authored sheets: ten building
+atlases (`structural_*`, `boundaries_*`, `interior_*`, and `exterior_props`) and
+six interactable frame strips. Every cell/frame is 32×32, preserves alpha, and
+is assigned by a `BuildingDefinition` or `AppearanceProfile`; do not move a
+cell or add opaque pixels to reserved atlas slots. `tests/test_building_art.gd`
+is the authoritative automated contract for dimensions, transparency, owner,
+and profile references.
 
 The four large tree sprites are standalone transparent **160×192 px** assets,
 ground-anchored at their bottom centre: the broadleaf tree serves temperate

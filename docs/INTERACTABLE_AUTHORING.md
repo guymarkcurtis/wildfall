@@ -11,12 +11,10 @@ and do **not** add a branch such as `if building_id == "chest"` or
 `match station_id` to decide that an object stores items, burns fuel, emits
 light, or lists recipes.
 
-> **Status: Phase 0 skeleton.** The contract sections below (data‑driven rule,
-> asset locations, stable identity, save policy, slot grid, initial content) are
-> agreed and final for this pass. The per‑object authoring walkthroughs and the
-> validation/error‑message details are marked **Pending** and will be filled in
-> as their phases land (Phases 1‑5). See
-> `INTERACTABLES_STORAGE_AND_LIGHTING_PLAN.md` for the phase breakdown.
+> **Status: complete through M10 (2026-09-15).** The contract sections below
+> describe the shipped data-driven interaction, storage, station, fuel, light,
+> art, save, and texture-pack paths. See `ACTIVE_BUILD_PLAN.md` for the
+> completed verification record and deliberate deferrals.
 
 ## Before you start
 
@@ -33,13 +31,13 @@ gameplay code. The runtime reads the profile and behaves generically.
 
 | You are adding | Start from | Put the new asset in |
 |---|---|---|
-| A placed object (building) | `wood_chest.tres` (Phase 3) | `data/buildings/` |
+| A placed object (building) | a nearby `BuildingDefinition` | `data/buildings/` |
 | An interaction profile | a shipped `InteractionProfile` | `data/interactables/` |
-| A container (storage) profile | the chest `ContainerProfile` (Phase 3) | `data/interactables/` |
-| A station profile (recipes) | the workbench `StationProfile` (Phase 4) | `data/interactables/` |
-| A fuel profile | the campfire `FuelProfile` (Phase 5) | `data/interactables/` |
-| A light profile | the torch `LightProfile` (Phase 5) | `data/interactables/` |
-| An appearance/state‑sheet profile | the chest `AppearanceProfile` (Phase 3) | `data/interactables/` |
+| A container (storage) profile | `chest_container.tres` | `data/interactables/` |
+| A station profile (recipes) | `workbench_station.tres` | `data/interactables/` |
+| A fuel profile | `fuelled.tres` | `data/interactables/` |
+| A light profile | `local_light.tres` | `data/interactables/` |
+| An appearance/state‑sheet profile | `chest_appearance.tres` | `data/interactables/` |
 
 ## The data‑driven rule (final)
 
@@ -53,16 +51,19 @@ their authored profile data and their saved runtime state — not by code branch
 
 ## Stable identity (final)
 
-A placed object's identity is derived from its placement, not from its node:
+A placed record's identity is derived from its placement, not from its node:
 
 ```
-placement_key = "%d:%d:%d" % [tile.x, tile.y, story]
+tile record: "%d:%d:%d:<layer>"
+edge record: "%d:%d:%d:edge:<orientation>"
 ```
 
-The key is stable for the life of that placed building and is the key used for
-UI ownership (which panel is open for which object) and for save data. Do **not**
-use a `NodePath`, creation order, or a random ID — all three are unstable across
-save/load and would break panel ownership and state restoration.
+The key is stable for the life of that placed record and is the key used for UI
+ownership (which panel is open for which object), occupancy, and save data.
+Edge keys are canonical, so east/west and north/south spellings of one physical
+span cannot double-book. Do **not** use a `NodePath`, creation order, or a
+random ID — all three are unstable across save/load and would break state
+restoration.
 
 ## Save policy (final)
 
@@ -112,11 +113,13 @@ switches the player module to the indexed form.
 |---|---|---|
 | Chest / general container | **27 slots (9×3)** | Player‑placed storage; contents survive save/load |
 | Fuel input | **1 slot** | Accepts items carrying the `fuel` tag |
-| Station ingredient inputs | **station‑defined** | Per `StationProfile`; workbench/campfire/furnace differ |
-| Station output | **1 slot** | Disabled/read‑only until a craft fills it |
+| Station ingredient inputs | **station‑defined** | Per `StationProfile`: furnace **3**, campfire **3** (their recipes need up to 3 distinct ingredients), workbench **2**, anvil **2**. The panel shows only the slots the selected recipe needs |
+| Station output | **1 slot** | Take‑only: results wait here for pickup; drops never land |
 
 These are **UI slot capacities**. They are separate from the player's existing
 limit of 50 unique item *types*; raising one does not change the other.
+Growing a station's authored input count is save‑safe: older saves with a
+shorter validated slot array restore and pad up to the profile count.
 
 ### Item tags (final)
 
@@ -132,7 +135,7 @@ data query over tags, never a named item list in gameplay code.
 | Wood chest | container, open/close animation | 27 slots; contents survive save/load |
 | Workbench | station, input/output containers | station recipes; no fuel required |
 | Campfire | station, fuel, toggle, light | burns while enabled; lit only while powered |
-| Furnace | station, fuel, toggle, light | powered recipes; immediate craft only this pass |
+| Furnace | station, fuel, toggle, light | powered recipes; timed craft with per-recipe `craft_time` |
 | Torch | fuel/toggle/light (or perpetual variant) | no container UI unless it needs fuel |
 
 ## Schema reference for the profile Resources
@@ -231,5 +234,31 @@ capability design must not preclude any of these later.
       one radial mask, range culling, and a deterministic nearest-first cap of
       32. Fuelled appearance profiles select authored powered/unpowered names;
       dedicated multi-frame sheets remain Phase 6/M9 art work.
-- [ ] **Phase 6** — art contract (PixelLab state sheets + shared
-      `GradientTexture2D` light mask) and the texture‑pack manifest entries.
+- [x] **Phase 6 / M9–M10** — the PixelLab state sheets, shared
+      `GradientTexture2D` light mask, texture-pack manifest/export/refresh
+      path, focus frame, toast feedback, and release smoke paths are shipped.
+      `tests/test_building_art.gd` validates the 16-sheet contract; M10 adds a
+      mixed stateful save/load regression and sandbox layout smoke.
+- [x] **Interaction UI overhaul + timed crafting** — the shared panel is
+      rebuilt in the inventory's visual language: one centred window with a
+      device column beside the player inventory grid, every slot rendered
+      with the item icon, stack count, and tooltip. Stations show recipe
+      cards (icon, name, craft time, cost tooltip); selecting one lays out
+      **one filtered ingredient slot per distinct ingredient** with a
+      have/need badge (extra slots hidden; unreturned strays stay visible),
+      plus **Fill ingredients** and a primary **Craft** button whose status
+      line names what is missing, unpowered, or blocking. Fuel devices show
+      a single filtered fuel slot with live burn status and the on/off
+      toggle. Crafting is **timed**: `RecipeDefinition.craft_time` (authored
+      per recipe, scaling with item tier — glass 5 s … gold ingot 14 s) is
+      consumed by `StationCrafting.start_craft`, which validates, consumes
+      the inputs up front, and persists a `craft_job` payload in the
+      record's capability state. `StationCrafting.tick` (driven from
+      `BuildingManager._physics_process`, like `FuelConsumer`) advances the
+      job, pauses on power loss, holds on a full output, and survives
+      save/load and closed panels; a progress bar and completion toast keep
+      the player informed. Results land in the station's **take-only**
+      output slot — click, shift-click, drag, or Take moves them to the
+      player, and nothing can be dropped back in. Opening any device panel
+      closes the standalone inventory window (the panel already hosts the
+      player's inventory grid).

@@ -19,8 +19,8 @@ single X/Y tile grid, then stairs transition their active story. Rendering makes
 the active story clear and hides or ghosts the others. The result should feel
 like a house floor-plan that the player can inhabit, not a dollhouse.
 
-**Plan status:** `READY FOR IMPLEMENTATION`  
-**Last reviewed:** 2026-09-14  
+**Plan status:** `SUPERSEDED — IMPLEMENTED THROUGH M10`
+**Last reviewed:** 2026-09-15
 **Primary test surface:** Building Sandbox
 
 ## Existing foundation to preserve

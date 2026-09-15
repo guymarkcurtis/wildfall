@@ -19,10 +19,10 @@ then begin the next phase.
 
 **Owner:** Quen 3.8
 
-**Plan status:** `IN PROGRESS`
+**Plan status:** `SUPERSEDED — IMPLEMENTED THROUGH M10`
 
-**Last reviewed:** 2026-09-14
-**Current implementation checkpoint:** Phase 1 — General inventory and content foundation (Phase 0 complete)
+**Last reviewed:** 2026-09-15
+**Current implementation checkpoint:** Complete — see `ACTIVE_BUILD_PLAN.md` M0–M10
 
 ### Existing systems to preserve
 

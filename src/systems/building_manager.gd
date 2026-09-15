@@ -80,6 +80,7 @@ func _physics_process(delta: float) -> void:
 	if item_database != null:
 		for record in _record_list:
 			FuelConsumer.tick(record, delta, item_database)
+			StationCrafting.tick(record, delta, item_database)
 	_refresh_local_light_budget()
 
 ## Keep expensive PointLight2D nodes bounded in dense player builds. The
@@ -201,7 +202,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("demolish"):
-		_demolish_near_player()
+		_demolish_at_mouse()
 		get_viewport().set_input_as_handled()
 		return
 	# Building Sandbox debug controls: the [ / ] keys move the ACTIVE story
@@ -211,12 +212,21 @@ func _unhandled_input(event: InputEvent) -> void:
 	if GameSession.is_building_sandbox() and not build_mode:
 		if event.is_action_pressed("build_level_up"):
 			set_active_story(active_story + 1)
+			_toast("Now viewing story %d" % (active_story + 1))
 			get_viewport().set_input_as_handled()
 			return
 		if event.is_action_pressed("build_level_down"):
 			set_active_story(active_story - 1)
+			_toast("Now viewing story %d" % (active_story + 1))
 			get_viewport().set_input_as_handled()
 			return
+	elif not build_mode and (event.is_action_pressed("build_level_up")
+			or event.is_action_pressed("build_level_down")):
+		# Survival has no free story movement: say how story editing works
+		# instead of silently swallowing the press.
+		_toast("Enter build mode (B), then press [ or ] to choose the story")
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("toggle_roofs") and GameSession.is_building_sandbox():
 		roofs_visible = not roofs_visible
 		_apply_presentation()
@@ -237,10 +247,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("build_level_up"):
 		set_selected_story(selected_story + 1)
+		_toast("Now building on story %d" % (selected_story + 1))
 		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("build_level_down"):
 		set_selected_story(selected_story - 1)
+		_toast("Now building on story %d" % (selected_story + 1))
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseButton:
@@ -802,22 +814,66 @@ func _remove_record(record: BuildingRecord, refund: bool, refund_to: InventoryCo
 	record.node = null
 	_apply_presentation()
 
-func _demolish_near_player() -> void:
+## F demolishes whatever the mouse points at, always taking the TOPMOST
+## part: a column with a roof over a floor over a wall loses the roof
+## first, one press per part. Edge parts (walls) anchor to the four
+## canonical edges around the cursor tile, so any side of a wall is
+## found. The cursor is the selector — no player-distance check.
+func _demolish_at_mouse() -> void:
 	if player == null:
 		return
-	var nearest: BuildingRecord = null
-	var best: float = 56.0
-	for record in _record_list:
-		if record.node == null or not is_instance_valid(record.node) or record.story != selected_story:
+	_demolish_top_at_tile(_mouse_tile())
+
+func _demolish_top_at_tile(tile: Vector2i) -> bool:
+	var best: BuildingRecord = null
+	var best_story := -1
+	var best_key := ""
+	for story in range(BuildingRecord.MAX_STORIES):
+		for record in _records_touching(tile, story):
+			var key := record.placement_key()
+			if story > best_story or (story == best_story and key < best_key):
+				best = record
+				best_story = story
+				best_key = key
+	if best == null:
+		return false
+	if _demolition_is_blocked(best):
+		return false # the block reason is already on the HUD toast lane
+	_remove_record(best, true)
+	return true
+
+## Every record occupying one tile on one story: cell-anchored layers plus
+## the edge records on the tile's four sides (walls between cells).
+func _records_touching(tile: Vector2i, story: int) -> Array[BuildingRecord]:
+	var found: Array[BuildingRecord] = []
+	for layer in LAYER_QUERY_PRIORITY:
+		if layer == "edge":
 			continue
-		var dist: float = record.node.position.distance_to(player.global_position)
-		if dist < best:
-			best = dist
-			nearest = record
-	if nearest != null:
-		if _demolition_is_blocked(nearest):
-			return
-		_remove_record(nearest, true)
+		var record := get_record_at(tile, story, layer)
+		if record != null and not found.has(record):
+			found.append(record)
+	# A wall's canonical key is the NORTH/WEST edge of an anchor tile, so the
+	# south edge of `tile` is the north edge of the tile below, and the east
+	# edge is the west edge of the tile to the right.
+	var edge_queries := [
+		[tile, "north"],
+		[tile + Vector2i(0, 1), "north"],
+		[tile, "west"],
+		[tile + Vector2i(1, 0), "west"],
+	]
+	for query in edge_queries:
+		var record := get_record_at(query[0], story, "edge", query[1])
+		if record != null and not found.has(record):
+			found.append(record)
+	return found
+
+func _toast(text: String) -> void:
+	var parent := get_parent()
+	if parent == null:
+		return
+	var hud := parent.get_node_or_null("HUD")
+	if hud != null and hud.has_method("show_toast"):
+		hud.show_toast(text)
 
 ## Containers are never silently deleted by player demolition. The record
 ## knows whether it has storage from its authored definition, so this applies

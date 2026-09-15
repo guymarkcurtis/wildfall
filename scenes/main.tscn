@@ -35,6 +35,7 @@
 [ext_resource type="Script" path="res://src/ui/sandbox_save_toolbar.gd" id="33_sandbox_toolbar"]
 [ext_resource type="Script" path="res://src/systems/interaction_manager.gd" id="34_interaction"]
 [ext_resource type="Script" path="res://src/ui/sandbox_tutorial_card_panel.gd" id="35_tutorial_card"]
+[ext_resource type="Script" path="res://src/ui/character_panel.gd" id="36_character"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -210,6 +211,15 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("30_mission_panel")
 
+[node name="CharacterPanel" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("36_character")
+
 [node name="WorldMap" type="Control" parent="HUD"]
 layout_mode = 3
 anchors_preset = 15
@@ -221,17 +231,17 @@ script = ExtResource("31_world_map")
 
 [node name="CraftingPanel" type="Control" parent="HUD"]
 layout_mode = 3
-anchors_preset = 7
+anchors_preset = 8
 anchor_left = 0.5
-anchor_top = 0.0
+anchor_top = 0.5
 anchor_right = 0.5
-anchor_bottom = 0.0
+anchor_bottom = 0.5
 grow_horizontal = 2
 grow_vertical = 2
 offset_left = -390.0
-offset_top = 12.0
+offset_top = -312.0
 offset_right = 390.0
-offset_bottom = 636.0
+offset_bottom = 312.0
 visible = false
 script = ExtResource("11_craft")
 

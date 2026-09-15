@@ -17,9 +17,17 @@ extends Resource
 @export var tool_type: String = ""  # axe, pickaxe, sword, etc.
 
 ## Generic vocabulary other systems query by data, never by item name.
-## Shipped tags: "fuel" (burnable in fuelled stations/lights). Add new tags
-## in data; consumers own their vocabulary and interpret it generically.
+## Shipped tags: "fuel" (burnable in fuelled stations/lights) and
+## "light_source" (equippable in the character screen's light slot). Add new
+## tags in data; consumers own their vocabulary and interpret it generically.
 @export var tags: PackedStringArray = PackedStringArray()
+
+## Emitted-light presentation for items tagged "light_source". The character
+## screen's light slot reads these when its light is lit; every future
+## lantern or lamp only needs these fields, no new code.
+@export var light_color: Color = Color(1.0, 0.85, 0.6)
+@export var light_energy: float = 1.2
+@export var light_radius_px: float = 190.0
 
 func has_tag(tag: String) -> bool:
 	return tags.has(tag)

@@ -114,9 +114,9 @@ func _build_navigation_ribbon() -> void:
 	var ribbon := PanelContainer.new()
 	ribbon.name = "NavigationRibbon"
 	ribbon.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	ribbon.offset_left = -350.0
+	ribbon.offset_left = -430.0
 	ribbon.offset_top = 8.0
-	ribbon.offset_right = 350.0
+	ribbon.offset_right = 430.0
 	ribbon.offset_bottom = 34.0
 	ribbon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
@@ -127,7 +127,7 @@ func _build_navigation_ribbon() -> void:
 	ribbon.add_theme_stylebox_override("panel", style)
 	$Overlay.add_child(ribbon)
 	var text := Label.new()
-	text.text = "I  INVENTORY     C  CRAFT     U  TECHNOLOGY     J  JOURNAL     M  MAP"
+	text.text = "I  INVENTORY     K  CHARACTER     C  CRAFT     U  TECHNOLOGY     J  JOURNAL     M  MAP"
 	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	text.add_theme_font_size_override("font_size", 11)

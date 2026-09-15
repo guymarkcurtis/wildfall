@@ -12,7 +12,7 @@ var _entries: VBoxContainer = null
 var _status: Label = null
 
 func _ready() -> void:
-	anchors_preset = Control.LayoutPreset.PRESET_FULL_RECT
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build_ui()
 	visible = false
@@ -47,6 +47,7 @@ func _build_ui() -> void:
 	_window.name = "MissionWindow"
 	_window.anchors_preset = Control.LayoutPreset.PRESET_CENTER
 	_window.size = Vector2(720.0, 520.0)
+	_window.position = -_window.size * 0.5
 	_window.add_theme_stylebox_override("panel", _make_style())
 	add_child(_window)
 

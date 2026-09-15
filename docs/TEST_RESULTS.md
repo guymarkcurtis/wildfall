@@ -1,6 +1,48 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **Interaction UI overhaul + timed crafting (2026-09-15):** rebuilt the
+  shared `InteractablePanel` (inventory-style icon slots, device column +
+  player inventory in one window, recipe cards, per-recipe filtered
+  ingredient slots with have/need badges, single fuel slot with live burn
+  status, timed-craft progress bar, take-only output), added
+  `StationCrafting.start_craft`/`tick` with a persisted `craft_job`, authored
+  per-tier `craft_time` values, and grew furnace/campfire authored inputs to
+  3 slots with a pad-up migration for older saves. Godot 4.7.2 headless runs
+  (`HOME`/XDG homes under `/tmp/godot-check-home`): station **42/42** (was 27
+  — timed-job, slot-growth/migration, power-pause, take-only-output, and
+  panel fill coverage), interaction router **42/42**, placement **88/88**,
+  sandbox **76/76**, stairs **37/37**, content **102/102**, harvesting
+  **94/94**, ground pack **140/140**, art **701/701**, and `test_game`
+  **442 passed / 1 failed** — the single failure is the mission-journal
+  centering check, which also fails with these changes stashed (pre-existing
+  on the working tree; the object-interaction panel centering check that
+  previously failed against the old absolute-positioned layout now passes).
+  `--headless --editor --quit` exited 0. Windowed
+  `tools/capture_interactable_panels.gd` captured the four panel baselines
+  to `docs/ui_baseline/` (workbench ready-to-craft, furnace mid-craft with
+  burning fuel and progress bar, chest container, fuel-only torch).
+- **Active Build Plan M10 complete (2026-09-15, release verification and
+  handoff):** clean-environment Godot 4.7.2 runs used `HOME` and XDG homes
+  under `/tmp/riftwake-m10-*`. `--headless --import --quit` and
+  `--headless --editor --quit` both exited 0; `git diff --check` was clean.
+  Focused suites: content **102/102**, placement **88/88** (six new M10
+  mixed-house state checks plus two no-clutter/health-feedback checks), sandbox
+  **76/76** (the five-layout cabin/cottage/yard/workshop/three-storey smoke),
+  stairs **37/37**, interaction **42/42**, station **27/27**, harvesting
+  **94/94**, ground pack **140/140**, and art **701/701**. The full game
+  harness first hit one pre-existing streaming-world flake in the live WG-05
+  byte-identical-biome assertion (**439/440**); a fresh isolated re-run was
+  **440/440**, exit 0. A windowed `tools/capture_building_sandbox.gd` run
+  refreshed `docs/sandbox_baseline/ground_build.png`, `upper_story_build.png`,
+  and `save_load.png` and confirmed **18** placed records after reload. The
+  capture exposed persistent object labels/full-health bars obscuring a
+  furnished room; M10 hides those non-actionable overlays and reveals the
+  health bar only after damage, with focused regression coverage. Focused
+  scripts still report Godot cleanup diagnostics for deferred test nodes and
+  retained Resources at process exit; they do not produce script errors or
+  non-zero exits and remain test-teardown follow-up work rather than a runtime
+  failure.
 - **Active Build Plan M9 complete (2026-09-14, art / UX / presentation)**:
   post-commit closeout re-run on Godot 4.7.2 headless (XDG homes + `HOME`
   redirected to `/tmp/godot-check`; each suite as

@@ -195,6 +195,11 @@ func _run() -> void:
 	await process_frame
 	_check(buildings.roofs_visible, "F5 shows the roof layer again")
 	buildings.set_build_mode(false)
+	# M10 release playtest: construct each promised sandbox layout through the
+	# same data-driven placement API used by the player. This is deliberately a
+	# compact structural smoke rather than a second catalogue list: it proves
+	# the authored tiers, layers, connectors, and furniture compose together.
+	_test_m10_layout_smoke(buildings, player)
 	# M9 box 6: the ghost shows the full placement contract — one marker per
 	# reserved key (each footprint cell, the exact edge an edge part occupies,
 	# the stairwell landing a connector reserves) — and per-marker colour
@@ -307,6 +312,61 @@ func _run() -> void:
 	GameSession.set_game_mode(GameSession.MODE_SURVIVAL)
 	print("Building Sandbox failures: %d" % _failures)
 	quit(_failures)
+
+func _test_m10_layout_smoke(buildings: BuildingManager, player: Player) -> void:
+	var supplies := {
+		"wooden_foundation": 40, "wooden_floor": 40, "wooden_wall": 40,
+		"wooden_roof": 12, "wooden_stairs": 3, "fence": 12, "fence_gate": 3,
+		"planter_box": 4, "wooden_table": 2, "chair": 4,
+		"stone_foundation": 12, "stone_floor": 12, "stone_wall": 12,
+		"furnace": 2, "workbench": 2,
+	}
+	for item_id in supplies:
+		player.inventory.add_item(str(item_id), int(supplies[item_id]))
+	var failures := 0
+	var place := func(item_id: String, tile: Vector2i, story: int = 0, orientation: String = "") -> void:
+		if not buildings.place_record(item_id, tile, player.inventory, story, orientation):
+			failures += 1
+	# Cabin: timber foundation, edges, roof, and furniture.
+	var cabin := Vector2i(10, 6)
+	for offset in [Vector2i.ZERO, Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+		place.call("wooden_foundation", cabin + offset)
+		place.call("wooden_roof", cabin + offset, 1)
+	place.call("wooden_wall", cabin, 0, "north")
+	place.call("wooden_wall", cabin, 0, "west")
+	place.call("wooden_table", cabin + Vector2i(1, 1))
+	place.call("chair", cabin + Vector2i(1, 0))
+	# Two-storey cottage: the stair reserves its opening; the other upper
+	# tiles form the usable floor.
+	var cottage := Vector2i(14, 6)
+	for offset in [Vector2i.ZERO, Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+		place.call("wooden_foundation", cottage + offset)
+	place.call("wooden_stairs", cottage)
+	for offset in [Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+		place.call("wooden_floor", cottage + offset, 1)
+	place.call("wooden_wall", cottage + Vector2i(1, 0), 1, "north")
+	# Fenced farmyard: boundary pieces and exterior objects coexist with ground.
+	var yard := Vector2i(19, 6)
+	for offset in [Vector2i.ZERO, Vector2i(1, 0), Vector2i(2, 0)]:
+		place.call("fence", yard + offset, 0, "north")
+	place.call("fence_gate", yard + Vector2i(1, 0), 0, "south")
+	place.call("planter_box", yard + Vector2i(1, 1))
+	# Stone workshop: a second material tier carries floor, edges, and stations.
+	var workshop := Vector2i(24, 6)
+	for offset in [Vector2i.ZERO, Vector2i(1, 0)]:
+		place.call("stone_foundation", workshop + offset)
+		place.call("stone_floor", workshop + offset)
+	place.call("stone_wall", workshop, 0, "north")
+	place.call("furnace", workshop)
+	place.call("workbench", workshop + Vector2i(1, 0))
+	# Three-story stress layout: two supported floors above the ground story.
+	var tower := Vector2i(29, 6)
+	for offset in [Vector2i.ZERO, Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+		place.call("wooden_foundation", tower + offset)
+		place.call("wooden_floor", tower + offset, 1)
+		place.call("wooden_floor", tower + offset, 2)
+	place.call("wooden_wall", tower, 2, "north")
+	_check(failures == 0, "M10 sandbox playtest builds cabin, cottage, yard, workshop, and three-story layout")
 
 func _check(condition: bool, label: String) -> void:
 	if condition:

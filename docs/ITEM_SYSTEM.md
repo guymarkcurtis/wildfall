@@ -2,7 +2,7 @@
 
 ## Overview
 
-All items in the game are defined by `ItemDefinition` resources. The 78
+All items in the game are defined by `ItemDefinition` resources. The 119
 items currently in the game are created **in code** by
 `src/systems/item_database.gd` (`ItemDatabase` is a Node in `main.tscn`,
 not a .tres file). Items define stack size, weight, category, bonuses and
@@ -22,6 +22,7 @@ Exact fields of `resources/item_definition.gd`:
 | weight | float | Weight per item in game units |
 | rarity | String | common / uncommon / rare / epic / legendary |
 | texture_path | String | Path to icon texture (empty = placeholder) |
+| tags | PackedStringArray | Data-defined capabilities such as `fuel` |
 | health_bonus | float | Healing when consumed |
 | hunger_bonus | float | Satiety when consumed |
 | damage_bonus | float | Extra damage when used as a tool/weapon |
@@ -45,17 +46,18 @@ is available to texture-pack authors.
 | Category | Count | Items |
 |----------|-------|-------|
 | resource | 18 | wood, stone, fibre, clay, sand, leaf, bone, hide, feather, coal, iron_ore, gold_ore, copper_ore, tin_ore, charcoal, seed_wheat, wheat, herb |
-| building | 27 | torch; wood foundation, floor, wall, window, door, roof, stairs, ramp, pillar; stone foundation, floor, wall, window, door, roof, stairs, ramp, pillar; campfire, furnace, workbench, anvil, chest, bed, farm_soil, fence |
+| building | 65 | Data-authored placeables under `data/buildings/`: timber, stone, reinforced/metal, furniture, boundaries, stations, and down-stair variants |
 | food | 9 | berry, cooked_meat, cooked_fish, bread, soup, fish, meat, apple, mushroom |
 | material | 8 | plank, stone_brick, iron_ingot, gold_ingot, copper_ingot, bronze_ingot, glass, flour |
 | tool | 9 | wooden/stone/iron axe, wooden/stone/iron pickaxe, stone_hoe, wooden/stone hammer |
-| weapon | 3 | wooden_sword, stone_sword, iron_sword |
+| weapon | 4 | wooden_sword, stone_sword, iron_sword, wooden_bow |
 | consumable | 2 | potion_health, potion_mana |
+| ammo | 1 | arrow |
 
 ## Inventory Integration
 
-Items are stored in `InventoryComponent` (a RefCounted owned by Player)
-as a dictionary keyed by item id:
+Items are stored in `InventoryComponent` (a RefCounted owned by Player) on an
+indexed `InventoryStorage`; its public API retains a compact item-id view:
 ```gdscript
 { "wood": 25, "stone": 10 }
 ```
@@ -83,7 +85,9 @@ these tiers; the same unlocks also control placeable building parts.
 ## Creating New Items
 
 Add a call in `ItemDatabase._load_items()` (items are defined in code,
-not in .tres files):
+not in `.tres` files). For a normal placeable, also author its
+`BuildingDefinition`, recipe, pickup icon, texture-pack entry, and sandbox
+coverage; the item alone never defines building behaviour.
 
 ```gdscript
 items["ruby_shard"] = _create_item("ruby_shard", "Ruby Shard", "material",

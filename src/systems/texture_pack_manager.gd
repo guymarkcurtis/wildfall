@@ -315,7 +315,7 @@ static func export_stock_reference() -> Dictionary:
 	_ensure_root()
 	var pack_root := "%s/%s" % [ROOT, REFERENCE_PACK]
 	_ensure_directory(pack_root)
-	for relative_path in PACK_ASSETS:
+	for relative_path in get_pack_override_paths():
 		_copy_stock_asset(relative_path, pack_root)
 	_write_manifest(pack_root, REFERENCE_PACK, "Unedited stock reference. Use this for comparison or as an AI-editor input.")
 	_write_contact_card()
@@ -329,11 +329,64 @@ static func create_refinement_pack() -> Dictionary:
 	var pack_root := "%s/%s" % [ROOT, REFINEMENT_PACK]
 	var is_new: bool = DirAccess.open(pack_root) == null
 	_ensure_directory(pack_root)
-	for relative_path in PACK_ASSETS:
+	for relative_path in get_pack_override_paths():
 		if not FileAccess.file_exists("%s/%s" % [pack_root, relative_path]):
 			_copy_stock_asset(relative_path, pack_root)
 	_write_manifest(pack_root, REFINEMENT_PACK, "Editable override pack. Keep atlas dimensions and cell layout unchanged.")
 	return {"pack_path": ProjectSettings.globalize_path(pack_root), "created": is_new}
+
+## Bring an existing comparison or artist pack up to the current asset
+## contract without replacing any of its authored overrides. This is the safe
+## maintenance path after adding icons, sprites, or atlas sheets to PACK_ASSETS.
+static func sync_missing_pack_assets(pack_id: String) -> Dictionary:
+	var normalized_id := pack_id.strip_edges()
+	if normalized_id.is_empty() or normalized_id == "stock" or normalized_id.contains("/") or normalized_id.contains("\\"):
+		return {"ok": false, "reason": "invalid_pack_id"}
+	_ensure_root()
+	var pack_root := "%s/%s" % [ROOT, normalized_id]
+	if DirAccess.open(pack_root) == null:
+		return {"ok": false, "reason": "pack_not_found"}
+	var added := 0
+	for relative_path in get_pack_override_paths():
+		if not FileAccess.file_exists("%s/%s" % [pack_root, relative_path]):
+			_copy_stock_asset(relative_path, pack_root)
+			if FileAccess.file_exists("%s/%s" % [pack_root, relative_path]):
+				added += 1
+	_update_pack_manifest(pack_root, normalized_id)
+	return {
+		"ok": true,
+		"pack_path": ProjectSettings.globalize_path(pack_root),
+		"added": added,
+		"total_assets": get_pack_override_paths().size()
+	}
+
+## All paths whose visuals can be overridden as a complete pack. PACK_ASSETS
+## is the documented atlas/icon contract; the Trailblazer frames are a
+## discoverable runtime sprite tree, so include them here without hard-coding
+## every direction and animation frame.
+static func get_pack_override_paths() -> PackedStringArray:
+	var paths: PackedStringArray = PACK_ASSETS.duplicate()
+	_append_png_paths("res://assets/characters/trailblazer", paths)
+	paths.sort()
+	return paths
+
+static func _append_png_paths(directory_path: String, paths: PackedStringArray) -> void:
+	var directory := DirAccess.open(directory_path)
+	if directory == null:
+		return
+	directory.list_dir_begin()
+	var entry := directory.get_next()
+	while not entry.is_empty():
+		if not entry.begins_with("."):
+			var child_path := directory_path.path_join(entry)
+			if directory.current_is_dir():
+				_append_png_paths(child_path, paths)
+			elif entry.get_extension().to_lower() == "png":
+				var relative_path := child_path.trim_prefix("res://")
+				if not paths.has(relative_path):
+					paths.append(relative_path)
+		entry = directory.get_next()
+	directory.list_dir_end()
 
 static func open_pack_folder() -> void:
 	_ensure_root()
@@ -405,6 +458,34 @@ static func _write_manifest(pack_root: String, pack_id: String, description: Str
 		]
 	}, "\t"))
 	file.close()
+
+## Keep a custom pack's own provenance, description, and rules while updating
+## its machine-readable asset list to the current pack contract.
+static func _update_pack_manifest(pack_root: String, pack_id: String) -> void:
+	var manifest_path := "%s/%s" % [pack_root, MANIFEST_NAME]
+	var manifest: Dictionary = {}
+	if FileAccess.file_exists(manifest_path):
+		var source := FileAccess.open(manifest_path, FileAccess.READ)
+		if source != null:
+			var parsed: Variant = JSON.parse_string(source.get_as_text())
+			source.close()
+			if typeof(parsed) == TYPE_DICTIONARY:
+				manifest = parsed
+	manifest["schema"] = "riftwake.texture-pack"
+	manifest["schema_version"] = 2
+	manifest["id"] = pack_id
+	manifest["assets"] = _asset_metadata()
+	if not manifest.has("description"):
+		manifest["description"] = "Texture-pack overrides synchronized with the current Wildfall asset contract."
+	if not manifest.has("rules"):
+		manifest["rules"] = [
+			"Keep image dimensions and atlas cell layouts unchanged.",
+			"Texture packs only affect presentation, never terrain collision or save data."
+		]
+	var destination := FileAccess.open(manifest_path, FileAccess.WRITE)
+	if destination != null:
+		destination.store_string(JSON.stringify(manifest, "\t"))
+		destination.close()
 
 ## A deliberately plain JSON contract for image editors and external tools.
 ## Each item points to one exported PNG and explains both what it depicts and

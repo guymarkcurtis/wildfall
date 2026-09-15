@@ -1,9 +1,9 @@
 # Development Roadmap
 
-**Active work:** the buildings + interactables pass (layered multilevel
-building, storage, stations, fuel, lighting) is tracked milestone-by-milestone
-in [`docs/ACTIVE_BUILD_PLAN.md`](ACTIVE_BUILD_PLAN.md). The phases below stay
-high-level; the active plan owns the current checklist.
+**Latest completed work:** the buildings + interactables pass (layered
+multilevel building, storage, stations, fuel, lighting) completed M0–M10 on
+2026-09-15. [`docs/ACTIVE_BUILD_PLAN.md`](ACTIVE_BUILD_PLAN.md) retains the
+release evidence and authoring contracts.
 
 ## Phase 1: Foundation
 - [x] Project structure
@@ -18,8 +18,8 @@ high-level; the active plan owns the current checklist.
 
 ## Phase 2: Content
 - [x] Tile set and terrain rendering (placeholder 32px orthogonal colors)
-- [x] 20+ item definitions (78 items)
-- [x] 15+ recipe definitions (56 recipes, all obtainable)
+- [x] 20+ item definitions (119 items)
+- [x] 15+ recipe definitions (96 recipes, all obtainable)
 - [x] Creature definitions (7 types, wired)
 - [x] Modular building definitions and stackable story cutaway (wood + stone structural kits)
 - [x] Technology tree (U-panel research, costs, prerequisites, recipe/build-tier gates, saved unlocks)
@@ -36,6 +36,7 @@ high-level; the active plan owns the current checklist.
 - [x] World-relative WASD (W north, A west, S south, D east)
 - [x] Creature AI (pathfinding, aggression / chase-attack for wolf, boar, polar bear)
 - [x] Build palette, placement, demolition, and four-story cutaway (`B`, LMB, `F`, `[` / `]`)
+- [x] Layered multi-story buildings, data-authored storage/stations/fuel/lights, and M10 release verification
 - [x] Weather system
 - [x] Day/night cycle
 - [x] Status effects

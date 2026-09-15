@@ -6,5 +6,5 @@
 resource_name = "station_furnace"
 script = ExtResource("1_33w3h")
 recipe_group = "furnace"
-input_slot_count = 1
+input_slot_count = 3
 requires_power = true

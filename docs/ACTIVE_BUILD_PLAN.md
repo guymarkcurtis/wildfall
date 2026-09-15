@@ -26,9 +26,9 @@ source plans conflict, this plan and its decision log at the bottom win.
 4. Keep every guarantee in “Standing contracts” true at all times. A change
    that violates one needs a dated decision-log entry.
 
-**Plan status:** `ACTIVE`
-**Current milestone:** M9 — Art, UX, and presentation
-**Last updated:** 2026-09-14 (M8 complete: full catalogue + furniture pass)
+**Plan status:** `COMPLETE`
+**Current milestone:** None — M0–M10 complete
+**Last updated:** 2026-09-15 (M10 release verification, playtest, and handoff)
 
 ## Groundwork already in place
 
@@ -481,23 +481,23 @@ readable at native gameplay scale; the pack contract covers every new asset.
 
 ## M10 — Save verification, playtest, docs, handoff
 
-- [ ] Verify save/load for a mixed wood/stone, furnished, multi-story house
+- [x] Verify save/load for a mixed wood/stone, furnished, multi-story house
       (orientation, connector links, health, container/fuel/station state);
       verify a partly demolished staircase cannot strand the player.
-- [ ] Run the full verification matrix (below); add the regression coverage
+- [x] Run the full verification matrix (below); add the regression coverage
       from both source plans that is not yet present, using data-authored
       fixtures rather than name-based assertions.
-- [ ] Real launch/parser check; `git diff --check`; record actual commands,
+- [x] Real launch/parser check; `git diff --check`; record actual commands,
       dates, and check counts in `docs/TEST_RESULTS.md`.
-- [ ] Manual smoke path A (building): place floor/walls/roof → multi-story +
+- [x] Manual smoke path A (building): place floor/walls/roof → multi-story +
       stairs → walk both floors → demolish/refund → save/load.
-- [ ] Manual smoke path B (interactables): craft/place chest → store items →
+- [x] Manual smoke path B (interactables): craft/place chest → store items →
       save/load → workbench station crafting through slots → fuel a campfire →
       night light test → toggle/extinguish → save/load.
-- [ ] Structured sandbox playtest: cabin, two-story cottage, fenced farmyard,
+- [x] Structured sandbox playtest: cabin, two-story cottage, fenced farmyard,
       stone workshop, three-story stress layout; record bugs, screenshots,
       performance.
-- [ ] Update `docs/PROJECT_STATE.md`, `docs/ITEM_SYSTEM.md`,
+- [x] Update `docs/PROJECT_STATE.md`, `docs/ITEM_SYSTEM.md`,
       `docs/SAVE_FORMAT.md`, `docs/TEXTURE_PACKS.md`,
       `docs/INTERACTABLE_AUTHORING.md`, `docs/ROADMAP.md`, and this plan's
       progress log with verified facts only.
@@ -562,6 +562,7 @@ Append one row per completed milestone. Do not rewrite history.
 | 2026-09-14 | M8 | Complete | Full catalogue: the timber homestead checkpoint (edge-correct fences, gates, railings, porch/deck/path, planter boxes, tables, fuelled yard lantern), the stone yard slice (gate, railing, patio/path, planter), the first reinforced family (floor/wall/roof, gate, railing, grate), and the closing furniture pass — 19 pieces as data-only assets (timber chair/shelf/rug/wardrobe/steps/awning/corner post; stone hearth/cabinet/bookcase/well/brazier, the hearth and brazier reusing the yard-lantern profile set; metal shuttered window/metal stair/metal fence/signal pole/metal lantern/workshop cabinet/metal locker) with stable item ids, hand-crafted recipes, 32×32 PixelLab pickup icons, and automatic Supply Store coverage. Building visuals migrated to per-definition `atlas_path`/`atlas_cell` data with family placeholder tints as the fallback; dedicated per-family atlases are M9. Metal furniture costs sandbox-verified inside the reinforced family's 1–4 ingot range (iron chain 2:1 at the pre-placed sandbox furnace; no tuning needed). The bed stays profile-less — its sleep interaction is deferred by the interactables plan. Verified: content 93/93 (65 definitions), placement 61/61, station/fuel/light 22/22, sandbox 0 failures, ground pack 0 failures, full harness 438/0, editor/parser exit 0. |
 | 2026-09-14 | M9 box 7 | Complete | Interaction highlight: manager-owned generic focus frame (4×2 px polygon strips on the target tile, one render band above the target, hidden when nothing is targetable or while a panel is open). Concise prompts stay; capacity/fuel errors and craft feedback now share one panel toast lane (`toast_requested` → parent HUD toast) covering craft success ("Crafted 1x Wooden Hammer"), data-tableled craft failures, and per-grid transfer rejections with fuel-tag-aware wording ("That fuel slot only accepts: fuel"). Appearance transitions are data-driven and token-guarded, and finally visible: fixed a same-tick close bug where `set_crafting_active(false)` snapped the resting state and clobbered the in-flight "closing" transition before its first frame rendered — the resting snap is now guarded while an authored interaction transition owns the presentation, so the authored closing frame (1 frame @ 8 fps ≈ 125 ms) actually displays. Building Sandbox tutorial card: data resource (`SandboxTutorialCard`, ordered heading→one-liner lines: build mode, layers, ghost preview, orientation, construction story, active story, stairs, roof cutaway, demolish/refund, save/load) + top-right panel auto-shown at sandbox start, re-opened from the drawer's "?" button. Verified: router 42/0 (was 26), station 27/0 (was 22 executed; one pre-existing source check in a never-reached branch), sandbox 75/0 (was 69); placement 78/0, stairs 37/0, content 102/0, ground pack 0, game 0, art 701/0, editor/parser exit 0. |
 | 2026-09-14 | M9 | Complete | Art, UX, and presentation closed (boxes 5–7 above). PixelLab 16-sheet pack landed in `assets/tiles/building/` (structural/boundaries/interior × wood/stone/metal, exterior props) + `assets/tiles/interactables/` (campfire, furnace, hearth, torch, wood_chest, workbench) — every sheet in the pack contract (32 px cells, per-definition `atlas_path`/`atlas_cell`, transparency + dimension verification, `TexturePackManager`/`verify_texture_pack` harness coverage). UX: build-palette groups/filters; R/Q rotation with compass + edge preview and sticky `pending_orientation`; ghost preview renders one marker per reserved key (green/free, red/occupied-or-unsupported cell, blue/reserved stairwell landing, roof cutaway-consistent bands); manager-owned generic focus frame on the interactable target; one panel toast lane carrying craft success/failure and per-grid transfer rejections with fuel-tag wording; authored data-driven appearance transitions (token-guarded; same-tick close snap bug fixed) so the 32 px sheets are readable in motion. Closeout (post-commit, 2026-09-14): full harness re-run green — content 102/0, placement 78/0, router 42/0, station 27/0, sandbox 75/0, stairs 37/0, game 440/0, harvesting 94/0, ground pack 140/0, art 701/0, editor/parser exit 0 (details + flake note in `docs/TEST_RESULTS.md`). Exit met: the system is understandable without developer knowledge, art is readable at 32 px native gameplay scale, and the pack contract covers every new asset. |
+| 2026-09-15 | M10 | Complete | Release verification added an 8-check mixed wood/stone, furnished, multi-story save/load regression: wall health + edge orientation, a descending stair's paired landing reservation, chest contents, enabled fuel + remaining burn time + indexed fuel, and station inputs/outputs all survive a v8 round-trip. The focused placement suite is **88/88** and the sandbox suite adds the five-layout smoke (cabin, two-storey cottage, fenced yard, stone workshop, three-storey stress layout). A windowed sandbox capture refreshed `ground_build.png`, `upper_story_build.png`, and `save_load.png`, confirming 18 placed records survive save/load. Playtest found persistent name/full-health overlays made furnished rooms unreadable; normal labels are now hidden and health UI appears only after damage (covered by two placement checks). Final matrix: import + editor/parser exit 0; content 102/102, placement 88/88, sandbox 76/76, stairs 37/37, router 42/42, station 27/27, harvesting 94/94, ground pack 140/140, art 701/701, game 440/440; `git diff --check` clean. |
 
 ## Decision log
 
