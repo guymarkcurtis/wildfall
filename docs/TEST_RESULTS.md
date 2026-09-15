@@ -1,6 +1,40 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **Active Build Plan M9 complete (2026-09-14, art / UX / presentation)**:
+  post-commit closeout re-run on Godot 4.7.2 headless (XDG homes + `HOME`
+  redirected to `/tmp/godot-check`; each suite as
+  `godot --headless --path . --script res://tests/test_<suite>.gd` —
+  `ground_pack`, `building_placement`, `building_sandbox`, `building_stairs`,
+  `building_content`, `station_crafting`, `interaction_router`, `harvesting`,
+  `game`, `building_art` — plus `--editor --quit` for the editor/parser
+  check). Final counts: interaction router **42/42** (was 26 — box 7 added
+  the focus-frame and toast/animation checks), station crafting **27/27**
+  (22 executed before box 7; one pre-existing source check sits in a
+  never-reached branch, so 28 checks exist but 27 execute), sandbox
+  **75/0** (was 69 — tutorial-card checks), placement **78/78** (was 61 —
+  R/Q rotation + per-reserved-key ghost markers + palette groups), stairs
+  **37/37**, content **102/102** (was 93 — atlas `atlas_path`/`atlas_cell`
+  data), `test_game` **440 passed / 0 failed**, harvesting **94/0**, ground
+  pack **140 checks / 0 failures** (stock manifest regenerates from the
+  packed contract), building art **701/701** (per-sheet contract: exact
+  dimensions, 32 px cells, transparency, atlas data), editor/parser exit 0.
+  Key family: **F3** debug, **F4** save, **F5** roof toggle (sandbox only;
+  moved from R in box 5), **F9** load. **Known flake (pre-existing,
+  chunk-resource streaming):** in the closeout run the three `test_game`
+  checks "Far chunk generates resources when loaded (+0)" and
+  "Unloading/Re-entering … (N -> N)" failed once (315 -> 315; the same
+  family previously showed as 369 -> 369) while **every** WG-05
+  distance-to-water/biome check passed on both runs — a headless
+  chunk-stream timing flake, not a WG-05 regression. Per the flake rule,
+  one green re-run of that suite alone
+  (`--headless --path . --script res://tests/test_game.gd`) counts as the
+  closeout evidence: **440 passed / 0 failed**, exit 0. **Pack handoff:**
+  the 16-sheet pack (10 building sheets in `assets/tiles/building/`, 6
+  interactable state sheets in `assets/tiles/interactables/`) was packed
+  from the PixelLab masters in `/tmp/godot-check/m9_gen/`; do not re-run
+  the packer against the repo — re-packs only from re-verified masters in
+  that directory, with transparency/dimension re-verification before commit.
 - **Active Build Plan M8 complete (2026-09-14, full catalogue + furniture
   pass)**: `tests/test_building_content.gd` **93/93 checks**,
   `tests/test_building_placement.gd` **61/61**,
