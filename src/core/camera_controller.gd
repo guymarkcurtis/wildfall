@@ -1,10 +1,15 @@
 ## Smooth follow camera for the orthogonal 2D top-down view.
-## Supports 45° snap rotation, free middle-mouse rotate, and north-up reset.
+## Supports 45° snap rotation, free middle-mouse rotate, north-up reset,
+## and a two-level zoom toggle (standard / zoomed-in detail view).
 class_name CameraController
 extends Camera2D
 
 const SNAP_RADIANS: float = PI * 0.25
 const DRAG_SENSITIVITY: float = 0.008
+## The standard (default) view: no magnification.
+const STANDARD_ZOOM: Vector2 = Vector2(1.0, 1.0)
+## The zoomed-in detail view: everything 50% larger.
+const DETAIL_ZOOM: Vector2 = Vector2(1.5, 1.5)
 
 @export var follow_speed: float = 5.0
 @export var look_ahead_x: float = 0.0
@@ -14,6 +19,7 @@ var _target_position: Vector2 = Vector2.ZERO
 var _has_target: bool = false
 var _dragging: bool = false
 var _rotation_locked: bool = false
+var _zoomed_in: bool = false
 
 func _input(event: InputEvent) -> void:
 	if _rotation_locked:
@@ -26,6 +32,9 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("reset_view"):
 		reset_view()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("zoom_view"):
+		toggle_zoom()
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton:
 		var mouse := event as InputEventMouseButton
@@ -59,6 +68,17 @@ func rotate_view(delta_radians: float) -> void:
 ## Snap rotation to the nearest 45° and set it to world-north up.
 func reset_view() -> void:
 	rotation = 0.0
+
+## Toggle between the standard view (1.0x) and the zoomed-in detail
+## view (1.5x). The camera keeps following the player at the same world
+## position, so the view simply magnifies around the player.
+func toggle_zoom() -> void:
+	_zoomed_in = not _zoomed_in
+	zoom = DETAIL_ZOOM if _zoomed_in else STANDARD_ZOOM
+
+## True while the zoomed-in detail view (1.5x) is active.
+func is_zoomed_in() -> bool:
+	return _zoomed_in
 
 ## Ignore rotate input while the seed editor (or similar) owns the keyboard.
 func set_rotation_locked(locked: bool) -> void:

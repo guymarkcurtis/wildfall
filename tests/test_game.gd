@@ -2192,6 +2192,16 @@ func _run_checks() -> void:
 	_check(abs(camera.rotation - PI * 0.5) < 0.01, "Camera rotate_view applies radians")
 	camera.reset_view()
 	_check(is_zero_approx(camera.rotation), "reset_view returns north-up")
+	_check(InputMap.has_action("zoom_view"), "zoom_view input action exists (backslash key)")
+	var zoom_key_event := InputMap.action_get_events("zoom_view")[0] as InputEventKey
+	_check(zoom_key_event != null and zoom_key_event.keycode == KEY_BACKSLASH,
+			"zoom_view is bound to the backslash key")
+	camera.toggle_zoom()
+	_check(camera.is_zoomed_in() and camera.zoom == Vector2(1.5, 1.5),
+			"zoom toggle switches the camera to the 1.5x detail view")
+	camera.toggle_zoom()
+	_check(not camera.is_zoomed_in() and camera.zoom == Vector2(1.0, 1.0),
+			"toggling again restores the standard 1.0x view")
 	var player_visual: CharacterVisual = player_ent.character_visual
 	player_visual.update_animation(Vector2.ZERO, 0.0, Vector2.RIGHT)
 	var east_texture := player_visual.get_active_texture()

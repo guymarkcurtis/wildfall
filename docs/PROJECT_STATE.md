@@ -113,7 +113,7 @@ two new atlases to the texture-pack export. All requests in
 
 ## CURRENT TEST RESULTS (2026-09-16)
 
-Automated headless run of the real main scene — **451 passed, 0 failed,
+Automated headless run of the real main scene — **455 passed, 0 failed,
 0 script errors** (see TEST_RESULTS.md). Two pre-existing, seed-dependent
 flake families can still fail a minority of runs on unlucky world seeds —
 both A/B-verified on a clean HEAD, so they are not regressions:
@@ -131,6 +131,7 @@ triple can fire under heavy parallel load. Details in TEST_RESULTS.md:
 | Item database (123 items, 100 recipes — incl. stone/iron handheld lantern tiers and the new wall torch/lantern fixtures) | PASS |
 | Crafting + stations + research (scrollable recipe list, nearby station gates, starting recipes, paid research unlocks) | PASS |
 | Camera follow (target set, lerp converges) | PASS |
+| Zoom toggle (backslash: standard 1.0x view / 1.5x zoomed-in detail view and back) | PASS |
 | Seed input (T opens, pre-fill, Escape cancels) | PASS |
 | Save/load round-trip (player, destroyed resource/creature spawns, placed buildings) | PASS |
 | Chunk lifecycle (generate/unload/reload deterministic) + set_seed regen | PASS |
@@ -164,7 +165,7 @@ A 30-second headless run of the actual game also completed with 0 errors,
 
 - **Presentation**: Orthogonal 2D top-down (square 32px tiles, Camera2D). Not isometric.
 - **Player Movement**: World-relative WASD (W north, A west, S south, D east) + Sprint and a short aimed Space-bar jump. Faces the pointer, which controls tool and ranged aim. Rocky ground is walkable; water retains terrain collision.
-- **Camera**: Smooth follow; `,`/`.` snap-rotate, middle-mouse free rotate, Home resets north-up.
+- **Camera**: Smooth follow; `,`/`.` snap-rotate, middle-mouse free rotate, Delete resets north-up (the input map binds `reset_view` to Delete — the old "Home" note was stale), and backslash toggles the zoom: the standard 1.0x view and a zoomed-in 1.5x detail view for seeing up close (the camera keeps following the player, so the view simply magnifies around them).
 - **Ranged combat**: Face the cursor; LMB fires the wooden bow (consumes arrows).
 - **Buildings**: B opens the grouped build palette. Select an owned part, LMB places it, wheel cycles parts, F demolishes, and [ or ] selects one of four construction stories (these are the keys the help text names — the old "[ / ]" text pointed at an unbound slash and has been corrected; no action uses `/`). R/Q rotate an orientable preview; floors, objects, edges, roofs, and connectors share a layered tile model. The player moves between active stories through stairs; Building Sandbox additionally offers F5 roof visibility and [ or ] active-story recovery outside build mode. An enclosed room on the active story — a floor underfoot, a perimeter of walls/doors/windows sealing all four directions, and a roof one story up — counts as indoors and is marked "Sheltered" in the HUD. Presentation follows the player's location: outside, every structure shows its full exterior shell — the roofs and the exterior-facing walls of every story at full colour (a 3-story house reads as a 3-story house from the yard), each story's visuals offset so the stories stack as one building, with interior mass (floors, foundations, interior partitions) ghosted at 25%; inside, the cutaway is scoped to the building the player is in — only its level the player stands on shows (the roof above hides, the room's own overhead fades, every other story is hidden outright, and the HUD names the floor) — while every other building keeps its full exterior shell; leaving a building from an upper story returns the active story to the ground unless the player is still on a stair connector, and an unroofed indoor spot (open deck/balcony) reads as outdoors — the roof shows again — while the floor underfoot keeps the player on their story. Wall fixtures (torch, lantern) mount on the outside face of exterior walls, doors, and windows with their own light, and are removed with a refund when their host wall is demolished.
 - **World clock / weather / statuses**: DayNightCycle + WeatherSystem + StatusEffectSystem, shown on the HUD. Being indoors (see Buildings) outranks every cold source: snow-weather chill and the arctic-night biome chill do not apply inside an enclosed room, any slow/frozen statuses already present are cleared, and the player's movement speed ignores the weather multiplier there.
@@ -199,7 +200,7 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - `src/systems/` — SaveSystem, ItemDatabase, BuildingManager, TechnologySystem, TexturePackManager, CreatureSpawner, MissionManager (Phase 4)
 - `resources/` — ItemDefinition, RecipeDefinition, BiomeDefinition, CreatureDefinition, BuildingDefinition, TechnologyDefinition (wired)
 - `scenes/` — `main.tscn` is the only wired scene (see dead-code inventory in ARCHITECTURE.md)
-- `tests/` — `test_game.gd` headless harness (451 checks), plus focused content/placement/sandbox/stairs/interaction/station/art/presentation suites
+- `tests/` — `test_game.gd` headless harness (455 checks), plus focused content/placement/sandbox/stairs/interaction/station/art/presentation suites
 - `docs/` — Project documentation
 
 ## RECENTLY COMPLETED (2026-09-10 review)
@@ -335,6 +336,28 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - Expanded the harness to **230 passing checks** (22 durability + 32
   mission checks, plus the reworked durability/mission blocks), 0
   failures, 0 script errors — green on two consecutive runs.
+
+## RECENTLY COMPLETED (2026-09-16 round, zoom toggle)
+
+- **Zoom toggle on backslash**: the view now has two levels — the
+  current zoom stays the standard view (1.0x), and backslash toggles
+  to a zoomed-in detail view where everything is 50% larger (1.5x),
+  for seeing up close. Pressing backslash again returns to the
+  standard view. The camera keeps following the player at the same
+  world position, so toggling simply magnifies the view around the
+  player. Implementation: `CameraController` gains a `zoom_view`
+  input action (backslash), a `_zoomed_in` state, `toggle_zoom()`
+  (sets `zoom` to 1.0x/1.5x) and `is_zoomed_in()`; the existing
+  follow/rotate behaviour is untouched.
+- **Docs**: the Camera line corrected — the input map binds
+  `reset_view` to **Delete** (keycode 4194312), not Home as the old
+  text claimed (Home is 4194317 and was never bound).
+- **Tests**: `test_game` 451 → **455 checks, 455/0 green** (the new
+  block verifies the `zoom_view` action exists, is bound to the backslash keycode,
+  toggles the camera zoom to 1.5x and back, and tracks state);
+  `--headless --editor --quit` exited 0 with no script errors, and the
+  input-sensitive suites re-ran green (`test_interaction_router`
+  42/42, `test_building_placement` 88/88).
 
 ## RECENTLY COMPLETED (2026-09-16 round, overlay menu replacement + journal centring)
 

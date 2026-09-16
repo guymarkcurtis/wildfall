@@ -1,6 +1,31 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **Zoom toggle: backslash switches the standard 1.0x view and a
+  zoomed-in 1.5x detail view (2026-09-16):**
+  the current zoom stays the standard view; the new toggle (backslash)
+  zooms in 50% so everything renders 1.5x larger, for seeing up close,
+  and backslash again returns to the standard view. The camera keeps
+  following the player at the same world position — the toggle only
+  magnifies `Camera2D.zoom` around the existing follow position, so
+  rotation and follow logic are untouched. Code: `project.godot` gains
+  a `zoom_view` input action bound to the backslash key (keycode 92 =
+  `KEY_BACKSLASH` — the first draft used 4539, which is not the
+  backslash keycode; the engine enum was queried empirically to fix
+  it); `CameraController` gains `STANDARD_ZOOM`/`DETAIL_ZOOM`
+  constants, a `_zoomed_in` state, a `zoom_view` branch in `_input`
+  (guarded by the existing `_rotation_locked` check, so the seed
+  editor still owns the keyboard), plus `toggle_zoom()` and
+  `is_zoomed_in()`. Docs: the PROJECT_STATE camera line was corrected
+  — the input map binds `reset_view` to **Delete** (keycode 4194312),
+  not Home (4194317) as the old text claimed. Tests: `test_game`
+  451 → **455 checks, 455/0 green** (the new block verifies the
+  `zoom_view` action exists, is bound to the backslash keycode, and
+  that toggling switches the camera to 1.5x and back while tracking
+  state); `--headless --editor --quit` exited 0 with no script
+  errors; after the input-map change the input-sensitive suites
+  re-ran green (`test_interaction_router` 42/42,
+  `test_building_placement` 88/88).
 - **Overlay menus replace each other; journal window centred (2026-09-16):**
   the five overlay menus — inventory (I), character (K), crafting (C),
   technology (U), journal (J) — now REPLACE each other as the active
@@ -54,7 +79,9 @@
   resources when loaded", "Unloading a chunk frees its resource
   nodes", "Re-entering an unloaded chunk recreates its resource
   nodes") also fired on clean HEAD. Both are documented here rather
-  than masked; representative seeds pass 451/0.
+  than masked; representative seeds pass 451/0 (the entry above
+  extends the harness to 455; those same seeds are green at 455/0 —
+  the 451 total is superseded, not a failure).
 - **Full exterior shell, wall fixtures, and a scoped cutaway (2026-09-16):**
   makes the outside of a house look like what the player built. Outside,
   every story's exterior-facing walls and all roofs render in full colour
