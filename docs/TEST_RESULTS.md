@@ -1,6 +1,60 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **Overlay menus replace each other; journal window centred (2026-09-16):**
+  the five overlay menus — inventory (I), character (K), crafting (C),
+  technology (U), journal (J) — now REPLACE each other as the active
+  window instead of stacking: opening one closes the other four, and
+  closing the active one (with its own key) returns straight to the
+  game — the previously-opened menu never reappears. Escape is
+  reserved for the pause menu: each overlay now closes with its own
+  toggle key (the panels' old "Esc closes" handlers/hints are gone).
+  The journal (MissionPanel) window now opens centred in the
+  1280×720 viewport (centre (640,360)); it was opening at the top-left
+  corner because `anchors_preset` assignment is editor bookkeeping
+  only — the fix applies `set_anchors_and_offsets_preset(PRESET_CENTER)`
+  plus ±size/2 offsets at open time. Code: `main.gd` funnels all five
+  toggle keys through one `_toggle_overlay_menu` choke point whose
+  open-state is DERIVED from the panels (`is_open()`/`visible`) — no
+  stored "active menu" state, so external closers (the interaction
+  manager) stay consistent without bookkeeping; `mission_panel.gd`
+  centres on open; the three panels drop their `ui_cancel` handlers.
+  Tests: `test_game` 446 → **451 checks, 451/0 green** (the old
+  2-check journal block is replaced by a 7-check swap sequence:
+  J open → I (inventory opens, journal closes) → I again (closed, and
+  "Closing the active menu returns to the game (no earlier menu
+  reopens)") → J reopens → J closes); every other suite unchanged and
+  green: `test_presentation` 80/80, `test_shelter` 49/49,
+  `test_building_stairs` 40/40, `test_building_sandbox` 80/80,
+  `test_building_placement` 88/88, `test_building_content` 111/111,
+  `test_building_art` 701/701, `test_station_crafting` 42/42,
+  `test_interaction_router` 42/42, `test_harvesting` 94/94,
+  `test_ground_pack` 140/140, `test_equipment` 39/39,
+  `test_light_tiers` 37/37; `--headless --editor --quit` exited 0
+  with no script errors. Flake forensics (pre-existing, NOT caused by
+  this change): `test_game` draws a RANDOM world seed per process
+  (`main._ready()` runs `randomize(); randi()` — the harness ignores
+  any seed argument), so each run is a different world. On a
+  seed-dependent minority of draws the WG-12 presence guarantee
+  activates (fewer than `guarantee_min_eligible_cells` tag-matching
+  cells) and anchors `cave_entrance` at the nearest-to-centre land
+  cell (0,0), overriding that cell's payload biomes to the fallback
+  ("mountain"); the WG-05 live check compares chunk (0,0) payload
+  biomes at 12 fixed tiles against the pure legacy selector, which
+  knows nothing about the guarantee override, so those runs fail
+  "sampled tile biomes are byte-identical to the pre-WG-05 selector"
+  (observed: tile (0,0) payload=mountain expected=grassland, tile
+  (7,0) payload=mountain expected=temperate_forest). A/B-verified on
+  a clean-HEAD worktree (zero of this change's code): an unmodified
+  HEAD run fired the identical failure with the identical anchor
+  state (`anchors={cave_entrance: (0,0)}`, fallback biome
+  "mountain", same tile signatures), so the WG-05 flake is a
+  pre-existing seed lottery, independent of this work; the ObjectDB
+  chunk-unload triple ("Far chunk generates
+  resources when loaded", "Unloading a chunk frees its resource
+  nodes", "Re-entering an unloaded chunk recreates its resource
+  nodes") also fired on clean HEAD. Both are documented here rather
+  than masked; representative seeds pass 451/0.
 - **Full exterior shell, wall fixtures, and a scoped cutaway (2026-09-16):**
   makes the outside of a house look like what the player built. Outside,
   every story's exterior-facing walls and all roofs render in full colour
@@ -39,10 +93,11 @@
   assert the separate pavilion keeps its shell while the player is inside
   the house, plus the hide-not-ghost rule); `test_game` **446 checks** —
   the two outdoor cutaway checks flipped to the shell contract (floor /
-  foundation read as mass at 25%, not skin at 1.0); 445/1 = the pre-existing
-  mission-journal-centred check on representative seeds (a seed-dependent
-  chunk-unload ObjectDB flake can add two more on some seeds — pre-
-  existing, unrelated to buildings); `test_shelter` **49/49** (sandbox
+  foundation read as mass at 25%, not skin at 1.0); 445/1 on
+  representative seeds — the one failure was the mission-journal-
+  centred check, which the entry above FIXES (superseded: that entry
+  is 451/0); a seed-dependent chunk-unload ObjectDB flake can add two
+  more on some seeds — pre-existing, unrelated to buildings; `test_shelter` **49/49** (sandbox
   leg now asserts the story below the viewed story is hidden, not
   ghosted); `test_building_stairs` **40/40** (its policy block migrated
   to the mode-based API with the same assertions plus the hide-not-ghost

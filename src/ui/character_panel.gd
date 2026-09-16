@@ -56,11 +56,6 @@ func _ready() -> void:
 	_window.add_theme_stylebox_override("panel", _make_window_style())
 	center.add_child(_window)
 
-func _unhandled_input(event: InputEvent) -> void:
-	if is_open and event.is_action_pressed("ui_cancel"):
-		close_panel()
-		get_viewport().set_input_as_handled()
-
 ## Bind the panel to a player. Safe before the panel is opened; the layout
 ## is (re)built on every open so it always mirrors live state.
 func configure(player: Player, item_database: ItemDatabase) -> void:
@@ -101,8 +96,8 @@ func close_panel() -> void:
 	_light_status_label = null
 	_light_toggle_button = null
 
-## Escape closes the topmost panel and consumes the key so no other UI or
-## world action sees it.
+## The character screen blocks world input while it is open (K or the
+## ✕ button closes it; Escape belongs to the pause menu).
 func blocks_world_input() -> bool:
 	return is_open
 
@@ -137,14 +132,14 @@ func _build_layout() -> void:
 	title.add_theme_color_override("font_color", COL_TITLE)
 	titles.add_child(title)
 	var help := Label.new()
-	help.text = "Drag or click to equip; shift-click moves a stack. L lights the equipped torch. Esc closes."
+	help.text = "Drag or click to equip; shift-click moves a stack. L lights the equipped torch. K closes."
 	help.add_theme_font_size_override("font_size", 12)
 	help.add_theme_color_override("font_color", COL_MUTED)
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	titles.add_child(help)
 	var close_button := Button.new()
 	close_button.text = "✕"
-	close_button.tooltip_text = "Close (Esc / K)"
+	close_button.tooltip_text = "Close (K)"
 	close_button.custom_minimum_size = Vector2(34, 34)
 	_style_button(close_button, false)
 	close_button.pressed.connect(func(): close_panel())

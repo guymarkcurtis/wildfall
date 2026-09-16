@@ -64,11 +64,6 @@ func set_active_hotbar_slot(slot_index: int) -> void:
 	_active_hotbar_slot = slot_index if slot_index >= 0 and slot_index < HOTBAR_SLOTS else -1
 	_refresh_slots()
 
-func _unhandled_input(event: InputEvent) -> void:
-	if _is_open and event.is_action_pressed("ui_cancel"):
-		close()
-		get_viewport().set_input_as_handled()
-
 func _build_ui() -> void:
 	_dim = ColorRect.new()
 	_dim.color = Color(0.015, 0.025, 0.018, 0.70)
@@ -96,7 +91,7 @@ func _build_ui() -> void:
 	_header.add_child(title)
 
 	_hint_label = Label.new()
-	_hint_label.text = "Click an item, then a quick-bar slot to assign it  •  Esc / I to close"
+	_hint_label.text = "Click an item, then a quick-bar slot to assign it  •  I closes"
 	_hint_label.position = Vector2(0.0, 28.0)
 	_hint_label.size = Vector2(PANEL_WIDTH - 64.0, 20.0)
 	_hint_label.add_theme_font_size_override("font_size", 12)
@@ -249,7 +244,7 @@ func _on_slot_pressed(is_hotbar: bool, index: int) -> void:
 		return
 	if bool(_move_source["is_hotbar"]) == is_hotbar and int(_move_source["index"]) == index:
 		_move_source.clear()
-		_hint_label.text = "Click an item, then a quick-bar slot to assign it  •  Esc / I to close"
+		_hint_label.text = "Click an item, then a quick-bar slot to assign it  •  I closes"
 		_refresh_slots()
 		return
 	_move_item_to(is_hotbar, index)
@@ -277,7 +272,7 @@ func _move_item_to(target_is_hotbar: bool, target_index: int) -> void:
 		_move_source.clear()
 		return
 	_move_source.clear()
-	_hint_label.text = "Click an item, then a quick-bar slot to assign it  •  Esc / I to close"
+	_hint_label.text = "Click an item, then a quick-bar slot to assign it  •  I closes"
 	hotbar_assignment_changed.emit(_hotbar_items.duplicate())
 	_refresh_slots()
 

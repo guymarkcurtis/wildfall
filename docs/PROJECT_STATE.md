@@ -113,12 +113,15 @@ two new atlases to the texture-pack export. All requests in
 
 ## CURRENT TEST RESULTS (2026-09-16)
 
-Automated headless run of the real main scene — **445 passed, 1 failed,
-0 script errors** (the one failure is the pre-existing mission-journal
-centering check; it fails identically on a clean HEAD with all local
-changes stashed — see TEST_RESULTS.md; two chunk-unload ObjectDB checks
-can additionally fail on some seeds — a pre-existing seed-dependent
-flake):
+Automated headless run of the real main scene — **451 passed, 0 failed,
+0 script errors** (see TEST_RESULTS.md). Two pre-existing, seed-dependent
+flake families can still fail a minority of runs on unlucky world seeds —
+both A/B-verified on a clean HEAD, so they are not regressions:
+`test_game` draws a RANDOM world seed per process, and when the WG-12
+presence guarantee activates (too few tag-eligible cells) it overrides
+the centre cell's payload biomes to its fallback, which the WG-05
+legacy-selector comparison does not model; and the ObjectDB chunk-unload
+triple can fire under heavy parallel load. Details in TEST_RESULTS.md:
 
 | Test | Status |
 |------|--------|
@@ -132,6 +135,7 @@ flake):
 | Save/load round-trip (player, destroyed resource/creature spawns, placed buildings) | PASS |
 | Chunk lifecycle (generate/unload/reload deterministic) + set_seed regen | PASS |
 | Live input: crafting panel hidden at start, C opens it, second C closes it | PASS |
+| Live input: the five overlay menus (I/K/C/U/J) replace each other — opening one closes the other four, closing the active one with its own key (Escape stays the pause menu) returns to the game with no earlier menu reopening, and the journal window opens centred | PASS |
 | Live input: 1050 px walk keeps the chunk loaded + terrain rendered under the player | PASS |
 | Explored map: nearby-chunk POIs only, marker save/load, centred panel | PASS |
 | Inventory (persistent quick bar, expandable storage, uniform slot spacing, click/drag transfers) | PASS |
@@ -148,11 +152,13 @@ A 30-second headless run of the actual game also completed with 0 errors,
 
 ### Known Issues (remaining)
 1. Some future-phase scripts remain intentionally unwired; see the inventory in `docs/ARCHITECTURE.md`.
-2. Pre-existing at the current HEAD (2026-09-15 pull): the mission-journal
-   "centred in the viewport" check in `test_game.gd` fails
-   (position (0.0, 0.0) vs (640.0, 360.0)) — verified failing on a clean
-   tree with all local changes stashed; it is part of the in-flight M10 /
-   equipment-UI work, not a regression from the lighting pass.
+2. Seed-dependent flake families in `test_game` (pre-existing on a clean
+   HEAD — see the CURRENT TEST RESULTS note and TEST_RESULTS.md): on a
+   minority of the harness's random per-process world seeds the WG-12
+   presence-guarantee override makes the WG-05 legacy-selector comparison
+   fail, and the ObjectDB chunk-unload triple can fail under heavy
+   parallel load. Re-running the harness (a fresh random seed) clears
+   them.
 
 ## CURRENTLY WORKING (all verified by the test run above)
 
@@ -193,7 +199,7 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - `src/systems/` — SaveSystem, ItemDatabase, BuildingManager, TechnologySystem, TexturePackManager, CreatureSpawner, MissionManager (Phase 4)
 - `resources/` — ItemDefinition, RecipeDefinition, BiomeDefinition, CreatureDefinition, BuildingDefinition, TechnologyDefinition (wired)
 - `scenes/` — `main.tscn` is the only wired scene (see dead-code inventory in ARCHITECTURE.md)
-- `tests/` — `test_game.gd` headless harness (446 checks), plus focused content/placement/sandbox/stairs/interaction/station/art/presentation suites
+- `tests/` — `test_game.gd` headless harness (451 checks), plus focused content/placement/sandbox/stairs/interaction/station/art/presentation suites
 - `docs/` — Project documentation
 
 ## RECENTLY COMPLETED (2026-09-10 review)
@@ -329,6 +335,38 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - Expanded the harness to **230 passing checks** (22 durability + 32
   mission checks, plus the reworked durability/mission blocks), 0
   failures, 0 script errors — green on two consecutive runs.
+
+## RECENTLY COMPLETED (2026-09-16 round, overlay menu replacement + journal centring)
+
+- **Overlay menus replace each other**: the five overlay menus
+  (inventory I, character K, craft C, technology U, journal J) now
+  replace each other as the active window instead of stacking —
+  opening one closes the other four, and closing the active one
+  (with its own key) returns straight to the game; a previously-
+  opened menu never reappears. Escape is reserved for the pause
+  menu, so each overlay closes with its own toggle key (the panels'
+  old "Esc closes" `ui_cancel` handlers/hints are gone).
+- **Implementation**: `main.gd` funnels all five toggle keys through
+  one `_toggle_overlay_menu(name)` choke point whose open-state is
+  DERIVED from the panels (`is_open()`/`visible`) — no stored "active
+  menu" state, so external closers (the interaction manager) stay
+  consistent without bookkeeping. The journal (MissionPanel) now
+  centres its window at open time with
+  `set_anchors_and_offsets_preset(PRESET_CENTER)` plus ±size/2
+  offsets — plain `anchors_preset` assignment is editor bookkeeping
+  only and never moved the window, which is why the journal sat in
+  the top-left corner before.
+- **Tests**: `test_game` 446 → **451 checks, 451/0 green** (the old
+  2-check journal block is replaced by a 7-check swap sequence:
+  J open → I → I closes to the game → J reopens → J closes); all 13
+  other suites unchanged and green; `--headless --editor --quit`
+  exited 0 with no script errors.
+- **Flake forensics**: the two known seed-dependent flake families
+  (WG-05 vs the WG-12 presence-guarantee override; the ObjectDB
+  chunk-unload triple) were A/B-verified on a clean-HEAD worktree —
+  an unmodified HEAD run fired the identical WG-05 failure with the
+  identical anchor state, so both are pre-existing, not regressions
+  from this change (full analysis in TEST_RESULTS.md).
 
 ## RECENTLY COMPLETED (2026-09-16 round, exterior shell, wall fixtures, scoped cutaway)
 

@@ -660,9 +660,82 @@ func _on_tool_broken(item_id: String) -> void:
 	hud.show_toast("%s broke!" % item_name)
 	_refresh_ui()
 
+## The five overlay menus replace each other: opening one closes the others,
+## and closing the active one (with its own key) returns straight to the
+## game instead of revealing a previously opened menu underneath. Each menu
+## still answers to its own key (I/K/C/U/J); Escape stays reserved for the
+## pause menu. Map, pause, and build mode are separate systems and are left
+## alone by this group.
+const OVERLAY_MENUS: Array[String] = ["inventory", "character", "crafting", "technology", "journal"]
+
+func _overlay_menu_open(menu_name: String) -> bool:
+	match menu_name:
+		"inventory":
+			return inventory_panel != null and inventory_panel.is_open()
+		"character":
+			return character_panel != null and character_panel.is_open
+		"crafting":
+			return crafting_panel != null and crafting_panel.visible
+		"technology":
+			return technology_panel != null and technology_panel.visible
+		"journal":
+			return mission_panel != null and mission_panel.visible
+	return false
+
+func _close_overlay_menu(menu_name: String) -> void:
+	match menu_name:
+		"inventory":
+			if inventory_panel != null:
+				inventory_panel.close()
+		"character":
+			if character_panel != null:
+				character_panel.close_panel()
+		"crafting":
+			if crafting_panel != null:
+				crafting_panel.visible = false
+		"technology":
+			if technology_panel != null:
+				technology_panel.visible = false
+		"journal":
+			if mission_panel != null:
+				mission_panel.visible = false
+
+func _open_overlay_menu(menu_name: String) -> void:
+	# Replacement semantics: no second overlay menu may sit on top of the
+	# active one, so close everything else before opening this one.
+	for menu in OVERLAY_MENUS:
+		if menu != menu_name and _overlay_menu_open(menu):
+			_close_overlay_menu(menu)
+	match menu_name:
+		"inventory":
+			if inventory_panel != null:
+				inventory_panel.open()
+		"character":
+			if character_panel != null:
+				character_panel.open_panel()
+		"crafting":
+			if crafting_panel != null:
+				crafting_panel.visible = true
+				_refresh_crafting_ui()
+		"technology":
+			if technology_panel != null:
+				technology_panel.visible = true
+				technology_panel.refresh()
+		"journal":
+			if mission_panel != null:
+				mission_panel.visible = true
+				mission_panel.refresh()
+
+## One entry point for all five menu keys: toggling the active menu closes
+## it (back to the game); toggling anything else replaces the active one.
+func _toggle_overlay_menu(menu_name: String) -> void:
+	if _overlay_menu_open(menu_name):
+		_close_overlay_menu(menu_name)
+	else:
+		_open_overlay_menu(menu_name)
+
 func _on_toggle_missions_ui() -> void:
-	if mission_panel != null:
-		mission_panel.toggle()
+	_toggle_overlay_menu("journal")
 
 func _on_map_waypoint_changed(tile: Vector2i, label: String) -> void:
 	if tile.x != 999999999:
@@ -800,7 +873,7 @@ func _on_inventory_changed() -> void:
 
 ## Player toggled the inventory UI (I key, via the event bus).
 func _on_toggle_inventory_ui() -> void:
-	inventory_panel.toggle()
+	_toggle_overlay_menu("inventory")
 
 func _on_hotbar_assignment_changed(assignments: Array[String]) -> void:
 	if player != null:
@@ -859,9 +932,7 @@ func _on_texture_pack_changed(_pack_id: String) -> void:
 
 ## Player toggled the crafting UI (C key, via the event bus).
 func _on_toggle_crafting_ui() -> void:
-	crafting_panel.visible = not crafting_panel.visible
-	if crafting_panel.visible:
-		_refresh_crafting_ui()
+	_toggle_overlay_menu("crafting")
 
 ## Per-frame: keep chunk loading in sync with the player, move the camera, keep the HUD
 ## in step with the seed editor, and update the debug overlay.
@@ -903,10 +974,9 @@ func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("load"):
 		load_game()
 	if Input.is_action_just_pressed("toggle_technology"):
-		if technology_panel != null:
-			technology_panel.toggle()
-	if Input.is_action_just_pressed("toggle_character") and character_panel != null:
-		character_panel.toggle()
+		_toggle_overlay_menu("technology")
+	if Input.is_action_just_pressed("toggle_character"):
+		_toggle_overlay_menu("character")
 	if Input.is_action_just_pressed("toggle_light"):
 		_toggle_player_light()
 

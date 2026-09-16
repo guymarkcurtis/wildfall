@@ -1,6 +1,7 @@
 ## The in-game mission journal: lists active, available, and completed
 ## missions with their live progress, rewards, and unmet prerequisites.
-## Opened and closed with J (bus toggle_missions_ui); Escape closes it.
+## Opened and closed with J (bus toggle_missions_ui); Escape is the pause
+## menu's key, so the journal only answers to J.
 class_name MissionPanel
 extends Control
 
@@ -23,12 +24,16 @@ func configure(manager: MissionManager) -> void:
 	if _window != null and visible:
 		refresh()
 
-## J key path: open the journal if hidden, close it if visible.
+## J key path: open the journal if hidden, close it if visible. Opening
+## re-asserts the centred offsets: the panel is invisible during scene boot,
+## so the anchored layout pass that tracks the parent's size can land late,
+## and the first frame a player sees must already be centred.
 func toggle() -> void:
 	if _window == null:
 		return
 	visible = not visible
 	if visible:
+		_center_window()
 		refresh()
 
 ## Optional one-line status message under the header.
@@ -36,18 +41,21 @@ func show_status(message: String) -> void:
 	if _status != null:
 		_status.text = message
 
-## Escape closes the journal while it is open.
-func _unhandled_input(event: InputEvent) -> void:
-	if visible and event.is_action_pressed("ui_cancel"):
-		visible = false
-		get_viewport().set_input_as_handled()
+## Pin the window to the viewport centre using real anchor+offset pairs.
+## (Assigning `anchors_preset` alone is an editor-only bookkeeping property
+## and moves nothing, which left the window parked at its build-time
+## top-left corner.)
+func _center_window() -> void:
+	_window.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	_window.offset_left = -_window.size.x * 0.5
+	_window.offset_top = -_window.size.y * 0.5
+	_window.offset_right = _window.size.x * 0.5
+	_window.offset_bottom = _window.size.y * 0.5
 
 func _build_ui() -> void:
 	_window = PanelContainer.new()
 	_window.name = "MissionWindow"
-	_window.anchors_preset = Control.LayoutPreset.PRESET_CENTER
 	_window.size = Vector2(720.0, 520.0)
-	_window.position = -_window.size * 0.5
 	_window.add_theme_stylebox_override("panel", _make_style())
 	add_child(_window)
 
