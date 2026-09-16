@@ -23,6 +23,12 @@ menu; it applies immediately to the running world.
 Packs live under `user://texture_packs/`. The menu’s folder button opens the
 actual platform folder, so this works in the editor and exported game builds.
 
+Authored packs are also archived in the repository under `texture_packs/`
+(one folder per pack, each containing `assets/` and `manifest.json`). That
+folder carries a `.gdignore` because the game loads packs only from
+`user://texture_packs/`; to use an archived pack, copy its folder into the
+platform user folder.
+
 ## Pack contract
 
 An override pack mirrors these paths below its own folder:

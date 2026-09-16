@@ -1,0 +1,2457 @@
+{
+	"assets": [
+		{
+			"editor_note": "Keep this at 256 x 256 pixels and make opposite edges tile seamlessly.",
+			"layout": {
+				"height": 256,
+				"kind": "seamless_surface",
+				"repeat": "world-space; tile seamlessly on all four edges",
+				"width": 256
+			},
+			"name": "Water surface",
+			"path": "assets/ground/water.png",
+			"purpose": "Water surface used for oceans, rivers, lakes, and swamp pools.",
+			"used_for": [
+				"biome background",
+				"world ground rendering"
+			]
+		},
+		{
+			"editor_note": "Keep this at 256 x 256 pixels and make opposite edges tile seamlessly.",
+			"layout": {
+				"height": 256,
+				"kind": "seamless_surface",
+				"repeat": "world-space; tile seamlessly on all four edges",
+				"width": 256
+			},
+			"name": "Sand surface",
+			"path": "assets/ground/sand.png",
+			"purpose": "Sandy ground used across beach and desert areas.",
+			"used_for": [
+				"biome background",
+				"world ground rendering"
+			]
+		},
+		{
+			"editor_note": "Keep this at 256 x 256 pixels and make opposite edges tile seamlessly.",
+			"layout": {
+				"height": 256,
+				"kind": "seamless_surface",
+				"repeat": "world-space; tile seamlessly on all four edges",
+				"width": 256
+			},
+			"name": "Grass surface",
+			"path": "assets/ground/grass.png",
+			"purpose": "Open grassy ground used across temperate plains.",
+			"used_for": [
+				"biome background",
+				"world ground rendering"
+			]
+		},
+		{
+			"editor_note": "Keep this at 256 x 256 pixels and make opposite edges tile seamlessly.",
+			"layout": {
+				"height": 256,
+				"kind": "seamless_surface",
+				"repeat": "world-space; tile seamlessly on all four edges",
+				"width": 256
+			},
+			"name": "Forest surface",
+			"path": "assets/ground/forest.png",
+			"purpose": "Leafy forest-floor ground used beneath wooded areas.",
+			"used_for": [
+				"biome background",
+				"world ground rendering"
+			]
+		},
+		{
+			"editor_note": "Keep this at 256 x 256 pixels and make opposite edges tile seamlessly.",
+			"layout": {
+				"height": 256,
+				"kind": "seamless_surface",
+				"repeat": "world-space; tile seamlessly on all four edges",
+				"width": 256
+			},
+			"name": "Dirt surface",
+			"path": "assets/ground/dirt.png",
+			"purpose": "Packed earth used in temperate, volcanic, and worn terrain.",
+			"used_for": [
+				"biome background",
+				"world ground rendering"
+			]
+		},
+		{
+			"editor_note": "Keep this at 256 x 256 pixels and make opposite edges tile seamlessly.",
+			"layout": {
+				"height": 256,
+				"kind": "seamless_surface",
+				"repeat": "world-space; tile seamlessly on all four edges",
+				"width": 256
+			},
+			"name": "Stone surface",
+			"path": "assets/ground/stone.png",
+			"purpose": "Bare rocky ground used in mountains, desert rock, and volcanic terrain.",
+			"used_for": [
+				"biome background",
+				"world ground rendering"
+			]
+		},
+		{
+			"editor_note": "Keep this at 256 x 256 pixels and make opposite edges tile seamlessly.",
+			"layout": {
+				"height": 256,
+				"kind": "seamless_surface",
+				"repeat": "world-space; tile seamlessly on all four edges",
+				"width": 256
+			},
+			"name": "Snow surface",
+			"path": "assets/ground/snow.png",
+			"purpose": "Snow-covered ground used throughout arctic areas.",
+			"used_for": [
+				"biome background",
+				"world ground rendering"
+			]
+		},
+		{
+			"editor_note": "Keep this at 256 x 256 pixels and make opposite edges tile seamlessly.",
+			"layout": {
+				"height": 256,
+				"kind": "seamless_surface",
+				"repeat": "world-space; tile seamlessly on all four edges",
+				"width": 256
+			},
+			"name": "Mud surface",
+			"path": "assets/ground/mud.png",
+			"purpose": "Wet muddy ground used in swamp areas.",
+			"used_for": [
+				"biome background",
+				"world ground rendering"
+			]
+		},
+		{
+			"editor_note": "Do not move, add, or remove cells. Artwork can change, but cell positions are game data.",
+			"layout": {
+				"cell_order": "row 1: water, sand, grass, forest; row 2: dirt, stone, snow, mud",
+				"columns": 4,
+				"kind": "atlas",
+				"rows": 2
+			},
+			"name": "Terrain atlas",
+			"path": "assets/tiles/wildfall-terrain-atlas.png",
+			"purpose": "Logical terrain tiles used by Godot's automatic terrain-edge and corner blending.",
+			"used_for": [
+				"terrain TileSet",
+				"water collision reference"
+			]
+		},
+		{
+			"editor_note": "Keep all four frames the same size and in their current left-to-right order.",
+			"layout": {
+				"columns": 4,
+				"frame_order": "left to right, frames 1 through 4",
+				"kind": "animation_strip",
+				"rows": 1
+			},
+			"name": "Water animation atlas",
+			"path": "assets/tiles/wildfall-water-animation.png",
+			"purpose": "Animated water overlay frames.",
+			"used_for": [
+				"water animation"
+			]
+		},
+		{
+			"editor_note": "Keep each resource in its assigned cell so harvesting visuals continue to match the resource type.",
+			"layout": {
+				"cell_order": "row 1: tree, rock, fibre, berry; row 2: iron ore, coal, gold ore, crystal",
+				"columns": 4,
+				"kind": "atlas",
+				"rows": 2
+			},
+			"name": "Resource-node atlas",
+			"path": "assets/tiles/wildfall-resources-atlas.png",
+			"purpose": "World resource nodes the player harvests.",
+			"used_for": [
+				"trees",
+				"rocks",
+				"fibre",
+				"berries",
+				"ore nodes"
+			]
+		},
+		{
+			"editor_note": "Keep the 4 by 2 grid and transparent backgrounds.",
+			"layout": {
+				"cell_order": "eight decorative variants, read left to right then top to bottom",
+				"columns": 4,
+				"kind": "atlas",
+				"rows": 2
+			},
+			"name": "Ground-detail atlas",
+			"path": "assets/tiles/wildfall-ground-details.png",
+			"purpose": "Small decorative details scattered over biome ground.",
+			"used_for": [
+				"grass tufts",
+				"pebbles",
+				"ambient ground decoration"
+			]
+		},
+		{
+			"editor_note": "Keep the four 32 x 32 cells in this exact left-to-right order and preserve transparency.",
+			"layout": {
+				"cell_order": "campfire, furnace, workbench, anvil",
+				"cell_size": "32 x 32 pixels",
+				"columns": 4,
+				"kind": "atlas",
+				"rows": 1
+			},
+			"name": "Crafting-station atlas",
+			"path": "assets/tiles/wildfall-crafting-stations.png",
+			"purpose": "World visuals for placeable crafting stations that unlock nearby recipes.",
+			"used_for": [
+				"campfire",
+				"furnace",
+				"workbench",
+				"anvil"
+			]
+		},
+		{
+			"editor_note": "Keep every cell at 32 x 32 and preserve the 2 by 9 layout.",
+			"layout": {
+				"cell_order": "wood column first, stone column second; structural types top to bottom",
+				"columns": 2,
+				"kind": "atlas",
+				"rows": 9
+			},
+			"name": "Building-parts atlas",
+			"path": "assets/tiles/wildfall-building-parts.png",
+			"purpose": "Wood and stone structural pieces used by the building system.",
+			"used_for": [
+				"walls",
+				"floors",
+				"doors",
+				"roofs"
+			]
+		},
+		{
+			"editor_note": "Keep the five 32 x 32 cells in their current order and preserve transparency.",
+			"layout": {
+				"cell_order": "five utilities from left to right",
+				"columns": 5,
+				"kind": "atlas",
+				"rows": 1
+			},
+			"name": "Building-utilities atlas",
+			"path": "assets/tiles/wildfall-building-utilities.png",
+			"purpose": "Utility objects placed in player-built structures.",
+			"used_for": [
+				"building utilities"
+			]
+		},
+		{
+			"editor_note": "Keep the 2 by 2 grid and transparent backgrounds.",
+			"layout": {
+				"cell_order": "four variants, read left to right then top to bottom",
+				"columns": 2,
+				"kind": "atlas",
+				"rows": 2
+			},
+			"name": "Forage-plant atlas",
+			"path": "assets/resources/wildfall-forage-plants.png",
+			"purpose": "Small harvestable and decorative plant variants.",
+			"used_for": [
+				"forage visuals",
+				"ground vegetation"
+			]
+		},
+		{
+			"editor_note": "Keep the roots at the bottom-centre and preserve transparency.",
+			"layout": {
+				"height": 192,
+				"kind": "sprite",
+				"width": 160
+			},
+			"name": "Large broadleaf tree",
+			"path": "assets/resources/tree-large.png",
+			"purpose": "Ground-anchored harvestable tree at gameplay scale.",
+			"used_for": [
+				"surface tree",
+				"tree idle frame"
+			]
+		},
+		{
+			"editor_note": "Keep the roots planted and match the idle tree canvas exactly.",
+			"layout": {
+				"frame": 1,
+				"frame_count": 4,
+				"height": 192,
+				"kind": "animation_frame",
+				"width": 160
+			},
+			"name": "Tree shake frame 1",
+			"path": "assets/resources/tree-shake/frame_01.png",
+			"purpose": "Impact response frame played whenever a tree is struck.",
+			"used_for": [
+				"tree hit animation"
+			]
+		},
+		{
+			"editor_note": "Keep the roots planted and match the idle tree canvas exactly.",
+			"layout": {
+				"frame": 2,
+				"frame_count": 4,
+				"height": 192,
+				"kind": "animation_frame",
+				"width": 160
+			},
+			"name": "Tree shake frame 2",
+			"path": "assets/resources/tree-shake/frame_02.png",
+			"purpose": "Impact response frame played whenever a tree is struck.",
+			"used_for": [
+				"tree hit animation"
+			]
+		},
+		{
+			"editor_note": "Keep the roots planted and match the idle tree canvas exactly.",
+			"layout": {
+				"frame": 3,
+				"frame_count": 4,
+				"height": 192,
+				"kind": "animation_frame",
+				"width": 160
+			},
+			"name": "Tree shake frame 3",
+			"path": "assets/resources/tree-shake/frame_03.png",
+			"purpose": "Impact response frame played whenever a tree is struck.",
+			"used_for": [
+				"tree hit animation"
+			]
+		},
+		{
+			"editor_note": "Keep the roots planted and match the idle tree canvas exactly.",
+			"layout": {
+				"frame": 4,
+				"frame_count": 4,
+				"height": 192,
+				"kind": "animation_frame",
+				"width": 160
+			},
+			"name": "Tree shake frame 4",
+			"path": "assets/resources/tree-shake/frame_04.png",
+			"purpose": "Impact response frame played whenever a tree is struck.",
+			"used_for": [
+				"tree hit animation"
+			]
+		},
+		{
+			"editor_note": "Keep the trunk and roots at the bottom-centre and preserve transparency.",
+			"layout": {
+				"height": 192,
+				"kind": "sprite",
+				"width": 160
+			},
+			"name": "Pine tree",
+			"path": "assets/resources/trees/pine-tree.png",
+			"purpose": "Ground-anchored harvestable evergreen for mountain and arctic biomes.",
+			"used_for": [
+				"pine_tree",
+				"arctic vegetation",
+				"mountain vegetation"
+			]
+		},
+		{
+			"editor_note": "Keep the trunk and roots at the bottom-centre and preserve transparency.",
+			"layout": {
+				"height": 192,
+				"kind": "sprite",
+				"width": 160
+			},
+			"name": "Willow tree",
+			"path": "assets/resources/trees/willow-tree.png",
+			"purpose": "Ground-anchored harvestable wetland tree for swamp biomes.",
+			"used_for": [
+				"willow_tree",
+				"swamp vegetation"
+			]
+		},
+		{
+			"editor_note": "Keep the trunk and roots at the bottom-centre and preserve transparency.",
+			"layout": {
+				"height": 192,
+				"kind": "sprite",
+				"width": 160
+			},
+			"name": "Meadow tree",
+			"path": "assets/resources/trees/meadow-tree.png",
+			"purpose": "Ground-anchored harvestable open-canopy tree for grassland biomes.",
+			"used_for": [
+				"meadow_tree",
+				"grassland vegetation"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wood pickup",
+			"path": "assets/items/pickups/wood.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wood",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Fibre pickup",
+			"path": "assets/items/pickups/fibre.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"fibre",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Berry pickup",
+			"path": "assets/items/pickups/berry.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"berry",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone pickup",
+			"path": "assets/items/pickups/stone.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Clay pickup",
+			"path": "assets/items/pickups/clay.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"clay",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Sand pickup",
+			"path": "assets/items/pickups/sand.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"sand",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Copper Ore pickup",
+			"path": "assets/items/pickups/copper_ore.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"copper_ore",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Tin Ore pickup",
+			"path": "assets/items/pickups/tin_ore.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"tin_ore",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Iron Ore pickup",
+			"path": "assets/items/pickups/iron_ore.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"iron_ore",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Coal pickup",
+			"path": "assets/items/pickups/coal.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"coal",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Gold Ore pickup",
+			"path": "assets/items/pickups/gold_ore.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"gold_ore",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Herb pickup",
+			"path": "assets/items/pickups/herb.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"herb",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Mushroom pickup",
+			"path": "assets/items/pickups/mushroom.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"mushroom",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wheat pickup",
+			"path": "assets/items/pickups/wheat.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wheat",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Meat pickup",
+			"path": "assets/items/pickups/meat.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"meat",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Fish pickup",
+			"path": "assets/items/pickups/fish.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"fish",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Hide pickup",
+			"path": "assets/items/pickups/hide.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"hide",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Feather pickup",
+			"path": "assets/items/pickups/feather.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"feather",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Bone pickup",
+			"path": "assets/items/pickups/bone.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"bone",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Anvil pickup",
+			"path": "assets/items/pickups/anvil.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"anvil",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Apple pickup",
+			"path": "assets/items/pickups/apple.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"apple",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Arrow pickup",
+			"path": "assets/items/pickups/arrow.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"arrow",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Awning pickup",
+			"path": "assets/items/pickups/awning.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"awning",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Bed pickup",
+			"path": "assets/items/pickups/bed.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"bed",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Bookcase pickup",
+			"path": "assets/items/pickups/bookcase.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"bookcase",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Brazier pickup",
+			"path": "assets/items/pickups/brazier.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"brazier",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Bread pickup",
+			"path": "assets/items/pickups/bread.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"bread",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Bronze Ingot pickup",
+			"path": "assets/items/pickups/bronze_ingot.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"bronze_ingot",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Cabinet pickup",
+			"path": "assets/items/pickups/cabinet.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"cabinet",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Campfire pickup",
+			"path": "assets/items/pickups/campfire.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"campfire",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Chair pickup",
+			"path": "assets/items/pickups/chair.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"chair",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Charcoal pickup",
+			"path": "assets/items/pickups/charcoal.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"charcoal",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Chest pickup",
+			"path": "assets/items/pickups/chest.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"chest",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Corner Post pickup",
+			"path": "assets/items/pickups/corner_post.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"corner_post",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Cooked Fish pickup",
+			"path": "assets/items/pickups/cooked_fish.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"cooked_fish",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Cooked Meat pickup",
+			"path": "assets/items/pickups/cooked_meat.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"cooked_meat",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Copper Ingot pickup",
+			"path": "assets/items/pickups/copper_ingot.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"copper_ingot",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Farm Soil pickup",
+			"path": "assets/items/pickups/farm_soil.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"farm_soil",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Fence pickup",
+			"path": "assets/items/pickups/fence.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"fence",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Fence Gate pickup",
+			"path": "assets/items/pickups/fence_gate.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"fence_gate",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Flour pickup",
+			"path": "assets/items/pickups/flour.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"flour",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Furnace pickup",
+			"path": "assets/items/pickups/furnace.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"furnace",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Glass pickup",
+			"path": "assets/items/pickups/glass.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"glass",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Gold Ingot pickup",
+			"path": "assets/items/pickups/gold_ingot.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"gold_ingot",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Hearth pickup",
+			"path": "assets/items/pickups/hearth.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"hearth",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Iron Axe pickup",
+			"path": "assets/items/pickups/iron_axe.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"iron_axe",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Iron Ingot pickup",
+			"path": "assets/items/pickups/iron_ingot.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"iron_ingot",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Iron Pickaxe pickup",
+			"path": "assets/items/pickups/iron_pickaxe.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"iron_pickaxe",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Iron Sword pickup",
+			"path": "assets/items/pickups/iron_sword.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"iron_sword",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Leaf pickup",
+			"path": "assets/items/pickups/leaf.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"leaf",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Metal Fence pickup",
+			"path": "assets/items/pickups/metal_fence.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"metal_fence",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Metal Gate pickup",
+			"path": "assets/items/pickups/metal_gate.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"metal_gate",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Metal Grate pickup",
+			"path": "assets/items/pickups/metal_grate.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"metal_grate",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Metal Lantern pickup",
+			"path": "assets/items/pickups/metal_lantern.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"metal_lantern",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Metal Locker pickup",
+			"path": "assets/items/pickups/metal_locker.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"metal_locker",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Metal Railing pickup",
+			"path": "assets/items/pickups/metal_railing.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"metal_railing",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Metal Roof pickup",
+			"path": "assets/items/pickups/metal_roof.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"metal_roof",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Metal Stair pickup",
+			"path": "assets/items/pickups/metal_stair.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"metal_stair",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Plank pickup",
+			"path": "assets/items/pickups/plank.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"plank",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Planter Box pickup",
+			"path": "assets/items/pickups/planter_box.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"planter_box",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Potion Health pickup",
+			"path": "assets/items/pickups/potion_health.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"potion_health",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Potion Mana pickup",
+			"path": "assets/items/pickups/potion_mana.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"potion_mana",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Reinforced Floor pickup",
+			"path": "assets/items/pickups/reinforced_floor.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"reinforced_floor",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Reinforced Wall pickup",
+			"path": "assets/items/pickups/reinforced_wall.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"reinforced_wall",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Rug pickup",
+			"path": "assets/items/pickups/rug.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"rug",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Seed Wheat pickup",
+			"path": "assets/items/pickups/seed_wheat.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"seed_wheat",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Shelf pickup",
+			"path": "assets/items/pickups/shelf.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"shelf",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Shuttered Window pickup",
+			"path": "assets/items/pickups/shuttered_window.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"shuttered_window",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Signal Pole pickup",
+			"path": "assets/items/pickups/signal_pole.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"signal_pole",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Soup pickup",
+			"path": "assets/items/pickups/soup.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"soup",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Steps pickup",
+			"path": "assets/items/pickups/steps.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"steps",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Axe pickup",
+			"path": "assets/items/pickups/stone_axe.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_axe",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Brick pickup",
+			"path": "assets/items/pickups/stone_brick.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_brick",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Door pickup",
+			"path": "assets/items/pickups/stone_door.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_door",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Floor pickup",
+			"path": "assets/items/pickups/stone_floor.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_floor",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Foundation pickup",
+			"path": "assets/items/pickups/stone_foundation.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_foundation",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Gate pickup",
+			"path": "assets/items/pickups/stone_gate.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_gate",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Hammer pickup",
+			"path": "assets/items/pickups/stone_hammer.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_hammer",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Hoe pickup",
+			"path": "assets/items/pickups/stone_hoe.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_hoe",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Path pickup",
+			"path": "assets/items/pickups/stone_path.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_path",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Patio pickup",
+			"path": "assets/items/pickups/stone_patio.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_patio",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Pickaxe pickup",
+			"path": "assets/items/pickups/stone_pickaxe.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_pickaxe",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Pillar pickup",
+			"path": "assets/items/pickups/stone_pillar.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_pillar",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Planter pickup",
+			"path": "assets/items/pickups/stone_planter.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_planter",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Railing pickup",
+			"path": "assets/items/pickups/stone_railing.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_railing",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Ramp pickup",
+			"path": "assets/items/pickups/stone_ramp.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_ramp",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Roof pickup",
+			"path": "assets/items/pickups/stone_roof.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_roof",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Stairs pickup",
+			"path": "assets/items/pickups/stone_stairs.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_stairs",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Sword pickup",
+			"path": "assets/items/pickups/stone_sword.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_sword",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Wall pickup",
+			"path": "assets/items/pickups/stone_wall.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_wall",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Stone Window pickup",
+			"path": "assets/items/pickups/stone_window.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"stone_window",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Torch pickup",
+			"path": "assets/items/pickups/torch.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"torch",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wardrobe pickup",
+			"path": "assets/items/pickups/wardrobe.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wardrobe",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Well pickup",
+			"path": "assets/items/pickups/well.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"well",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Axe pickup",
+			"path": "assets/items/pickups/wooden_axe.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_axe",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Bow pickup",
+			"path": "assets/items/pickups/wooden_bow.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_bow",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Deck pickup",
+			"path": "assets/items/pickups/wooden_deck.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_deck",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Door pickup",
+			"path": "assets/items/pickups/wooden_door.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_door",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Floor pickup",
+			"path": "assets/items/pickups/wooden_floor.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_floor",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Foundation pickup",
+			"path": "assets/items/pickups/wooden_foundation.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_foundation",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Hammer pickup",
+			"path": "assets/items/pickups/wooden_hammer.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_hammer",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Path pickup",
+			"path": "assets/items/pickups/wooden_path.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_path",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Pickaxe pickup",
+			"path": "assets/items/pickups/wooden_pickaxe.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_pickaxe",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Pillar pickup",
+			"path": "assets/items/pickups/wooden_pillar.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_pillar",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Porch pickup",
+			"path": "assets/items/pickups/wooden_porch.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_porch",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Railing pickup",
+			"path": "assets/items/pickups/wooden_railing.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_railing",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Ramp pickup",
+			"path": "assets/items/pickups/wooden_ramp.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_ramp",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Roof pickup",
+			"path": "assets/items/pickups/wooden_roof.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_roof",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Stairs pickup",
+			"path": "assets/items/pickups/wooden_stairs.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_stairs",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Sword pickup",
+			"path": "assets/items/pickups/wooden_sword.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_sword",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Table pickup",
+			"path": "assets/items/pickups/wooden_table.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_table",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Wall pickup",
+			"path": "assets/items/pickups/wooden_wall.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_wall",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Wooden Window pickup",
+			"path": "assets/items/pickups/wooden_window.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"wooden_window",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Workbench pickup",
+			"path": "assets/items/pickups/workbench.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"workbench",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Workshop Cabinet pickup",
+			"path": "assets/items/pickups/workshop_cabinet.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"workshop_cabinet",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep one centred item on transparency at exactly 32 x 32 pixels.",
+			"layout": {
+				"height": 32,
+				"kind": "sprite",
+				"width": 32
+			},
+			"name": "Yard Lantern pickup",
+			"path": "assets/items/pickups/yard_lantern.png",
+			"purpose": "World-space loot sprite shown before inventory collection.",
+			"used_for": [
+				"yard_lantern",
+				"bounce pickup"
+			]
+		},
+		{
+			"editor_note": "Keep the frame grid, facing, and transparent background.",
+			"layout": {
+				"columns": 4,
+				"frame_order": "four walking frames left to right; male row first, female row second",
+				"kind": "sprite_sheet",
+				"rows": 2
+			},
+			"name": "Explorer base walk sheet",
+			"path": "assets/characters/explorer-base-walk.png",
+			"purpose": "Player explorer appearance in regular conditions.",
+			"used_for": [
+				"player walking animation"
+			]
+		},
+		{
+			"editor_note": "Keep the frame grid, facing, and transparent background.",
+			"layout": {
+				"columns": 4,
+				"frame_order": "four walking frames left to right; male row first, female row second",
+				"kind": "sprite_sheet",
+				"rows": 2
+			},
+			"name": "Explorer storm walk sheet",
+			"path": "assets/characters/explorer-storm-walk.png",
+			"purpose": "Player explorer appearance during storm conditions.",
+			"used_for": [
+				"player storm walking animation"
+			]
+		},
+		{
+			"editor_note": "Keep the 4 by 2 grid, variant positions, and transparent background.",
+			"layout": {
+				"columns": 4,
+				"frame_order": "idle row first, movement row second; variants read left to right",
+				"kind": "sprite_sheet",
+				"rows": 2
+			},
+			"name": "Creature roster sheet",
+			"path": "assets/creatures/alien-creature-roster.png",
+			"purpose": "Creature appearance variants used by the streamed wildlife system.",
+			"used_for": [
+				"boar",
+				"wolf",
+				"deer",
+				"polar bear",
+				"alien wildlife"
+			]
+		},
+		{
+			"editor_note": "Row 0/5/7 cells are fully opaque seamless fills. In rows 1-3 col 0 is the north master and cols 1-3 are its east/south/west rotations; all other cells are reserved and must stay fully transparent. Do not add, move, or remove cells.",
+			"layout": {
+				"cell_order": "row 0 fills (foundation, floor, porch, deck); row 1 wall strip; row 2 window; row 3 door; row 4 stairs (up cols 0-3, down cols 4-7); row 5 roof/awning fills; row 6 supports; row 7 ramp",
+				"cell_size": 32,
+				"columns": 8,
+				"kind": "atlas",
+				"rows": 8
+			},
+			"name": "Structural atlas - timber",
+			"path": "assets/tiles/building/structural_wood.png",
+			"purpose": "Timber building structure cells: ground fills, wall/window/door edge strips, stairs, roof, supports, and ramp.",
+			"used_for": [
+				"timber building definitions",
+				"building placement sprites"
+			]
+		},
+		{
+			"editor_note": "Row 0/5/7 cells are fully opaque seamless fills. In rows 1-3 col 0 is the north master and cols 1-3 are its east/south/west rotations; all other cells are reserved and must stay fully transparent. Do not add, move, or remove cells.",
+			"layout": {
+				"cell_order": "row 0 fills (foundation, patio, reinforced floor); row 1 wall strip; row 2 window; row 3 door; row 4 stairs (up cols 0-3, down cols 4-7); row 5 roof fill; row 6 supports; row 7 ramp",
+				"cell_size": 32,
+				"columns": 8,
+				"kind": "atlas",
+				"rows": 8
+			},
+			"name": "Structural atlas - stone",
+			"path": "assets/tiles/building/structural_stone.png",
+			"purpose": "Stone building structure cells: ground fills, wall/window/door edge strips, stairs, roof, supports, and ramp.",
+			"used_for": [
+				"stone building definitions",
+				"building placement sprites"
+			]
+		},
+		{
+			"editor_note": "Row 0/5/7 cells are fully opaque seamless fills. Row 1 col 0 is the north master and cols 1-3 its east/south/west rotations; all other cells are reserved and must stay fully transparent. Do not add, move, or remove cells.",
+			"layout": {
+				"cell_order": "row 0 fills (foundation, floor, reinforced floor, metal grate); row 1 wall strip; row 2 reserved; row 3 reserved; row 4 stairs (up cols 0-3, down cols 4-7); row 5 roof fill; row 6 supports; row 7 ramp",
+				"cell_size": 32,
+				"columns": 8,
+				"kind": "atlas",
+				"rows": 8
+			},
+			"name": "Structural atlas - metal",
+			"path": "assets/tiles/building/structural_metal.png",
+			"purpose": "Metal building structure cells: ground fills, wall edge strips, stairs, roof, supports, and ramp.",
+			"used_for": [
+				"metal building definitions",
+				"building placement sprites"
+			]
+		},
+		{
+			"editor_note": "Each row is a 4-5 px deep top-edge strip: col 0 is the north master, cols 1-3 are its east/south/west rotations, and col 4 is a reserved corner. Strips must run the full 32 px width. Do not add, move, or remove cells.",
+			"layout": {
+				"cell_order": "row 0 fence (master col 0); row 1 gate (master col 0); row 2 railing (master col 0); row 3 reserved",
+				"cell_size": 32,
+				"columns": 8,
+				"kind": "atlas",
+				"rows": 4
+			},
+			"name": "Boundary atlas - timber",
+			"path": "assets/tiles/building/boundaries_wood.png",
+			"purpose": "Low timber boundary cells: palisade fence, palisade gate, and thin railing strip.",
+			"used_for": [
+				"fence, fence_gate, and wooden_railing definitions"
+			]
+		},
+		{
+			"editor_note": "Each populated row is a 4-5 px deep top-edge strip: col 0 is the north master, cols 1-3 are its east/south/west rotations, and col 4 is a reserved corner. Strips must run the full 32 px width. Do not add, move, or remove cells.",
+			"layout": {
+				"cell_order": "row 0 reserved (no stone fence); row 1 gate (master col 0); row 2 railing (master col 0); row 3 reserved",
+				"cell_size": 32,
+				"columns": 8,
+				"kind": "atlas",
+				"rows": 4
+			},
+			"name": "Boundary atlas - stone",
+			"path": "assets/tiles/building/boundaries_stone.png",
+			"purpose": "Stone boundary cells: dry-stone gate and thin stone railing strip (the plain stone wall is a structural part).",
+			"used_for": [
+				"stone_gate and stone_railing definitions"
+			]
+		},
+		{
+			"editor_note": "Each row is a 4-5 px deep top-edge strip: col 0 is the north master, cols 1-3 are its east/south/west rotations, and col 4 is a reserved corner. Strips must run the full 32 px width. Do not add, move, or remove cells.",
+			"layout": {
+				"cell_order": "row 0 fence (master col 0); row 1 gate (master col 0); row 2 railing (master col 0); row 3 reserved",
+				"cell_size": 32,
+				"columns": 8,
+				"kind": "atlas",
+				"rows": 4
+			},
+			"name": "Boundary atlas - metal",
+			"path": "assets/tiles/building/boundaries_metal.png",
+			"purpose": "Metal boundary cells: steel palisade fence, steel gate, and thin iron railing strip.",
+			"used_for": [
+				"metal_fence, metal_gate, and metal_railing definitions"
+			]
+		},
+		{
+			"editor_note": "Furniture cells are centred on transparency; only the rug (5,0) is an opaque ground tile. Interior cells are not orientable. Do not add, move, or remove cells.",
+			"layout": {
+				"cell_order": "row 0: (0) bed, (2) wooden table, (3) chair, (4) shelf, (5) rug, (6) wardrobe; all other cells reserved",
+				"cell_size": 32,
+				"columns": 8,
+				"kind": "atlas",
+				"rows": 4
+			},
+			"name": "Interior furniture - timber",
+			"path": "assets/tiles/building/interior_wood.png",
+			"purpose": "Timber interior furniture cells: bed, wooden table, chair, shelf, rug, and wardrobe.",
+			"used_for": [
+				"wooden interior furniture definitions"
+			]
+		},
+		{
+			"editor_note": "Furniture cells are centred on transparency. Interior cells are not orientable. Do not add, move, or remove cells.",
+			"layout": {
+				"cell_order": "row 0: (1) cabinet, (2) bookcase; all other cells reserved",
+				"cell_size": 32,
+				"columns": 8,
+				"kind": "atlas",
+				"rows": 4
+			},
+			"name": "Interior furniture - stone",
+			"path": "assets/tiles/building/interior_stone.png",
+			"purpose": "Stone interior furniture cells: cabinet and bookcase.",
+			"used_for": [
+				"stone interior furniture definitions"
+			]
+		},
+		{
+			"editor_note": "Furniture cells are centred on transparency. Interior cells are not orientable. Do not add, move, or remove cells.",
+			"layout": {
+				"cell_order": "row 0: (0) workshop cabinet, (1) metal locker; all other cells reserved",
+				"cell_size": 32,
+				"columns": 8,
+				"kind": "atlas",
+				"rows": 4
+			},
+			"name": "Interior furniture - metal",
+			"path": "assets/tiles/building/interior_metal.png",
+			"purpose": "Metal interior furniture cells: workshop cabinet and metal locker.",
+			"used_for": [
+				"metal interior furniture definitions"
+			]
+		},
+		{
+			"editor_note": "Path and crop-soil cells are fully opaque seamless ground fills; steps, planters, well, and pole are centred on transparency. Cells are not orientable. Do not add, move, or remove cells.",
+			"layout": {
+				"cell_order": "row 0 timber: (0) path, (1) steps, (2) planter; row 1 stone: (0) path, (1) well, (2) planter; row 2 metal: (1) signal pole; row 3 primitive: (0) crop soil; all other cells reserved",
+				"cell_size": 32,
+				"columns": 8,
+				"kind": "atlas",
+				"rows": 4
+			},
+			"name": "Exterior props (all tiers)",
+			"path": "assets/tiles/building/exterior_props.png",
+			"purpose": "Shared exterior ground and prop cells: per-tier paths, steps, planters, well, signal pole, and crop soil.",
+			"used_for": [
+				"exterior ground fills",
+				"steps, planters, well, and pole definitions"
+			]
+		},
+		{
+			"editor_note": "Frames are 32 x 32 and stack vertically. The chest base silhouette must stay pixel-identical across frames; only the lid changes. Keep transparent backgrounds.",
+			"layout": {
+				"cell_size": 32,
+				"columns": 1,
+				"frame_order": "top to bottom: (0) closed, (1) opening/half-open, (2) open",
+				"kind": "animation_strip",
+				"rows": 3
+			},
+			"name": "Chest state strip",
+			"path": "assets/tiles/interactables/wood_chest.png",
+			"purpose": "Lid states for the chest interactable.",
+			"used_for": [
+				"chest definition",
+				"chest_appearance profile"
+			]
+		},
+		{
+			"editor_note": "Frames are 32 x 32 and stack vertically. The stone ring must stay pixel-identical across all frames; only the flame changes. Keep transparent backgrounds.",
+			"layout": {
+				"cell_size": 32,
+				"columns": 1,
+				"frame_order": "top to bottom: (0) unlit, (1) ignition, (2) burn A, (3) burn B, (4) burn C",
+				"kind": "animation_strip",
+				"rows": 5
+			},
+			"name": "Campfire state strip",
+			"path": "assets/tiles/interactables/campfire.png",
+			"purpose": "Fuel states for the campfire: unlit, ignition, and a three-frame burn loop.",
+			"used_for": [
+				"campfire definition",
+				"campfire_appearance profile"
+			]
+		},
+		{
+			"editor_note": "Frames are 32 x 32 and stack vertically. The furnace body must stay pixel-identical across frames; only the mouth glow changes. Keep transparent backgrounds.",
+			"layout": {
+				"cell_size": 32,
+				"columns": 1,
+				"frame_order": "top to bottom: (0) cold, (1) heating, (2) lit",
+				"kind": "animation_strip",
+				"rows": 3
+			},
+			"name": "Furnace state strip",
+			"path": "assets/tiles/interactables/furnace.png",
+			"purpose": "Heat states for the furnace: cold, heating, and lit.",
+			"used_for": [
+				"furnace definition",
+				"furnace_appearance profile"
+			]
+		},
+		{
+			"editor_note": "Frames are 32 x 32 and stack vertically. The bench must stay pixel-identical across frames; only the in-use cue changes. Keep transparent backgrounds.",
+			"layout": {
+				"cell_size": 32,
+				"columns": 1,
+				"frame_order": "top to bottom: (0) idle, (1) active",
+				"kind": "animation_strip",
+				"rows": 2
+			},
+			"name": "Workbench state strip",
+			"path": "assets/tiles/interactables/workbench.png",
+			"purpose": "Use states for the workbench: idle and active.",
+			"used_for": [
+				"workbench definition",
+				"workbench_appearance profile"
+			]
+		},
+		{
+			"editor_note": "Frames are 32 x 32 and stack vertically. The socket base must stay pixel-identical across all frames; only the head flame changes. Keep transparent backgrounds.",
+			"layout": {
+				"cell_size": 32,
+				"columns": 1,
+				"frame_order": "top to bottom: (0) unlit, (1) ignition, (2) flame A, (3) flame B",
+				"kind": "animation_strip",
+				"rows": 4
+			},
+			"name": "Torch state strip",
+			"path": "assets/tiles/interactables/torch.png",
+			"purpose": "Fuel states for wall and ground torches: unlit, ignition, and a two-frame flame loop.",
+			"used_for": [
+				"torch definition",
+				"torch_appearance profile"
+			]
+		},
+		{
+			"editor_note": "As with the other state strips, the vessel silhouette must stay pixel-identical across both frames; only the ember glow changes. Keep transparent backgrounds.",
+			"layout": {
+				"cell_size": 32,
+				"columns": 1,
+				"frame_order": "top to bottom: (0) unlit, (1) lit",
+				"kind": "animation_strip",
+				"rows": 2
+			},
+			"name": "Fuelled vessel state strip (shared)",
+			"path": "assets/tiles/interactables/hearth.png",
+			"purpose": "Shared unlit/lit stone vessel presentation for hearth, brazier, yard lantern, and metal lantern.",
+			"used_for": [
+				"hearth, brazier, yard_lantern, metal_lantern definitions",
+				"fuelled_appearance profile"
+			]
+		}
+	],
+	"description": "Complete comparison skin assembled solely from PixelLab-generated terrain, prop, creature, character and animation sources.",
+	"id": "pixellab_comparison",
+	"license_note": "PixelLab generated assets; mechanically arranged only to match Wildfall texture atlas contracts.",
+	"rules": [
+		"All visual source art was generated by PixelLab.",
+		"Atlas placement and resizing are mechanical integration steps only."
+	],
+	"schema": "riftwake.texture-pack",
+	"schema_version": 2,
+	"source": "PixelLab MCP"
+}
