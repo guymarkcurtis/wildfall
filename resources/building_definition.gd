@@ -113,6 +113,17 @@ const BUILD_GROUPS := [
 ## the part is not orientable and renders from atlas_cell.
 @export var atlas_cells: Dictionary = {}
 
+## Front-elevation art for the exterior billboard projection: the cell this
+## part renders on its south-facing wall face (the building's front row)
+## when the player views the structure from the yard. The top-down atlas
+## cell above remains the fallback when this is unset, so authoring facade
+## art per part is optional and incremental.
+@export var facade_atlas_path: String = ""
+
+## [column, row] cell on facade_atlas_path; (-1, -1) = no facade art (the
+## part keeps its top-down atlas cell on the facade row).
+@export var facade_atlas_cell: Vector2i = Vector2i(-1, -1)
+
 ## Optional per-part placeholder tint; alpha 0 uses the visual family's
 ## default tint instead.
 @export var placeholder_color: Color = Color(0.0, 0.0, 0.0, 0.0)
@@ -173,6 +184,10 @@ func validate() -> Array[String]:
 		errors.append("placement_layer '%s' is not a supported layer" % placement_layer)
 	if not atlas_cells.is_empty() and atlas_path.is_empty():
 		errors.append("atlas_cells is set but atlas_path is empty")
+	if facade_atlas_cell != Vector2i(-1, -1) and facade_atlas_path.is_empty():
+		errors.append("facade_atlas_cell is set but facade_atlas_path is empty")
+	if not facade_atlas_path.is_empty() and facade_atlas_cell == Vector2i(-1, -1):
+		errors.append("facade_atlas_path is set but facade_atlas_cell is unset")
 	if not build_group.is_empty() and build_group not in BUILD_GROUPS:
 		errors.append("build_group '%s' is not one of %s (or leave it empty)" % [build_group, ", ".join(BUILD_GROUPS)])
 	for key in atlas_cells:

@@ -79,21 +79,29 @@ func _run() -> void:
 				slash_bound = str(action)
 	_check(slash_bound.is_empty(), "No input action is bound to the slash key the old help text promised")
 
-	# --- Enclosure rules. Five rooms on the all-land row y=0, four tiles
+	# --- Enclosure rules. Six rooms on the all-land row y=0, four tiles
 	# apart so no seal walk ever crosses a room boundary:
 	#   A: a fully enclosed 2x2 room                        -> sheltered
 	#   B: a walled 1x1 room without a roof                 -> not, until the roof is built
 	#   C: a walled 1x1 room with the north side open       -> not
 	#   D: a 1x1 room sealed by four doors                  -> sheltered
-	#   E: stacked foundations and a roof, but no floor     -> not
+	#   E: stacked foundations (no floor part) and a roof   -> sheltered (a foundation is a built floor surface)
+	#   F: a GROUND-LEVEL foundation house walked at story 0 -> sheltered
+	#   G: a two-story house; on the stair landing (the reserved floor
+	#      opening) the stair underfoot is the surface      -> sheltered
 	var room_a := Vector2i(6, 0)
 	var room_b := Vector2i(12, 0)
 	var room_c := Vector2i(16, 0)
 	var room_d := Vector2i(20, 0)
 	var room_e := Vector2i(24, 0)
-	player.inventory.add_item("wooden_foundation", 12)
-	player.inventory.add_item("wooden_floor", 10)
-	player.inventory.add_item("wooden_wall", 20)
+	var room_f := Vector2i(28, 0)
+	var room_g := Vector2i(32, 0)
+	player.inventory.add_item("wooden_foundation", 16)
+	player.inventory.add_item("wooden_floor", 12)
+	player.inventory.add_item("wooden_wall", 40)
+	player.inventory.add_item("wooden_door", 8)
+	player.inventory.add_item("wooden_roof", 16)
+	player.inventory.add_item("wooden_stairs", 4)
 	player.inventory.add_item("wooden_door", 6)
 	player.inventory.add_item("wooden_roof", 10)
 	# Room A: the full enclosure on two stories.
@@ -131,7 +139,8 @@ func _run() -> void:
 	_place(buildings, player, "wooden_door", room_d, 1, "south")
 	_place(buildings, player, "wooden_door", room_d, 1, "west")
 	_place(buildings, player, "wooden_roof", room_d, 2)
-	# Room E: a stacked foundation and a roof, but no floor underfoot.
+	# Room E: a stacked foundation and a roof, but no floor part — the
+	# foundation IS the built floor surface.
 	_place(buildings, player, "wooden_foundation", room_e)
 	_place(buildings, player, "wooden_foundation", room_e, 1)
 	_place(buildings, player, "wooden_wall", room_e, 1, "north")
@@ -139,6 +148,42 @@ func _run() -> void:
 	_place(buildings, player, "wooden_wall", room_e, 1, "south")
 	_place(buildings, player, "wooden_wall", room_e, 1, "west")
 	_place(buildings, player, "wooden_roof", room_e, 2)
+	# Room F: the ground-level foundation house — foundation at story 0, a
+	# door in the south wall, and a roof at story 1 (the shape a player's
+	# first house takes; the roof must cut away when they walk in).
+	_place(buildings, player, "wooden_foundation", room_f)
+	_place(buildings, player, "wooden_wall", room_f, 0, "north")
+	_place(buildings, player, "wooden_wall", room_f, 0, "east")
+	_place(buildings, player, "wooden_wall", room_f, 0, "west")
+	_place(buildings, player, "wooden_door", room_f, 0, "south")
+	_place(buildings, player, "wooden_roof", room_f, 1)
+	# Room G: the two-story house — the stairwell's landing story holds the
+	# reserved floor OPENING instead of a floor part, so standing at the top
+	# of the stairs must read the stair connector itself as the surface.
+	var stair_tile := room_g + Vector2i(1, 0)
+	for offset in [Vector2i.ZERO, Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+		_place(buildings, player, "wooden_foundation", room_g + offset)
+	for offset in [Vector2i.ZERO, Vector2i(1, 0)]:
+		_place(buildings, player, "wooden_wall", room_g + offset, 0, "north")
+	for offset in [Vector2i.ZERO, Vector2i(0, 1)]:
+		_place(buildings, player, "wooden_wall", room_g + offset, 0, "west")
+	_place(buildings, player, "wooden_wall", room_g + Vector2i(1, 0), 0, "east")
+	_place(buildings, player, "wooden_wall", room_g + Vector2i(1, 1), 0, "east")
+	_place(buildings, player, "wooden_door", room_g + Vector2i(0, 1), 0, "south")
+	_place(buildings, player, "wooden_wall", room_g + Vector2i(1, 1), 0, "south")
+	_place(buildings, player, "wooden_stairs", stair_tile, 0)
+	for offset in [Vector2i.ZERO, Vector2i(0, 1), Vector2i(1, 1)]:
+		_place(buildings, player, "wooden_floor", room_g + offset, 1)
+	for offset in [Vector2i.ZERO, Vector2i(1, 0)]:
+		_place(buildings, player, "wooden_wall", room_g + offset, 1, "north")
+	for offset in [Vector2i.ZERO, Vector2i(0, 1)]:
+		_place(buildings, player, "wooden_wall", room_g + offset, 1, "west")
+	_place(buildings, player, "wooden_wall", room_g + Vector2i(1, 0), 1, "east")
+	_place(buildings, player, "wooden_wall", room_g + Vector2i(1, 1), 1, "east")
+	_place(buildings, player, "wooden_wall", room_g + Vector2i(0, 1), 1, "south")
+	_place(buildings, player, "wooden_wall", room_g + Vector2i(1, 1), 1, "south")
+	for offset in [Vector2i.ZERO, Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+		_place(buildings, player, "wooden_roof", room_g + offset, 2)
 	_check(_place_failures == 0, "Every room piece places on its support chain (foundations, floors, edges, roofs)")
 
 	_teleport(player, room_a, 1, buildings)
@@ -147,7 +192,7 @@ func _run() -> void:
 	_check(buildings.is_player_sheltered(), "The 2x2 room shelters the east corner too (the seal walk spans the footprint)")
 	_teleport(player, room_a, 0, buildings)
 	_check(not buildings.is_player_sheltered(),
-			"Standing on the room's ground-story footprint is not indoors (natural ground has no floor)")
+			"Standing under the elevated room on its ground-story foundation is not indoors (story 0 has no walls or roof)")
 	_teleport(player, room_b, 1, buildings)
 	_check(not buildings.is_player_sheltered(),
 			"A walled room without a roof does not shelter (the ceiling is part of the enclosure)")
@@ -161,8 +206,27 @@ func _run() -> void:
 	_teleport(player, room_d, 1, buildings)
 	_check(buildings.is_player_sheltered(), "Doors count as perimeter fixtures: four doors seal the room")
 	_teleport(player, room_e, 1, buildings)
-	_check(not buildings.is_player_sheltered(),
-			"Stacked foundations and a roof without a floor underfoot do not shelter")
+	_check(buildings.is_player_sheltered(),
+			"A foundation is a built floor surface: the stacked-foundation room shelters like a floor-built one")
+	_teleport(player, room_f, 0, buildings)
+	_check(buildings.is_player_sheltered(),
+			"The ground-level foundation house shelters the player walking on its foundation at story 0")
+	var roof_f_record: BuildingRecord = buildings.get_record_at(room_f, 1, "overhead")
+	_check(roof_f_record != null, "The foundation house's roof resolves for the cutaway check")
+	if roof_f_record != null:
+		_check(not roof_f_record.node.visible,
+				"Inside the foundation house the roof cuts away instead of staying as an exterior shell")
+	_teleport(player, stair_tile, 1, buildings)
+	_check(buildings.is_player_sheltered(),
+			"Standing on the stairwell landing (the reserved floor opening) shelters: the stair is the surface underfoot")
+	var roof_g_record: BuildingRecord = buildings.get_record_at(stair_tile, 2, "overhead")
+	_check(roof_g_record != null, "The two-story house's roof resolves for the landing cutaway check")
+	if roof_g_record != null:
+		_check(not roof_g_record.node.visible,
+				"On the level-2 stair landing the roof cuts away instead of blocking the view")
+	_teleport(player, room_g + Vector2i(0, 1), 1, buildings)
+	_check(buildings.is_player_sheltered(),
+			"Away from the stairs, the level-2 floor tiles shelter as usual")
 	# Demolishing a wall while standing inside must break the shelter.
 	_teleport(player, room_a, 1, buildings)
 	_check(buildings.is_player_sheltered(), "Room A is still enclosed before the demolition check")
@@ -283,33 +347,36 @@ func _run() -> void:
 	_check(not str(info_label.text).contains("Sheltered"),
 			"The HUD info line drops Sheltered once the player is outdoors")
 
-	# --- Sandbox exemption: in survival, an upper story without a floor
-	# underfoot snaps the active story back to the ground, and the outdoor
-	# view shows each structure's full exterior shell. The sandbox exempts both:
-	# its [ / ] keys deliberately park the active story as a viewing tool,
-	# and the presentation follows that story (the interior cutaway), never
-	# the topmost layer. The player is on the outdoor tile from the HUD leg
-	# (no floor underfoot upstairs), so the survival reset would fire here
-	# if the exemption were missing.
+	# --- Sandbox parity: the sandbox exists to rehearse the real world, so
+	# it shares survival's rules: an upper story without a floor underfoot
+	# snaps the active story back to the ground, and the outdoor view shows
+	# each structure's full exterior shell rather than an active-story
+	# cutaway. The player is on the outdoor tile from the HUD leg (no floor
+	# underfoot upstairs).
 	var roof_b_record: BuildingRecord = buildings.get_record_at(room_b, 2, "overhead")
 	var floor_b_record: BuildingRecord = buildings.get_record_at(room_b, 1, "floor")
 	_check(roof_b_record != null and floor_b_record != null,
-			"The sandbox-exemption leg resolves room B's roof and floor")
+			"The sandbox-parity leg resolves room B's roof and floor")
 	if roof_b_record != null and floor_b_record != null:
 		var roof_b := roof_b_record.node
 		var floor_b := floor_b_record.node
 		_check(not buildings.has_layer_covering(outdoor, 2, "floor"),
-				"Sandbox-exemption precondition: the outdoor tile has no story-2 floor")
+				"Sandbox-parity precondition: the outdoor tile has no story-2 floor")
 		buildings.set_active_story(2)
-		for _frame in range(2):
-			await process_frame
-		_check(buildings.active_story == 2,
-				"Sandbox exemption: an upper story without a floor underfoot is not reset to the ground")
-		_check(roof_b.visible and absf(roof_b.modulate.a - 0.4) < 0.001,
-				"Sandbox presentation follows the viewed story (cutaway fade), not the exterior topmost layer")
-		_check(not floor_b.visible,
-				"Sandbox presentation hides the story below the viewed story — the cutaway is a hide, not a ghost")
-		buildings.set_active_story(0)
+		buildings._update_outdoor_story_reset()
+		_check(buildings.active_story == 0,
+				"Sandbox parity: an upper story without a floor underfoot resets to the ground, like survival")
+		_check(roof_b.visible and absf(roof_b.modulate.a - 1.0) < 0.001,
+				"Sandbox parity: the outdoor view is the exterior shell (roof at full colour), not a cutaway")
+		_check(floor_b.visible and absf(floor_b.modulate.a - 0.25) < 0.001,
+				"Sandbox parity: interior mass ghosts at 25% under the exterior shell, like survival")
+		# Back inside room B, the cutaway matches survival's interior view:
+		# the story above hides outright, the level underfoot shows in full.
+		_teleport(player, room_b, 1, buildings)
+		_check(not roof_b.visible,
+				"Sandbox parity: indoors, the ceiling above the player hides for the cutaway")
+		_check(floor_b.visible and absf(floor_b.modulate.a - 1.0) < 0.001,
+				"Sandbox parity: indoors, the level underfoot renders in full colour")
 	_finish()
 
 ## Place one part, counting failures on the class member (see the header:

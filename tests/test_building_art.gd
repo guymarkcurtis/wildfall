@@ -80,8 +80,36 @@ func _initialize() -> void:
 	_test_family_maps()
 	_test_interior_sheets()
 	_test_state_sheets()
+	_test_facade_sheet()
 	print("Building art contract: %d failures (%d checks)" % [_failures, _checks])
 	quit(_failures)
+
+## Request 6: the facade atlas — the front-elevation cells the exterior
+## billboard projection shows on south-facing wall faces.
+func _test_facade_sheet() -> void:
+	var sheet_path := "res://assets/tiles/wildfall-building-facades.png"
+	_check(_in_pack_assets(sheet_path), "The facade atlas is listed in TexturePackManager.PACK_ASSETS")
+	var img := _load_image(sheet_path)
+	_check(img != null, "The facade atlas loads")
+	if img == null:
+		return
+	_check(img.get_width() == 32 * 9 and img.get_height() == 32,
+			"The facade atlas is exactly 9 x 1 cells of 32 px (288 x 32)")
+	var order := ["wood_wall", "wood_door", "wood_window", "stone_wall", "stone_door", "stone_window", "metal_wall", "metal_door", "metal_window"]
+	for index in range(order.size()):
+		var ink := _cell_ink(img, Vector2i(index * 32, 0), Vector2i(32, 32))
+		_check(ink >= 400, "Facade cell %d (%s) carries artwork (%d px ink)" % [index, order[index], ink])
+	# Every shipped facade reference points into this sheet at the right cell.
+	var expectations := {
+		"wooden_wall": Vector2i(0, 0), "wooden_door": Vector2i(1, 0), "wooden_window": Vector2i(2, 0),
+		"stone_wall": Vector2i(3, 0), "stone_door": Vector2i(4, 0), "stone_window": Vector2i(5, 0),
+		"reinforced_wall": Vector2i(6, 0), "shuttered_window": Vector2i(8, 0),
+	}
+	for item_id in expectations:
+		var def: BuildingDefinition = _registry.definitions.get(item_id)
+		_check(def != null and str(def.facade_atlas_path) == sheet_path \
+						and def.facade_atlas_cell == expectations[item_id],
+				"%s references facade cell %s" % [item_id, str(expectations[item_id])])
 
 func _check(condition: bool, label: String) -> void:
 	_checks += 1

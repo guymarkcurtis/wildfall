@@ -1,6 +1,90 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **Facade art installed (2026-09-16):** the billboard projection's
+  south wall rows now render authored front-elevation cells: nine
+  32×32 PixelLab generations (wood/stone/metal × wall/door/window) on
+  the building atlas's palette, composed into
+  `assets/tiles/wildfall-building-facades.png`. `BuildingDefinition`
+  gained optional `facade_atlas_path`/`facade_atlas_cell` (validated as
+  a pair); `Building` shows the facade only on south-facing shell parts
+  in exterior mode — one facade row per built story under the roof cap,
+  so story count reads correctly. Texture packs can override the sheet
+  (PACK_ASSETS + manifest). Tests: `test_building_art` 701 → **721
+  checks** (sheet geometry, per-cell ink, per-definition references),
+  `test_presentation` 80 → **83** (facade visible on south walls
+  outdoors only); content 111/0, shelter 58/0, sandbox 79/0, stairs
+  40/40, game 455/455, placement/router/station/light/harvesting/
+  ground_pack/equipment all green; `--headless --editor --quit` exit 0.
+- **Billboard exterior projection (2026-09-16):** from the yard,
+  buildings now render as the Stardew-style south-facing stack:
+  `Building.EXTERIOR_STORY_OFFSET` went from the diagonal (-6, -9)
+  nudge to a full tile straight up (0, -32) per story, so the topmost
+  roof caps the structure and every story's south wall row shows as
+  that floor's front facade (south doors/windows show their own art).
+  Interior and build views keep exact top-down alignment; node
+  positions and collision never move. Facade cells still borrow the
+  top-down atlas art — dedicated elevation art is queued as
+  ART_REQUESTS request 6. Tests: the presentation suite's offset
+  assertions read the constant and carried over (80/80); shelter
+  58/58, sandbox 79/0, game 455/455.
+- **Building Sandbox shares the real-world building views (2026-09-16):**
+  a playtest found that standing outside a building in the Building
+  Sandbox still showed the interior cutaway. The sandbox had a
+  deliberate exemption from the location-aware presentation (it always
+  rendered the active-story interior focus, and its [ / ] keys parked
+  the active story outside build mode); since the yard exists to
+  rehearse survival, the exemption is gone: `_apply_presentation` now
+  runs the same sheltered/exterior/structure-scoped policy in every
+  mode, the outdoor story reset applies in the sandbox too, and the
+  sandbox-only [ / ] active-story parking keys are removed (outside
+  build mode every mode answers with the same "Enter build mode (B),
+  then press [ or ] to choose the story" hint). The sandbox-only F5
+  roof-visibility toggle stays as a build-yard inspection aid. Tests:
+  `test_shelter`'s "sandbox exemption" leg became a sandbox-parity leg
+  (upper story with no floor resets to ground outdoors; outdoors the
+  roof renders at full colour and interior mass ghosts at 0.25; indoors
+  the ceiling hides and the level underfoot renders full colour) —
+  49 → **51 checks, 51/0 green**; `test_building_sandbox` replaced the
+  two story-parking checks with one parity check — 80 → **79 checks,
+  79/0 green**; `test_presentation` 80/80, `test_building_stairs` 40/40,
+  `test_game` 455/455, and the full remaining suites re-ran green
+  (placement 88, content 111, art 701, router 42, station 42,
+  light_tiers 37, harvesting 94, ground_pack 140, equipment 39);
+  `--headless --editor --quit` exited 0 with no script errors.
+- **Foundation houses are indoors (2026-09-16, same round follow-up):**
+  the unified view exposed a shelter-detection gap: `is_player_
+  sheltered` accepted only the floor layer as "floor underfoot", so a
+  ground-level house on foundations (the normal first build) never
+  counted as indoors and its roof stayed up as an exterior shell while
+  the player stood inside. The shelter walk and the outdoor story reset
+  now share `_has_built_surface_covering` (floor OR ground layer): a
+  foundation is the ground-level floor. A three-variant debug harness
+  (floor / foundation / bare terrain underfoot) confirmed only the
+  foundation case was broken before the fix and both built shapes
+  shelter after it; bare terrain still never counts. Tests:
+  `test_shelter` gained room F (ground-level foundation house: shelter
+  + roof cutaway indoors) and room E flipped to the new contract
+  (a stacked-foundation room shelters) — 51 → **54 checks, 54/0 green**;
+  full harness re-ran green (presentation 80/80, sandbox 79/0, stairs
+  40/40, game 455/455, placement 88, content 111, art 701, router 42,
+  station 42, light_tiers 37, harvesting 94, ground_pack 140,
+  equipment 39).
+- **Stairwell landings shelter (2026-09-16, same round follow-up 2):**
+  playtesting the foundation fix found the roof returned when walking
+  up to level 2: the landing is the stair connector's reserved floor
+  OPENING, so the tile underfoot had no floor/ground record, the player
+  read as outdoors there, and the exterior shell came back until they
+  stepped off the stairs. `_has_built_surface_covering` now also
+  accepts a vertical connector whose story span includes the tile's
+  story, so the staircase itself is the surface underfoot on both of
+  its stories. Tests: `test_shelter` room G — a two-story house
+  asserting shelter plus the roof cutting away on the level-2 landing
+  and on the floor tiles beyond it — 54 → **58 checks, 58/0 green**;
+  stairs 40/40, presentation 80/80, sandbox 79/0, game 455/455,
+  placement 88, content 111, art 701, router 42, station 42,
+  light_tiers 37, harvesting 94, ground_pack 140, equipment 39;
+  `--headless --editor --quit` exited 0.
 - **Zoom toggle: backslash switches the standard 1.0x view and a
   zoomed-in 1.5x detail view (2026-09-16):**
   the current zoom stays the standard view; the new toggle (backslash)

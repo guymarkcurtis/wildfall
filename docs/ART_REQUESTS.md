@@ -167,3 +167,40 @@ inventory — two lanterns sharing one icon is a polish gap.
   new files (today they point at the borrowed icons) and
   `tests/test_light_tiers.gd` already checks both `texture_path`
   values resolve to existing assets, so the swap is harness-covered.
+
+## Request 6 — Building facade cells (south faces) [DONE 2026-09-16]
+
+The exterior presentation is now a south-facing billboard stack: each
+story rises one tile straight up, so every story's south wall row shows
+as that floor's front facade under the roof above it. Dedicated
+south-facing facade cells make buildings read as real buildings from
+the yard.
+
+Shipped 2026-09-16: nine 32×32 cells generated through the PixelLab.ai
+MCP (`create_image_pixflux`, forced 16-colour palette extracted from
+the building atlas), composed with PIL into
+`assets/tiles/wildfall-building-facades.png` (288×32, one row; the
+optional second row was dropped as unneeded — lantern mounts render
+from the existing fixture parts). Wiring: `BuildingDefinition` gained
+optional `facade_atlas_path` / `facade_atlas_cell` (validated as a
+pair), `Building` renders the facade sprite above the top-down art and
+`set_presentation` shows it only on south-facing shell parts in
+exterior mode, the sheet joined the texture-pack contract
+(`PACK_ASSETS` + stock manifest), and `test_building_art` grew 20
+facade checks (sheet geometry, per-cell ink, per-definition cell
+references) and `test_presentation` 3 checks (facade visible on south
+walls outdoors only).
+
+- **Output**: `assets/tiles/wildfall-building-facades.png`
+- **Layout**: a single transparent sheet of **32×32 px cells**, 9
+  columns × 1 row (288×32): columns 0–2 wood tier (wall, door,
+  window), columns 3–5 stone tier (wall, door, window), columns 6–8
+  metal tier (wall, door, window). Column 7 (metal door) is authored
+  ahead of a future metal door part.
+- **Style**: matched `assets/tiles/wildfall-building-parts.png` (the
+  PixelLab building atlas) palette; drawn as ELEVATION art — the front
+  of the wall seen from the yard.
+- **Consumer**: `BuildingDefinition.facade_atlas_path` +
+  `facade_atlas_cell` → `Building._definition_facade_atlas()` →
+  `_facade_sprite` (visibility in `set_presentation`); texture-pack
+  contract and harness art checks cover the sheet.

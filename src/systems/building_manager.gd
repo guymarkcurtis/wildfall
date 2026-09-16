@@ -172,19 +172,17 @@ func _update_connector_traversal() -> void:
 ## active story returns to the ground — so leaving a house from an upper
 ## floor lands the view back on the ground level. Unroofed decks and open
 ## porches keep their floor underfoot, so a balcony stays on its story and
-## only reads as outdoors. The sandbox is exempt: its [ / ] keys deliberately
-## park the active story as a viewing tool.
+## only reads as outdoors. The Building Sandbox follows the same rule on
+## purpose: its views exist to rehearse the real world's.
 func _update_outdoor_story_reset() -> void:
 	if player == null or not is_instance_valid(player):
-		return
-	if GameSession.is_building_sandbox():
 		return
 	if active_story <= 0 or _connector_under_player != null:
 		return
 	var tile := Vector2i(
 			int(floor(player.global_position.x / float(TILE_SIZE))),
 			int(floor(player.global_position.y / float(TILE_SIZE))))
-	if has_layer_covering(tile, active_story, "floor"):
+	if _has_built_surface_covering(tile, active_story):
 		return
 	set_active_story(0)
 
@@ -289,31 +287,20 @@ func _unhandled_input(event: InputEvent) -> void:
 		_demolish_at_mouse()
 		get_viewport().set_input_as_handled()
 		return
-	# Building Sandbox debug controls: the [ and ] keys move the ACTIVE story
-	# when the build palette is closed, and F5 toggles roof visibility.
-	# Never available in survival — a normal player must not phase through
-	# floors. (R/Q became building-rotation controls in M9 box 5.)
-	if GameSession.is_building_sandbox() and not build_mode:
-		if event.is_action_pressed("build_level_up"):
-			set_active_story(active_story + 1)
-			_toast("Now viewing story %d" % (active_story + 1))
-			get_viewport().set_input_as_handled()
-			return
-		if event.is_action_pressed("build_level_down"):
-			set_active_story(active_story - 1)
-			_toast("Now viewing story %d" % (active_story + 1))
-			get_viewport().set_input_as_handled()
-			return
-	elif not build_mode and (event.is_action_pressed("build_level_up")
-			or event.is_action_pressed("build_level_down")):
-		# Survival has no free story movement: say how story editing works
-		# instead of silently swallowing the press.
-		_toast("Enter build mode (B), then press [ or ] to choose the story")
-		get_viewport().set_input_as_handled()
-		return
+	# F5 toggles roof visibility in the Building Sandbox only — a build-yard
+	# inspection aid, never a different view model: every mode shares the
+	# location-aware exterior/interior presentation. (R/Q became
+	# building-rotation controls in M9 box 5.)
 	if event.is_action_pressed("toggle_roofs") and GameSession.is_building_sandbox():
 		roofs_visible = not roofs_visible
 		_apply_presentation()
+		get_viewport().set_input_as_handled()
+		return
+	if not build_mode and (event.is_action_pressed("build_level_up")
+			or event.is_action_pressed("build_level_down")):
+		# No mode has free story movement: say how story editing works
+		# instead of silently swallowing the press.
+		_toast("Enter build mode (B), then press [ or ] to choose the story")
 		get_viewport().set_input_as_handled()
 		return
 	if not build_mode:
@@ -387,9 +374,9 @@ func set_selected_story(story: int) -> void:
 	_apply_presentation()
 	build_story_changed.emit(selected_story)
 
-## Move the player between stories (connector traversal or the sandbox
-## selector). Updates the player's collision mask/render band, republishes
-## the cutaway focus, and emits for the HUD.
+## Move the player between stories (connector traversal). Updates the
+## player's collision mask/render band, republishes the cutaway focus, and
+## emits for the HUD.
 func set_active_story(story: int) -> void:
 	var next_story := clampi(story, 0, BuildingRecord.MAX_STORIES - 1)
 	if active_story == next_story:
@@ -572,16 +559,42 @@ func _sealed_in_direction(tile: Vector2i, story: int, orientation: String) -> bo
 	for _step in range(SHELTER_SEAL_DEPTH):
 		if get_record_at(current, story, "edge", orientation) != null:
 			return true
-		if not has_layer_covering(current, story, "floor"):
+		if not _has_built_surface_covering(current, story):
 			return false
 		current += delta
 	return false
 
-## True when the player stands inside an enclosed room: a floor underfoot on the
-## active story, a perimeter edge fixture in all four directions, and a
-## roof overhead one story up (the room's ceiling). Open decks, half-built
-## shelters, and natural ground never count — story-0 terrain has no floor
-## records, so a room only exists where the player placed one.
+## True when a built walkable surface covers the tile on this story: a
+## floor-layer record, a ground-layer record (a foundation is the
+## ground-level floor), or a vertical connector whose story span includes
+## this story — a stair's landing story has the reserved opening instead of
+## a floor, and standing on the staircase is standing inside the house just
+## as much as standing on either floor. The shelter walk and the outdoor
+## story reset both read this, so foundation-built houses and stairwell
+## landings are indoors exactly like floor-built ones, while bare terrain
+## never counts.
+func _has_built_surface_covering(tile: Vector2i, story: int) -> bool:
+	if has_layer_covering(tile, story, "floor") or has_layer_covering(tile, story, "ground"):
+		return true
+	for record in _record_list:
+		if record.layer != "connector" or record.definition == null \
+				or record.definition.connector_profile == null or not record.occupies_tiles():
+			continue
+		var offset: int = record.definition.connector_profile.upper_story_offset
+		if story < mini(record.story, record.story + offset) \
+				or story > maxi(record.story, record.story + offset):
+			continue
+		if tile.x >= record.tile.x and tile.x < record.tile.x + record.footprint.x \
+				and tile.y >= record.tile.y and tile.y < record.tile.y + record.footprint.y:
+			return true
+	return false
+
+## True when the player stands inside an enclosed room: a built surface
+## underfoot on the active story, a perimeter edge fixture in all four
+## directions, and a roof overhead one story up (the room's ceiling). Open
+## decks, half-built shelters, and natural ground never count — story-0
+## terrain has no floor records, so a room only exists where the player
+## placed one.
 func is_player_sheltered() -> bool:
 	if player == null or not is_instance_valid(player):
 		return false
@@ -597,7 +610,7 @@ func is_player_sheltered() -> bool:
 	return _shelter_cache_value
 
 func _compute_shelter(tile: Vector2i, story: int) -> bool:
-	if not has_layer_covering(tile, story, "floor"):
+	if not _has_built_surface_covering(tile, story):
 		return false
 	for orientation in ["north", "south", "west", "east"]:
 		if not _sealed_in_direction(tile, story, str(orientation)):
@@ -1276,10 +1289,10 @@ func _orientation_for_mouse(tile: Vector2i) -> String:
 ## standing outside a house shows its walls and roof at full colour on all
 ## stories, not its rooms. Outside any structure everything wears the
 ## exterior shell: shell parts (roofs, exterior-facing walls, fixtures) at
-## full colour on every story, interior parts ghosted. The sandbox keeps the
-## plain active-story interior focus: its [ / ] keys are an explicit viewing
-## tool, so the location-aware focus and the outdoor reset both stand down
-## there.
+## full colour on every story, interior parts ghosted. The Building Sandbox
+## shares this exact policy on purpose — its views rehearse the real
+## world's — with the sandbox-only F5 roof toggle as the one extra
+## inspection aid.
 func _apply_presentation() -> void:
 	if _exterior_dirty:
 		_rebuild_exterior_classification()
@@ -1296,9 +1309,7 @@ func _apply_presentation() -> void:
 		if record.node == null or not is_instance_valid(record.node):
 			continue
 		var shell_part := _shell_records.has(record.placement_key())
-		if GameSession.is_building_sandbox():
-			record.node.set_presentation("interior", active_story, roofs_visible, shell_part)
-		elif not sheltered:
+		if not sheltered:
 			record.node.set_presentation("exterior", 0, roofs_visible, shell_part)
 		elif structure.has(record.placement_key()):
 			record.node.set_presentation("interior", active_story, roofs_visible, shell_part)

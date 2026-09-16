@@ -28,3 +28,5 @@ atlas_cells = {
 "south": Vector2i(2, 3),
 "west": Vector2i(3, 3)
 }
+facade_atlas_path = "res://assets/tiles/wildfall-building-facades.png"
+facade_atlas_cell = Vector2i(4, 0)

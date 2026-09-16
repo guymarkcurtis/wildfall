@@ -167,7 +167,7 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - **Player Movement**: World-relative WASD (W north, A west, S south, D east) + Sprint and a short aimed Space-bar jump. Faces the pointer, which controls tool and ranged aim. Rocky ground is walkable; water retains terrain collision.
 - **Camera**: Smooth follow; `,`/`.` snap-rotate, middle-mouse free rotate, Delete resets north-up (the input map binds `reset_view` to Delete — the old "Home" note was stale), and backslash toggles the zoom: the standard 1.0x view and a zoomed-in 1.5x detail view for seeing up close (the camera keeps following the player, so the view simply magnifies around them).
 - **Ranged combat**: Face the cursor; LMB fires the wooden bow (consumes arrows).
-- **Buildings**: B opens the grouped build palette. Select an owned part, LMB places it, wheel cycles parts, F demolishes, and [ or ] selects one of four construction stories (these are the keys the help text names — the old "[ / ]" text pointed at an unbound slash and has been corrected; no action uses `/`). R/Q rotate an orientable preview; floors, objects, edges, roofs, and connectors share a layered tile model. The player moves between active stories through stairs; Building Sandbox additionally offers F5 roof visibility and [ or ] active-story recovery outside build mode. An enclosed room on the active story — a floor underfoot, a perimeter of walls/doors/windows sealing all four directions, and a roof one story up — counts as indoors and is marked "Sheltered" in the HUD. Presentation follows the player's location: outside, every structure shows its full exterior shell — the roofs and the exterior-facing walls of every story at full colour (a 3-story house reads as a 3-story house from the yard), each story's visuals offset so the stories stack as one building, with interior mass (floors, foundations, interior partitions) ghosted at 25%; inside, the cutaway is scoped to the building the player is in — only its level the player stands on shows (the roof above hides, the room's own overhead fades, every other story is hidden outright, and the HUD names the floor) — while every other building keeps its full exterior shell; leaving a building from an upper story returns the active story to the ground unless the player is still on a stair connector, and an unroofed indoor spot (open deck/balcony) reads as outdoors — the roof shows again — while the floor underfoot keeps the player on their story. Wall fixtures (torch, lantern) mount on the outside face of exterior walls, doors, and windows with their own light, and are removed with a refund when their host wall is demolished.
+- **Buildings**: B opens the grouped build palette. Select an owned part, LMB places it, wheel cycles parts, F demolishes, and [ or ] selects one of four construction stories (these are the keys the help text names — the old "[ / ]" text pointed at an unbound slash and has been corrected; no action uses `/`). R/Q rotate an orientable preview; floors, objects, edges, roofs, and connectors share a layered tile model. The player moves between active stories through stairs; Building Sandbox additionally offers an F5 roof-visibility toggle, and apart from that its building views are exactly survival's — the same location-aware exterior/interior presentation and outdoor story reset — because the yard exists to rehearse the real world. An enclosed room on the active story — a built floor surface underfoot (a floor or a foundation), a perimeter of walls/doors/windows sealing all four directions, and a roof one story up — counts as indoors and is marked "Sheltered" in the HUD. Presentation follows the player's location: outside, every structure shows its full exterior shell — the roofs and the exterior-facing walls of every story at full colour (a 3-story house reads as a 3-story house from the yard), each story's visuals offset so the stories stack as one building, with interior mass (floors, foundations, interior partitions) ghosted at 25%; inside, the cutaway is scoped to the building the player is in — only its level the player stands on shows (the roof above hides, the room's own overhead fades, every other story is hidden outright, and the HUD names the floor) — while every other building keeps its full exterior shell; leaving a building from an upper story returns the active story to the ground unless the player is still on a stair connector, and an unroofed indoor spot (open deck/balcony) reads as outdoors — the roof shows again — while the floor underfoot keeps the player on their story. Wall fixtures (torch, lantern) mount on the outside face of exterior walls, doors, and windows with their own light, and are removed with a refund when their host wall is demolished.
 - **World clock / weather / statuses**: DayNightCycle + WeatherSystem + StatusEffectSystem, shown on the HUD. Being indoors (see Buildings) outranks every cold source: snow-weather chill and the arctic-night biome chill do not apply inside an enclosed room, any slow/frozen statuses already present are cleared, and the player's movement speed ignores the weather multiplier there.
 - **World Generation**: Deterministic seed-based generation using 3 FastNoiseLite layers
 - **Chunk System**: 16×16 tile chunks, radius-3 (7×7) viewport streaming; reloads are deterministic (B3)
@@ -390,6 +390,101 @@ A 30-second headless run of the actual game also completed with 0 errors,
   an unmodified HEAD run fired the identical WG-05 failure with the
   identical anchor state, so both are pre-existing, not regressions
   from this change (full analysis in TEST_RESULTS.md).
+
+## RECENTLY COMPLETED (2026-09-16 round, facade art installed)
+
+The billboard projection's facades carried real front-elevation art:
+nine 32×32 cells (wood/stone/metal × wall/door/window) generated
+through the PixelLab.ai MCP on the building atlas's extracted palette,
+composed into `assets/tiles/wildfall-building-facades.png` (288×32).
+`BuildingDefinition` gained optional `facade_atlas_path` /
+`facade_atlas_cell` (validated as a pair); `Building` stacks the facade
+sprite above the top-down art and `set_presentation` shows it only on
+south-facing shell parts in exterior mode — so each story's south wall
+row renders as that floor's front face (door and window fronts
+included), which is what makes a multi-story building read with the
+right number of stories: one facade row per built story under the roof
+cap. Parts without facade data keep their top-down cell; texture packs
+can override the new sheet (added to `PACK_ASSETS` and the stock
+manifest). Coverage: `test_building_art` +20 facade checks (721 total),
+`test_presentation` +3 (83 total); full harness re-ran green.
+
+## RECENTLY COMPLETED (2026-09-16 round, billboard exterior projection)
+
+Playtesting the unified views found the last presentation gap: from the
+yard, a building still read as flat stacked tiles. The exterior
+projection is now the south-facing billboard stack (the Stardew-style
+look, and the "later 2.5D look" the project decisions already pointed
+at — sprites on the same grid, no iso rewrite): `Building
+.EXTERIOR_STORY_OFFSET` changed from the diagonal (-6, -9) nudge to a
+full tile straight up (0, -32) per story. The topmost roof caps the
+structure, and every story's south wall row shows in full below the
+mass above it as that floor's front facade — doors and windows on the
+south face show their own art there, and the south walls' existing
+6 px edge nudge forms a natural eave line under the roof. Interior and
+build views are untouched (exact top-down alignment); node positions
+and collision never move. Facade cells still borrow the parts' top-down
+atlas art for now — dedicated elevation art is queued as ART_REQUESTS
+request 6. Coverage: the presentation suite's offset assertions read
+the constant, so they carried over unchanged (80/80); shelter 58/58,
+sandbox 79/0, game 455/455 re-ran green.
+
+## RECENTLY COMPLETED (2026-09-16 round, sandbox shares the real-world views)
+
+A playtest reported that standing outside a building in the Building
+Sandbox still showed the inside. The sandbox had a deliberate
+exemption from the location-aware presentation — it always rendered the
+active-story interior focus, and its [ / ] keys parked the active story
+outside build mode. Since the yard exists to rehearse the real world,
+that exemption is gone:
+
+- **One presentation policy in every mode**: `BuildingManager
+  ._apply_presentation` no longer branches on the sandbox — outside an
+  enclosed room every structure wears its full exterior shell (roofs
+  and exterior-facing walls at full colour on every story, interior
+  mass ghosted at 25%), and inside, the cutaway is scoped to the
+  player's own structure exactly as in survival.
+- **The outdoor story reset applies in the sandbox too**: an upper
+  story with no floor underfoot (and no connector underfoot) returns
+  the active story to the ground on leaving a building, so the sandbox
+  cannot park the view on a story the player is not standing on.
+- **The sandbox-only [ / ] active-story parking keys are removed**:
+  outside build mode, every mode answers with the same "Enter build
+  mode (B), then press [ or ] to choose the story" hint; story editing
+  belongs to the build palette everywhere. The sandbox-only F5
+  roof-visibility toggle stays as a build-yard inspection aid.
+- **A foundation counts as a floor surface for shelter** (second
+  playtest finding): with the sandbox unified, a ground-level house
+  built the normal way — foundation underfoot, walls, a door, a roof at
+  story 1 — still showed its roof inside, because `is_player_sheltered`
+  accepted only the floor layer as "floor underfoot". The shelter walk
+  and the outdoor story reset now read a shared `_has_built_surface_
+  covering` (floor OR ground layer): a foundation is the ground-level
+  floor, so foundation-built houses are indoors exactly like
+  floor-built ones, while bare terrain still never counts. Coverage:
+  `test_shelter` gained room F (the ground-level foundation house,
+  asserting shelter plus the roof cutting away indoors) and room E's
+  expectation flipped to the new contract — 51 → **54 checks**.
+- **A stairwell landing shelters like a floor** (third playtest
+  finding): the foundation fix worked at ground level, but walking up
+  to level 2 brought the roof back — the landing is the stair's
+  reserved floor OPENING, so the tile underfoot had no surface record
+  and the player read as outdoors until stepping off the stairs.
+  `_has_built_surface_covering` now also accepts a vertical connector
+  whose story span covers the tile: standing on the staircase inside a
+  sealed house is indoors on both stories, so the roof cuts away the
+  moment the player arrives at level 2. Coverage: `test_shelter` room G
+  (a two-story house; shelter + roof cutaway asserted on the landing
+  and on the level-2 floor tiles) — 54 → **58 checks**.
+- **Coverage**: `test_shelter`'s sandbox-exemption leg became a
+  sandbox-parity leg (reset outdoors, exterior shell outdoors, hide
+  cutaway indoors) — 49 → **51 checks**; `test_building_sandbox`
+  replaced the two parking checks with one parity check — 80 → **79
+  checks**. Full harness re-run green: test_game **455/455**,
+  presentation 80/80, stairs 40/40, placement 88, content 111, art
+  701, router 42, station 42, light_tiers 37, harvesting 94,
+  ground_pack 140, equipment 39; `--headless --editor --quit` exited 0
+  (see TEST_RESULTS.md).
 
 ## RECENTLY COMPLETED (2026-09-16 round, exterior shell, wall fixtures, scoped cutaway)
 

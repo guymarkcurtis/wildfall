@@ -165,8 +165,12 @@ plus a name label and a mini health bar. Loot rolls on death.
 map tile can hold independent ground, floor, edge, object, overhead, and
 connector records across four construction stories; physical edges use stable
 canonical keys. In build mode, `[` / `]` selects the construction story,
-while stairs change the player's active story; the cutaway hides stories above
-and fades stories below. Upper stories require authored direct support.
+while stairs change the player's active story. Presentation is
+location-aware in every mode (the Building Sandbox included): outside,
+each structure shows its full exterior shell with interior mass ghosted;
+inside, the cutaway is scoped to the player's own structure — the level
+the player stands on shows in full colour and every other story hides
+outright. Upper stories require authored direct support.
 `BuildPalette` exposes owned parts, data-authored groups, rotation, story
 controls, and placement-failure feedback; it is wired under the HUD.
 `DayNightCycle` drives a `CanvasModulate`. `WeatherSystem` tints a

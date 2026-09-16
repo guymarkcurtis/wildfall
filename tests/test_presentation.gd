@@ -1,5 +1,6 @@
 ## Location-aware presentation coverage (Task G), run in SURVIVAL mode —
-## The building sandbox is exempt from the structure-scoped rules below, so the survival boot proves the full contract:
+## every mode shares the structure-scoped rules below (the Building Sandbox
+## rehearses the real world), so the survival boot proves the full contract:
 ##
 ## 1. Outside a structure the view is the structure's EXTERIOR SHELL: every
 ##    roof on every story in full colour, every exterior-facing wall (a wall
@@ -335,14 +336,27 @@ func _test_outdoor_exterior_view() -> void:
 			"Outside, the pavilion's room floor ghosts")
 	_check(absf(_pavilion_deck_floor.node.modulate.a - 0.25) < 0.001,
 			"Outside, the roofless deck's floor ghosts — mass never impersonates a roof")
-	# Per-story visual offset: each story's visuals are shifted up-left by one
-	# EXTERIOR_STORY_OFFSET step per story, so the facade reads as stacked.
+	# Per-story visual offset: each story's visuals rise one full tile per
+	# EXTERIOR_STORY_OFFSET step, so the south wall rows stack as the
+	# building's front facade under the roof (the billboard look).
 	_check(_roof_top.node.visual_offset == Building.EXTERIOR_STORY_OFFSET * 3,
 			"Outside, the story-3 roof is visually offset by three EXTERIOR_STORY_OFFSET steps")
 	_check(_floor_lower.node.visual_offset == Building.EXTERIOR_STORY_OFFSET * 1,
 			"Outside, the story-1 floor is visually offset by one EXTERIOR_STORY_OFFSET step")
 	_check(_foundation.node.visual_offset == Vector2.ZERO,
 			"Outside, the ground story has no visual offset")
+	# Billboard facades: south-facing shell parts swap their top-down cell
+	# for the authored front-elevation art, so each story's south row reads
+	# as that floor's front; every other part keeps the top-down art.
+	var south_facade: Sprite2D = _house_south_wall_s2.node.get("_facade_sprite")
+	_check(south_facade != null and south_facade.visible,
+			"Outside, the house's south wall shows its front-elevation facade")
+	var lower_facade: Sprite2D = _house_south_wall_s1.node.get("_facade_sprite")
+	_check(lower_facade != null and lower_facade.visible,
+			"Outside, the lower story's south wall shows its facade too (each story reads)")
+	var foundation_facade: Sprite2D = _foundation.node.get("_facade_sprite")
+	_check(foundation_facade == null or not foundation_facade.visible,
+			"Outside, non-south parts keep their top-down art (no facade)")
 	var info_label: Label = _hud.get("_info_label")
 	_check(info_label != null and not str(info_label.text).contains("Sheltered"),
 			"Outside, the HUD does not claim the player is sheltered")

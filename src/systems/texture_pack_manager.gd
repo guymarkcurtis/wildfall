@@ -29,6 +29,7 @@ const PACK_ASSETS: PackedStringArray = [
 	"assets/tiles/wildfall-ground-details.png",
 	"assets/tiles/wildfall-crafting-stations.png",
 	"assets/tiles/wildfall-building-parts.png",
+	"assets/tiles/wildfall-building-facades.png",
 	"assets/tiles/wildfall-building-utilities.png",
 	"assets/resources/wildfall-forage-plants.png",
 	"assets/resources/tree-large.png",
@@ -565,6 +566,15 @@ static func _asset_metadata() -> Array[Dictionary]:
 			"layout": {"kind": "atlas", "columns": 2, "rows": 9,
 					"cell_order": "wood column first, stone column second; structural types top to bottom"},
 			"editor_note": "Keep every cell at 32 x 32 and preserve the 2 by 9 layout."
+		},
+		{
+			"path": "assets/tiles/wildfall-building-facades.png",
+			"name": "Building-facade atlas",
+			"purpose": "Front-elevation cells the exterior billboard projection shows on south-facing wall faces (each story's front facade under the mass above it).",
+			"used_for": ["south facade of walls, doors, and windows per tier"],
+			"layout": {"kind": "atlas", "columns": 9, "rows": 1, "cell_size": 32,
+					"cell_order": "wood wall, wood door, wood window, stone wall, stone door, stone window, metal wall, metal door, metal window"},
+			"editor_note": "Elevation art (the front of the part seen from the yard), not top-down. Keep every cell at 32 x 32 and preserve the 9-cell order; column 7 (metal door) is authored ahead of a future metal door part."
 		},
 		{
 			"path": "assets/tiles/wildfall-building-utilities.png",

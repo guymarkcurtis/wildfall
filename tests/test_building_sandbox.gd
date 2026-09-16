@@ -220,22 +220,17 @@ func _run() -> void:
 	await process_frame
 	_check(buildings.selected_story == 0, "[ moves the palette's selected story back down")
 	buildings.set_build_mode(false)
+	# Sandbox parity: the yard rehearses the real world, so outside build
+	# mode no key moves the player's story — story editing belongs to the
+	# build palette exactly as in survival (the press answers with the same
+	# "Enter build mode" hint).
 	_press_key("build_level_up")
 	for _frame in range(20):
 		await process_frame
-		if buildings.active_story == 1:
-			break
 	_release_key("build_level_up")
 	await process_frame
-	_check(buildings.active_story == 1, "] moves the player up a story outside build mode")
-	_press_key("build_level_down")
-	for _frame in range(20):
-		await process_frame
-		if buildings.active_story == 0:
-			break
-	_release_key("build_level_down")
-	await process_frame
-	_check(buildings.active_story == 0, "[ brings the player back to the ground story")
+	_check(buildings.active_story == 0,
+			"] outside build mode never moves the player's story (sandbox shares survival's build-mode-only story editing)")
 	# M10 release playtest: construct each promised sandbox layout through the
 	# same data-driven placement API used by the player. This is deliberately a
 	# compact structural smoke rather than a second catalogue list: it proves

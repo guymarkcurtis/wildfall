@@ -49,17 +49,25 @@ const EDGE_VISUAL_OFFSET: float = 6.0
 ## How far a wall fixture's art hangs past its wall face: a wall nudges 6 px
 ## toward its edge, a fixture mounted on that face sits just outside it.
 const FIXTURE_VISUAL_OFFSET: float = 12.0
-## Per-story visual offset in the EXTERIOR presentation only: each story's
-## parts shift up-left by one step per story, so a multi-storey building
-## reads as stacked mass from outside while interior and build views keep
-## their exact top-down alignment. Node position and collision never move.
-const EXTERIOR_STORY_OFFSET := Vector2(-6.0, -9.0)
+## Per-story visual offset in the EXTERIOR presentation: each story's parts
+## rise one full tile straight up per story — a south-facing billboard
+## projection (the Stardew-style building look). The topmost roof caps the
+## structure, and every story's south wall row shows in full below the mass
+## above it as that floor's front facade (doors and windows on the south
+## face show their own art there). Node position and collision never move;
+## interior and build views keep their exact top-down alignment.
+const EXTERIOR_STORY_OFFSET := Vector2(0.0, -TILE_SIZE)
 ## Cosmetic lights outside this radius cannot affect the active view, so they
 ## stay disabled without needing a per-light manager scan.
 const LIGHT_CULL_RADIUS_PX: float = 960.0
 
 var _body: Polygon2D = null
 var _part_sprite: Sprite2D = null
+## Front-elevation sprite for the exterior billboard projection (the
+## part's facade_atlas art on its south-facing wall face). Created only
+## for parts whose definition ships facade art; visibility is owned by
+## set_presentation (exterior shell parts facing south only).
+var _facade_sprite: Sprite2D = null
 var _appearance_sprite: Sprite2D = null
 var _appearance_state: String = ""
 ## Position within the current state's frame strip (0-based). Looping states
@@ -162,6 +170,18 @@ func _setup_visuals() -> void:
 		_part_sprite.region_rect = Rect2(float(atlas["cell"].x) * TILE_SIZE, float(atlas["cell"].y) * TILE_SIZE, TILE_SIZE, TILE_SIZE)
 		_part_sprite.texture = TexturePackManager.get_texture(atlas["path"])
 		add_child(_part_sprite)
+	# The facade sprite stacks above the top-down art: exterior mode swaps
+	# the south-facing shell face to the authored front elevation, every
+	# other view keeps the top-down cell.
+	var facade := _definition_facade_atlas()
+	if not facade.is_empty():
+		_facade_sprite = Sprite2D.new()
+		_facade_sprite.position = Vector2(TILE_SIZE, TILE_SIZE) * 0.5 + edge_offset
+		_facade_sprite.region_enabled = true
+		_facade_sprite.region_rect = Rect2(float(facade["cell"].x) * TILE_SIZE, float(facade["cell"].y) * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+		_facade_sprite.texture = TexturePackManager.get_texture(facade["path"])
+		_facade_sprite.visible = false
+		add_child(_facade_sprite)
 
 	_label = Label.new()
 	_label.text = "%s  L%d" % [display_name, story + 1]
@@ -190,6 +210,10 @@ func reload_visual_texture() -> void:
 		var atlas := _definition_atlas()
 		if not atlas.is_empty():
 			_part_sprite.texture = TexturePackManager.get_texture(atlas["path"])
+	if _facade_sprite != null and definition != null:
+		var facade := _definition_facade_atlas()
+		if not facade.is_empty():
+			_facade_sprite.texture = TexturePackManager.get_texture(facade["path"])
 	if _appearance_sprite != null and definition != null and definition.appearance_profile != null:
 		_appearance_sprite.texture = TexturePackManager.get_texture(definition.appearance_profile.sheet_path)
 
@@ -449,6 +473,18 @@ func _definition_atlas() -> Dictionary:
 		return {}
 	return {"path": path, "cell": cell}
 
+## The authored front-elevation reference for this part, or {} when it has
+## no facade art (no definition, no cell, or the sheet is missing). Same
+## data-driven contract as _definition_atlas.
+func _definition_facade_atlas() -> Dictionary:
+	if definition == null:
+		return {}
+	var path := str(definition.get("facade_atlas_path"))
+	var cell: Vector2i = definition.get("facade_atlas_cell")
+	if path.is_empty() or cell == Vector2i(-1, -1) or not FileAccess.file_exists(path):
+		return {}
+	return {"path": path, "cell": cell}
+
 ## Placeholder tint: the part's optional per-part override color when authored,
 ## otherwise its visual family's tint, otherwise the neutral default.
 func _placeholder_color() -> Color:
@@ -497,8 +533,8 @@ func _render_band() -> int:
 
 ## Reposition the visual children around their setup-time base positions by
 ## `offset`. Only the exterior presentation passes a non-zero value (one
-## EXTERIOR_STORY_OFFSET step per story — up-left, a cheap "viewed from the
-## southeast" stack); interior and build views pass zero. The node position
+## EXTERIOR_STORY_OFFSET step per story — straight up, the south-facing
+## billboard stack); interior and build views pass zero. The node position
 ## and collision never move, so movement rules are untouched.
 func set_visual_offset(offset: Vector2) -> void:
 	visual_offset = offset
@@ -520,10 +556,17 @@ func set_visual_offset(offset: Vector2) -> void:
 ##                full colour on ALL stories so a multi-storey build reads
 ##                as mass, while interior parts ghost at ~25% (orientation
 ##                only). Each story's visuals shift by one
-##                EXTERIOR_STORY_OFFSET step per story; node position and
+##                EXTERIOR_STORY_OFFSET step per story (one tile straight
+##                up, the south-facing billboard stack); node position and
 ##                collision stay grid-anchored in every mode.
 func set_presentation(mode: String, focus_story: int, roofs_visible: bool = true, shell_part: bool = false) -> void:
 	set_visual_offset(EXTERIOR_STORY_OFFSET * story if mode == "exterior" else Vector2.ZERO)
+	# The front elevation shows only from outside, only on shell parts that
+	# face the viewer (the south wall row — each story's front facade under
+	# the mass above it). Every other mode keeps the top-down art.
+	if _facade_sprite != null:
+		_facade_sprite.visible = mode == "exterior" and shell_part \
+				and layer == "edge" and orientation == "south"
 	match mode:
 		"build":
 			var delta := story - focus_story
