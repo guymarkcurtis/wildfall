@@ -69,6 +69,11 @@ func _load_items() -> void:
 	
 	# Building materials
 	items["torch"] = _create_item("torch", "Torch", "building", 32, 0.2)
+	# Wall-mounted light fixtures: they attach to the outside face of an
+	# exterior wall (the "fixture" placement layer) instead of standing on the
+	# ground, and cast the same light as their handheld/placed counterparts.
+	items["wall_torch"] = _create_item("wall_torch", "Wall Torch", "building", 8, 0.3)
+	items["wall_lantern"] = _create_item("wall_lantern", "Wall Lantern", "building", 8, 1.0)
 	items["wooden_foundation"] = _create_item("wooden_foundation", "Wood Foundation", "building", 32, 2.0)
 	items["wooden_floor"] = _create_item("wooden_floor", "Wood Floor", "building", 32, 1.5)
 	items["wooden_wall"] = _create_item("wooden_wall", "Wooden Wall", "building", 16, 2.0)
@@ -202,6 +207,16 @@ func _load_items() -> void:
 		# The iron lantern borrows the metal lantern building icon until its
 		# dedicated pickup art ships (see the stone lantern note above).
 		iron_lantern_item.texture_path = "res://assets/items/pickups/metal_lantern.png"
+	var wall_torch_item := get_item("wall_torch")
+	if wall_torch_item != null:
+		# The wall torch borrows the torch pickup icon (a torch silhouette
+		# reads at 32 px) until dedicated fixture art ships.
+		wall_torch_item.texture_path = "res://assets/items/pickups/torch.png"
+	var wall_lantern_item := get_item("wall_lantern")
+	if wall_lantern_item != null:
+		# The wall lantern borrows the yard lantern icon (see the stone
+		# lantern note above) until dedicated fixture art ships.
+		wall_lantern_item.texture_path = "res://assets/items/pickups/yard_lantern.png"
 
 ## Load all recipe definitions.
 func _load_recipes() -> void:
@@ -318,6 +333,18 @@ func _load_recipes() -> void:
 		"plank": 1,
 		"charcoal": 1,
 		"fibre": 1
+	})
+	# Wall-mounted light fixtures. The wall torch is a primitive (ungated)
+	# craft; the wall lantern is a wood-tier workbench craft, mirroring the
+	# yard lantern's cost.
+	recipes["wall_torch"] = _create_recipe("wall_torch", "wall_torch", 1, "", {
+		"plank": 1,
+		"charcoal": 1,
+		"fibre": 1
+	})
+	recipes["wall_lantern"] = _create_recipe("wall_lantern", "wall_lantern", 1, "workbench", {
+		"plank": 2,
+		"charcoal": 1
 	})
 	# Handheld light tiers: the stone lantern is a workbench craft gated by
 	# stone research, the iron lantern by metalworking. Craft times scale
@@ -526,7 +553,7 @@ func _load_recipes() -> void:
 		"wooden_foundation", "wooden_floor", "wooden_wall", "wooden_window",
 		"wooden_door", "wooden_roof", "wooden_stairs", "wooden_stairs_down", "wooden_ramp", "wooden_pillar",
 		"fence", "fence_gate", "wooden_railing", "wooden_porch", "wooden_deck",
-		"wooden_path", "planter_box", "wooden_table", "yard_lantern",
+		"wooden_path", "planter_box", "wooden_table", "yard_lantern", "wall_lantern",
 		"chair", "shelf", "rug", "wardrobe", "steps", "awning", "corner_post"
 	], "wood_building")
 	_set_recipe_technology([

@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="BuildingDefinition" format=3]
+
+[ext_resource type="Resource" path="res://data/interactables/fuel_burnable.tres" id="1_fuel"]
+[ext_resource type="Resource" path="res://data/interactables/interaction_use.tres" id="2_interaction"]
+[ext_resource type="Resource" path="res://data/interactables/light_torch.tres" id="3_light"]
+[ext_resource type="Resource" path="res://data/interactables/fuelled_appearance.tres" id="4_appearance"]
+[ext_resource type="Script" path="res://resources/building_definition.gd" id="5_def"]
+
+[resource]
+script = ExtResource("5_def")
+id = "wall_lantern"
+display_name = "Wall Lantern"
+part_type = "fixture"
+build_group = "exterior"
+technology_id = "wood_building"
+requires_lower_support = false
+build_cost = Array[Dictionary]([{
+"item_id": "plank",
+"quantity": 2
+}, {
+"item_id": "charcoal",
+"quantity": 1
+}])
+max_health = 55
+allowed_orientations = PackedStringArray("north", "east", "south", "west")
+visual_family_id = "wood"
+interaction_profile = ExtResource("2_interaction")
+fuel_profile = ExtResource("1_fuel")
+light_profile = ExtResource("3_light")
+appearance_profile = ExtResource("4_appearance")

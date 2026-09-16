@@ -15,7 +15,7 @@ extends RefCounted
 const DEFAULT_BUILDINGS_DIR := "res://data/buildings"
 const DEFAULT_PROFILES_DIR := "res://data/interactables"
 
-const PLACEMENT_LAYERS := ["ground", "floor", "edge", "object", "overhead", "connector"]
+const PLACEMENT_LAYERS := ["ground", "floor", "edge", "fixture", "object", "overhead", "connector"]
 
 var definitions: Dictionary = {} # id -> BuildingDefinition
 var definition_paths: Dictionary = {} # id -> res:// path

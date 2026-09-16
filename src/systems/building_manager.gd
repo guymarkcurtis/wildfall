@@ -15,7 +15,7 @@ const CRAFTING_STATION_RANGE := 72.0
 const MAX_VISIBLE_LOCAL_LIGHTS := 32
 
 ## Deterministic lookup priority for the ambiguous tile+story query.
-const LAYER_QUERY_PRIORITY := ["object", "connector", "floor", "ground", "edge", "overhead"]
+const LAYER_QUERY_PRIORITY := ["object", "connector", "floor", "ground", "edge", "fixture", "overhead"]
 
 var records: Dictionary = {} # canonical key -> BuildingRecord (shared per footprint)
 var _record_list: Array[BuildingRecord] = [] # authoritative iteration set
@@ -50,13 +50,25 @@ var _shelter_cache_key := ""
 var _shelter_cache_value := false
 var _shelter_dirty := true
 
-## Per-column topmost occupied story: tile column "<x>:<y>" -> highest
-## story any record reaches there. This is the exterior presentation's
-## focus — the layer the player sees when standing outside (usually the
-## roof, whatever the topmost layer is), keyed per column so each
-## structure shows its own top, not the world's highest.
-var _top_story_by_column: Dictionary = {}
-var _top_stories_dirty := true
+## Per-story occupancy of tile cells ("<story>:<x>:<y>" -> true) plus the
+## exterior shell classification derived from it: the records a viewer
+## outside a structure sees — every roof, and every wall/fixture whose face
+## is not backed by built-up space on that story (see
+## _rebuild_exterior_classification). Rebuilt only when the record set
+## changes, so the per-frame path never scans it.
+var _occupied_cells: Dictionary = {}
+var _shell_records: Dictionary = {}
+var _exterior_dirty := true
+
+## The connected structure the player currently stands in — the interior
+## cutaway follows only this component, not every building in the world.
+## Cached against a cheap signature (player tile + story + the anchor
+## record they touch) and the record generation, so walking between
+## adjacent structures re-keys the view without a per-frame BFS.
+var _player_structure: Dictionary = {}
+var _structure_signature := ""
+var _structure_generation := -1
+var _record_generation := 0
 
 ## The presentation mode the building nodes were last republished in, so a
 ## doorway crossing (sheltered <-> not) republishes without waiting for a
@@ -176,16 +188,23 @@ func _update_outdoor_story_reset() -> void:
 		return
 	set_active_story(0)
 
-## Presentation follows the shelter state, not only the story: the moment
-## the player crosses a doorway — or a roof is built or removed — the
-## cutaway switches between the interior view (the level the player is on)
-## and the exterior view (each structure's topmost layer) without waiting
-## for the next placement.
+## Presentation follows the shelter state AND the structure the player
+## stands in: the moment they cross a doorway, walk between adjacent
+## structures, or a roof is built or removed, the cutaway re-keys between
+## the interior view (the level the player is on) and the exterior shell
+## view without waiting for the next placement.
 func _sync_sheltered_presentation() -> void:
 	if player == null or not is_instance_valid(player):
 		return
 	var sheltered := is_player_sheltered()
-	if sheltered != _presentation_sheltered:
+	var signature := _player_structure_signature()
+	# Do NOT pre-write `_structure_signature` here: the BFS cache inside
+	# `_compute_player_structure` compares against it, so writing the new
+	# signature first would make every walk between two structures a cache
+	# hit and the cutaway would never re-key until a record changed. The
+	# compute step owns the write; it runs only when the signature (or the
+	# record generation) actually differs.
+	if sheltered != _presentation_sheltered or signature != _structure_signature:
 		_presentation_sheltered = sheltered
 		_apply_presentation()
 
@@ -484,12 +503,14 @@ func get_all_buildings() -> Array:
 func get_record_for_key(key: String) -> BuildingRecord:
 	return records.get(key) as BuildingRecord
 
-## Record on a specific layer/edge at a tile+story. Edge orientations are
-## normalized through the canonical key, so "east" finds the record placed
-## from the neighbouring tile's "west".
+## Record on a specific layer/edge at a tile+story. Edge and fixture
+## orientations are normalized through their canonical keys, so "east"
+## finds the record placed from the neighbouring tile's "west".
 func get_record_at(tile: Vector2i, story: int, layer: String, orientation: String = "") -> BuildingRecord:
 	if layer == "edge":
 		return records.get(BuildingRecord.canonical_edge_key(tile, story, orientation)) as BuildingRecord
+	if layer == "fixture":
+		return records.get(BuildingRecord.canonical_fixture_key(tile, story, orientation)) as BuildingRecord
 	return records.get(BuildingRecord.tile_key(tile, story, layer)) as BuildingRecord
 
 ## Ambiguous tile+story query (compatibility): the topmost record by the
@@ -583,55 +604,138 @@ func _compute_shelter(tile: Vector2i, story: int) -> bool:
 			return false
 	return has_layer_covering(tile, story + 1, "overhead")
 
-## Rebuild the per-column topmost-story table from the live record list.
-## Tile parts contribute their story to every footprint cell; edge parts
-## contribute to their (normalised) anchor column. Cheap: placement-sized
-## data, rebuilt only when the record set changes.
-func _rebuild_column_top_stories() -> void:
-	_top_story_by_column.clear()
+## Rebuild the two tables the exterior presentation reads: per-story
+## tile-cell occupancy, and the shell classification. A record is part of
+## the shell a viewer outside the structure sees when it is a roof (always —
+## a roof is the exterior answer to "how tall is this structure?") or an
+## edge/fixture
+## part whose wall face is not backed by built-up space on that story. An
+## edge whose spanned tiles are BOTH occupied is an interior partition: it
+## stays ghosted even from outside. A freestanding wall (one or zero
+## spanned tiles occupied) is shell — an unfinished house shows exactly what
+## exists. Tile layers are mass, not skin: they never join the shell.
+func _rebuild_exterior_classification() -> void:
+	_occupied_cells.clear()
 	for record in _record_list:
-		if record.layer == "edge":
-			var key := "%d:%d" % [record.tile.x, record.tile.y]
-			if not _top_story_by_column.has(key):
-				_top_story_by_column[key] = record.story
-			else:
-				_top_story_by_column[key] = maxi(int(_top_story_by_column[key]), record.story)
-		elif record.occupies_tiles():
-			for dx in range(record.footprint.x):
-				for dy in range(record.footprint.y):
-					var cell := record.tile + Vector2i(dx, dy)
-					var key := "%d:%d" % [cell.x, cell.y]
-					if not _top_story_by_column.has(key):
-						_top_story_by_column[key] = record.story
-					else:
-						_top_story_by_column[key] = maxi(int(_top_story_by_column[key]), record.story)
-	_top_stories_dirty = false
-
-## The exterior focus for one placed part: the highest story its footprint
-## reaches (its anchor column for an edge part). A structure that only ever
-## touches the ground reports 0, so its parts stay at full colour from
-## outside — the topmost layer shown is whatever the structure actually has.
-func top_story_for(record: BuildingRecord) -> int:
-	if _top_stories_dirty:
-		_rebuild_column_top_stories()
-	var best := -1
-	if record.layer == "edge":
-		best = maxi(best, int(_top_story_by_column.get("%d:%d" % [record.tile.x, record.tile.y], 0)))
-	elif record.occupies_tiles():
+		if not record.occupies_tiles():
+			continue
 		for dx in range(record.footprint.x):
 			for dy in range(record.footprint.y):
-				var cell := record.tile + Vector2i(dx, dy)
-				best = maxi(best, int(_top_story_by_column.get("%d:%d" % [cell.x, cell.y], 0)))
-	else:
-		best = record.story
-	return best
+				_occupied_cells["%d:%d:%d" % [record.story, record.tile.x + dx, record.tile.y + dy]] = true
+	_shell_records.clear()
+	for record in _record_list:
+		match record.layer:
+			"overhead":
+				_shell_records[record.placement_key()] = true
+			"edge", "fixture":
+				var spanned := BuildingRecord.edge_span_tiles(record.tile, record.orientation)
+				if not _occupied_cells.has("%d:%d:%d" % [record.story, spanned[0].x, spanned[0].y]) \
+						or not _occupied_cells.has("%d:%d:%d" % [record.story, spanned[1].x, spanned[1].y]):
+					_shell_records[record.placement_key()] = true
+	_exterior_dirty = false
 
-## Record changes invalidate the per-tile shelter answer AND the per-column
-## topmost-story cache, so a standing player is re-evaluated the moment a
-## wall, door, or roof is built or demolished.
+## Live (lazily rebuilt) occupancy of one tile cell on one story.
+func _cell_occupied(tile: Vector2i, story: int) -> bool:
+	if _exterior_dirty:
+		_rebuild_exterior_classification()
+	return _occupied_cells.has("%d:%d:%d" % [story, tile.x, tile.y])
+
+## The connected structure the player currently stands in (G4): BFS over the
+## placed records, seeded by the records touching the player's
+## (tile, story). Records are adjacent when their spanned cells are equal
+## or orthogonally touching on the same story, or the same cell directly
+## above/below. Deliberate about over-merging: adjacent single-storey sheds
+## read as one structure — far better than opening two buildings at once.
+## Cached against (signature, record generation); returns {} when the
+## player is null or stands in open ground.
+func _compute_player_structure() -> Dictionary:
+	if player == null or not is_instance_valid(player):
+		return {}
+	var signature := _player_structure_signature()
+	if signature == _structure_signature and _structure_generation == _record_generation:
+		return _player_structure
+	_structure_signature = signature
+	_structure_generation = _record_generation
+	_player_structure = {}
+	var tile := Vector2i(
+			int(floor(player.global_position.x / float(TILE_SIZE))),
+			int(floor(player.global_position.y / float(TILE_SIZE))))
+	var touching := _records_touching(tile, active_story)
+	if touching.is_empty():
+		return _player_structure
+	var queue: Array[BuildingRecord] = []
+	for record in touching:
+		_player_structure[record.placement_key()] = record
+		queue.append(record)
+	while queue.size() > 0:
+		var current: BuildingRecord = queue.pop_front()
+		var current_cells := _record_span_cells(current)
+		for neighbour in _record_list:
+			if neighbour == current or _player_structure.has(neighbour.placement_key()):
+				continue
+			var story_delta := absi(neighbour.story - current.story)
+			if story_delta > 1:
+				continue
+			if _cells_touch(current_cells, _record_span_cells(neighbour), story_delta == 0):
+				_player_structure[neighbour.placement_key()] = neighbour
+				queue.append(neighbour)
+	return _player_structure
+
+## The cells a record binds into the player's structure: every footprint
+## cell for tile layers; for an edge/fixture part only the spanned cells
+## that are actually built up. Counting a wall's open far side would let
+## two structures across a yard gap merge through the gap — their facing
+## exterior walls' far cells sit adjacent — so a wall binds only the side
+## it is built on (both sides for an interior partition, none for a
+## freestanding one).
+func _record_span_cells(record: BuildingRecord) -> Array[Vector2i]:
+	if record.layer == "edge" or record.layer == "fixture":
+		var cells: Array[Vector2i] = []
+		for cell in BuildingRecord.edge_span_tiles(record.tile, record.orientation):
+			if _cell_occupied(cell, record.story):
+				cells.append(cell)
+		return cells
+	var plain: Array[Vector2i] = []
+	if record.occupies_tiles():
+		for dx in range(record.footprint.x):
+			for dy in range(record.footprint.y):
+				plain.append(record.tile + Vector2i(dx, dy))
+	return plain
+
+## True when two record spans meet: the same cell (adjacent on the same
+## story, or directly above/below), or orthogonally touching cells on the
+## same story.
+func _cells_touch(a: Array[Vector2i], b: Array[Vector2i], same_story: bool) -> bool:
+	for cell_a in a:
+		for cell_b in b:
+			var diff := cell_a - cell_b
+			if diff == Vector2i.ZERO:
+				return true
+			if same_story and absi(diff.x) + absi(diff.y) == 1:
+				return true
+	return false
+
+## The cheap per-frame signature of the player's structure anchor: their
+## tile and story plus the first record they touch. A record change is
+## caught separately by the record generation counter.
+func _player_structure_signature() -> String:
+	if player == null or not is_instance_valid(player):
+		return ""
+	var tile := Vector2i(
+			int(floor(player.global_position.x / float(TILE_SIZE))),
+			int(floor(player.global_position.y / float(TILE_SIZE))))
+	var touching := _records_touching(tile, active_story)
+	var anchor := "-" if touching.is_empty() else str(touching[0].placement_key())
+	return "%d:%d:%d|%s" % [tile.x, tile.y, active_story, anchor]
+
+## Record changes invalidate the per-tile shelter answer AND the exterior
+## shell tables, so a standing player is re-evaluated the moment a wall,
+## door, roof, or fixture is built or demolished. The generation counter
+## also invalidates the cached player-structure component.
 func _invalidate_record_caches() -> void:
 	_shelter_dirty = true
-	_top_stories_dirty = true
+	_exterior_dirty = true
+	_record_generation += 1
 
 # --- Placement ---
 
@@ -828,6 +932,10 @@ func _placement_failure_for(item_id: String, tile: Vector2i, story: int, orienta
 				and str(existing.definition.occupancy_replacement) == "none":
 			continue # the fixture will replace this wall
 		return "That slot is already occupied"
+	if probe.layer == "fixture":
+		var fixture_reason := _fixture_edge_failure(tile, story, resolved_orientation)
+		if fixture_reason != "":
+			return fixture_reason
 	if story == 0 and probe.layer == "ground" and not _terrain_is_buildable(tile):
 		return "Foundations need solid land, not water"
 	if story > 0 and bool(definition.requires_lower_support) and not _support_ok(probe):
@@ -835,6 +943,19 @@ func _placement_failure_for(item_id: String, tile: Vector2i, story: int, orienta
 		if required.is_empty():
 			return "Upper stories need a placed part directly below"
 		return "Upper stories need %s support directly below" % ", ".join(required)
+	return ""
+
+## The exact wall-fixture placement failures, or "" when the fixture would
+## mount: the physical edge must already hold a wall, door, or window, and
+## it must face outside the built structure (an edge whose spanned tiles
+## are both built up is an interior partition). The build ghost paints the
+## same two failures red through this same helper.
+func _fixture_edge_failure(tile: Vector2i, story: int, orientation: String) -> String:
+	if get_record_at(tile, story, "edge", orientation) == null:
+		return "Wall fixtures mount on a wall, door, or window edge"
+	var spanned := BuildingRecord.edge_span_tiles(tile, orientation)
+	if _cell_occupied(spanned[0], story) and _cell_occupied(spanned[1], story):
+		return "That wall faces inside the building — fixtures mount on its outside"
 	return ""
 
 ## Orientation resolved against the definition: non-orientable parts always
@@ -900,7 +1021,7 @@ func _rebuild_ghost(item_id: String, orientation: String, story: int) -> void:
 		var cell := entry["tile"] as Vector2i
 		var marker_story := int(entry["story"])
 		var marker := Polygon2D.new()
-		if layer == "edge":
+		if layer == "edge" or layer == "fixture":
 			marker.polygon = _edge_strip_polygon(str(entry["side"]))
 		else:
 			marker.polygon = PackedVector2Array([
@@ -957,11 +1078,15 @@ func _update_ghost_colors(tile: Vector2i) -> void:
 			int(marker.position.y / float(TILE_SIZE)))
 		var cell := tile + delta
 		var key := ""
+		var edge_failure := ""
 		if layer == "edge":
 			key = BuildingRecord.canonical_edge_key(cell, marker_story, str(marker.get_meta("ghost_side", "north")))
+		elif layer == "fixture":
+			key = BuildingRecord.canonical_fixture_key(cell, marker_story, str(marker.get_meta("ghost_side", "north")))
+			edge_failure = _fixture_edge_failure(cell, marker_story, str(marker.get_meta("ghost_side", "north")))
 		else:
 			key = BuildingRecord.tile_key(cell, marker_story, layer)
-		var occupied := get_record_for_key(key) != null
+		var occupied := get_record_for_key(key) != null or edge_failure != ""
 		var unsupported := marker_story > 0 and definition != null \
 				and bool(definition.requires_lower_support) \
 				and not _cell_supported(definition, tile + delta, marker_story)
@@ -996,6 +1121,17 @@ func _remove_record(record: BuildingRecord, refund: bool, refund_to: InventoryCo
 	if record.node != null and is_instance_valid(record.node):
 		record.node.queue_free()
 	record.node = null
+	# A wall that loses its edge (demolished — the edge key is now free)
+	# takes the fixtures mounted on that edge with it, refunded like any
+	# demolished part. An edge that is merely REPLACED (a door over a wall)
+	# keeps its fixtures: the replacement already owns the edge key.
+	if record.layer == "edge":
+		var wall_key := BuildingRecord.canonical_edge_key(record.tile, record.story, record.orientation)
+		if not records.has(wall_key):
+			var mounted := records.get(BuildingRecord.canonical_fixture_key(record.tile, record.story, record.orientation)) as BuildingRecord
+			if mounted != null:
+				_remove_record(mounted, refund, refund_to)
+				return
 	_apply_presentation()
 
 ## F demolishes whatever the mouse points at, always taking the TOPMOST
@@ -1027,28 +1163,31 @@ func _demolish_top_at_tile(tile: Vector2i) -> bool:
 	return true
 
 ## Every record occupying one tile on one story: cell-anchored layers plus
-## the edge records on the tile's four sides (walls between cells).
+## the edge and fixture records on the tile's four sides (walls and the
+## fixtures mounted on them, between cells).
 func _records_touching(tile: Vector2i, story: int) -> Array[BuildingRecord]:
 	var found: Array[BuildingRecord] = []
 	for layer in LAYER_QUERY_PRIORITY:
-		if layer == "edge":
+		if layer == "edge" or layer == "fixture":
 			continue
 		var record := get_record_at(tile, story, layer)
 		if record != null and not found.has(record):
 			found.append(record)
 	# A wall's canonical key is the NORTH/WEST edge of an anchor tile, so the
 	# south edge of `tile` is the north edge of the tile below, and the east
-	# edge is the west edge of the tile to the right.
+	# edge is the west edge of the tile to the right. Fixtures share a wall's
+	# physical edge, so both layers query the same four canonical sides.
 	var edge_queries := [
 		[tile, "north"],
 		[tile + Vector2i(0, 1), "north"],
 		[tile, "west"],
 		[tile + Vector2i(1, 0), "west"],
 	]
-	for query in edge_queries:
-		var record := get_record_at(query[0], story, "edge", query[1])
-		if record != null and not found.has(record):
-			found.append(record)
+	for layer in ["edge", "fixture"]:
+		for query in edge_queries:
+			var record := get_record_at(query[0], story, layer, str(query[1]))
+			if record != null and not found.has(record):
+				found.append(record)
 	return found
 
 func _toast(text: String) -> void:
@@ -1129,32 +1268,44 @@ func _orientation_for_mouse(tile: Vector2i) -> String:
 		return "east" if center_offset.x > 0.0 else "west"
 	return "south" if center_offset.y > 0.0 else "north"
 
-## Republish the cutaway policy to every placed node. Build mode focuses the
-## construction story (blueprints above). Normal play is location-aware:
-## inside an enclosed room the focus is the level the player is on (the
-## cutaway — the roof above hides so the interior reads), otherwise each
-## structure presents its own topmost layer (the exterior view — standing
-## outside a house shows its roof, not its rooms). The sandbox keeps the
-## plain active-story focus: its [ / ] keys are an explicit viewing tool, so
-## the location-aware focus and the outdoor reset both stand down there.
+## Republish the presentation policy to every placed node. Build mode
+## focuses the construction story (blueprints above). Normal play is
+## location-aware: inside an enclosed room the player's own structure shows
+## its interior cutaway (the level they stand on in full colour, every other
+## story hidden), while every other structure keeps its exterior shell —
+## standing outside a house shows its walls and roof at full colour on all
+## stories, not its rooms. Outside any structure everything wears the
+## exterior shell: shell parts (roofs, exterior-facing walls, fixtures) at
+## full colour on every story, interior parts ghosted. The sandbox keeps the
+## plain active-story interior focus: its [ / ] keys are an explicit viewing
+## tool, so the location-aware focus and the outdoor reset both stand down
+## there.
 func _apply_presentation() -> void:
+	if _exterior_dirty:
+		_rebuild_exterior_classification()
 	if build_mode:
-		var focus := selected_story
 		for record in _record_list:
 			if record.node != null and is_instance_valid(record.node):
-				record.node.set_presentation(focus, true, roofs_visible)
+				record.node.set_presentation("build", selected_story, roofs_visible)
+		_presentation_sheltered = is_player_sheltered()
+		_structure_signature = _player_structure_signature()
 		return
 	var sheltered := is_player_sheltered()
-	var exterior := not sheltered and not GameSession.is_building_sandbox()
-	if exterior:
-		_rebuild_column_top_stories()
+	var structure: Dictionary = _compute_player_structure() if sheltered else {}
 	for record in _record_list:
 		if record.node == null or not is_instance_valid(record.node):
 			continue
-		var focus := active_story
-		if exterior:
-			focus = top_story_for(record)
-		record.node.set_presentation(focus, false, roofs_visible, exterior)
+		var shell_part := _shell_records.has(record.placement_key())
+		if GameSession.is_building_sandbox():
+			record.node.set_presentation("interior", active_story, roofs_visible, shell_part)
+		elif not sheltered:
+			record.node.set_presentation("exterior", 0, roofs_visible, shell_part)
+		elif structure.has(record.placement_key()):
+			record.node.set_presentation("interior", active_story, roofs_visible, shell_part)
+		else:
+			record.node.set_presentation("exterior", 0, roofs_visible, shell_part)
+	_presentation_sheltered = sheltered
+	_structure_signature = _player_structure_signature()
 
 func _mouse_tile() -> Vector2i:
 	var world := player.get_global_mouse_position() if player != null else Vector2.ZERO

@@ -190,36 +190,39 @@ func _test_presentation_policy() -> void:
 	_check(floor_node.z_index == int(BuildingRecord.LAYER_Z["floor"])
 			and roof_node.z_index == BuildingRecord.STORY_Z_STRIDE + int(BuildingRecord.LAYER_Z["overhead"]),
 			"Layers share one render band per story with deterministic offsets")
-	# Normal play, ground focus: upper story hidden.
-	floor_node.set_presentation(0, false, true)
-	roof_node.set_presentation(0, false, true)
+	# Interior cutaway, ground focus: the focus story in full colour, the
+	# story above hidden (not a ghost).
+	floor_node.set_presentation("interior", 0, true)
+	roof_node.set_presentation("interior", 0, true)
 	_check(floor_node.visible and floor_node.modulate.a == 1.0, "Focus story is fully visible")
 	_check(not roof_node.visible, "The story above is hidden during normal play")
-	# Active upstairs: ground below ghosts, the roof overhead fades (cutaway).
-	floor_node.set_presentation(1, false, true)
-	roof_node.set_presentation(1, false, true)
-	_check(floor_node.visible and absf(floor_node.modulate.a - 0.25) < 0.001,
-			"The story below the focus ghosts at the documented opacity")
+	# Active upstairs: the story below is HIDDEN (the cutaway is a hide,
+	# not a ghost — G3); the roof overhead of the focus story fades.
+	floor_node.set_presentation("interior", 1, true)
+	roof_node.set_presentation("interior", 1, true)
+	_check(not floor_node.visible,
+			"The story below the focus is hidden — the interior cutaway is a hide, not a ghost")
 	_check(roof_node.visible and absf(roof_node.modulate.a - 0.4) < 0.001,
 			"The focus story's own roof cuts away so interiors read")
 	# Sandbox roof toggle hides the overhead completely.
-	roof_node.set_presentation(1, false, false)
+	roof_node.set_presentation("interior", 1, false)
 	_check(not roof_node.visible, "The sandbox roof toggle hides overheads outright")
 	# Build mode: the story above the focus shows as a faint blueprint.
-	floor_node.set_presentation(0, true, true)
-	roof_node.set_presentation(0, true, true)
+	floor_node.set_presentation("build", 0, true)
+	roof_node.set_presentation("build", 0, true)
 	_check(roof_node.visible and absf(roof_node.modulate.a - 0.14) < 0.01,
 			"Build mode shows the story above as a faint blueprint")
-	# Exterior view (the player is outside): the topmost layer renders in
-	# full colour; stories below it ghost. The roof toggle still wins.
-	floor_node.set_presentation(1, false, true, true)
-	roof_node.set_presentation(1, false, true, true)
+	# Exterior view (the player is outside): the shell — here the roof —
+	# renders in full colour on its story; interior mass (the floor)
+	# ghosts at 25%. The roof toggle still wins.
+	floor_node.set_presentation("exterior", 1, true, false)
+	roof_node.set_presentation("exterior", 1, true, true)
 	_check(roof_node.visible and roof_node.modulate.a == 1.0,
-			"Exterior view: the topmost layer (the roof) renders in full colour")
+			"Exterior view: the shell (the roof) renders in full colour")
 	_check(floor_node.visible and absf(floor_node.modulate.a - 0.25) < 0.001,
-			"Exterior view: stories below the topmost layer ghost out")
-	roof_node.set_presentation(1, false, false, true)
-	_check(not roof_node.visible, "Exterior view: the roof toggle still hides the topmost layer's roof")
+			"Exterior view: interior mass (the floor) ghosts out")
+	roof_node.set_presentation("exterior", 1, false, true)
+	_check(not roof_node.visible, "Exterior view: the roof toggle still hides the shell roof")
 	manager.queue_free()
 
 # --- Two-floor house ---

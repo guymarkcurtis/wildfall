@@ -46,6 +46,14 @@ var capability_state: Dictionary = {}
 ## How far an edge part's art nudges toward its oriented edge (cheap
 ## readability for the edge model until the dedicated edge art lands).
 const EDGE_VISUAL_OFFSET: float = 6.0
+## How far a wall fixture's art hangs past its wall face: a wall nudges 6 px
+## toward its edge, a fixture mounted on that face sits just outside it.
+const FIXTURE_VISUAL_OFFSET: float = 12.0
+## Per-story visual offset in the EXTERIOR presentation only: each story's
+## parts shift up-left by one step per story, so a multi-storey building
+## reads as stacked mass from outside while interior and build views keep
+## their exact top-down alignment. Node position and collision never move.
+const EXTERIOR_STORY_OFFSET := Vector2(-6.0, -9.0)
 ## Cosmetic lights outside this radius cannot affect the active view, so they
 ## stay disabled without needing a per-light manager scan.
 const LIGHT_CULL_RADIUS_PX: float = 960.0
@@ -70,6 +78,12 @@ static var _shared_light_texture: GradientTexture2D = null
 var _light_budget_allowed := true
 var _label: Label = null
 var _health_bar: ProgressBar = null
+## Current per-story presentation offset applied to the visual children (see
+## set_visual_offset and EXTERIOR_STORY_OFFSET).
+var visual_offset: Vector2 = Vector2.ZERO
+## Setup-time base position of every visual child, so set_visual_offset can
+## re-anchor them relative to where the part actually sits on the grid.
+var _visual_base: Dictionary = {}
 
 signal building_destroyed
 signal building_damaged(current_health: int, max_health: int)
@@ -85,9 +99,11 @@ func setup(item_id: String, item_name: String, tile: Vector2i, hp: int = 50, sto
 	layer = placement_layer if placement_layer != "" else (str(definition.effective_placement_layer()) if definition != null else "object")
 	orientation = edge_orientation
 	self.definition = definition
-	# Aligned top-down: every story sits on the same world X/Y (the floor-plan
-	# model). Stories are told apart by render band and opacity, never by
-	# shifting position up the screen.
+	# Aligned top-down: the node (and its collision) stays at the part's grid
+	# position — every story shares the same world X/Y (the floor-plan
+	# model). Interior and build views keep exact alignment; only the
+	# EXTERIOR view shifts each story's visuals (set_visual_offset /
+	# set_presentation), never the node or collision.
 	position = Vector2(tile) * TILE_SIZE
 	part_type = str(definition.get("part_type")) if definition != null else "utility"
 	tier = str(definition.get("tier")) if definition != null else ""
@@ -96,6 +112,18 @@ func setup(item_id: String, item_name: String, tile: Vector2i, hp: int = 50, sto
 	_setup_visuals()
 	_setup_collision()
 	_setup_light()
+	# Base positions for the per-story visual offset: every visual child,
+	# never the collision shape (which must stay grid-anchored).
+	_visual_base.clear()
+	for child in get_children():
+		if child is CollisionShape2D:
+			continue
+		if not (child is Node2D):
+			# UI overlays (name label, health bar) are Controls, not
+			# grid-anchored 2D art; they never take the exterior offset.
+			continue
+		_visual_base[child] = child.position
+	set_visual_offset(Vector2.ZERO)
 
 func _process(delta: float) -> void:
 	_update_light()
@@ -369,19 +397,37 @@ func set_crafting_active(is_active: bool) -> void:
 				and _appearance_state != profile.interaction_closing_state:
 			set_appearance_state(profile.initial_state)
 
-## Nudge direction for edge parts so their oriented side reads from above.
+## Nudge direction for edge parts so their oriented side reads from above,
+## and for wall fixtures, how far past the wall face their art hangs (a
+## fixture mounts on the outside of the edge it is anchored on).
 func _edge_visual_offset() -> Vector2:
-	if layer != "edge":
-		return Vector2.ZERO
-	match orientation:
-		"north":
-			return Vector2(0.0, -EDGE_VISUAL_OFFSET)
-		"south":
-			return Vector2(0.0, EDGE_VISUAL_OFFSET)
-		"west":
-			return Vector2(-EDGE_VISUAL_OFFSET, 0.0)
-		"east":
-			return Vector2(EDGE_VISUAL_OFFSET, 0.0)
+	match layer:
+		"edge":
+			match orientation:
+				"north":
+					return Vector2(0.0, -EDGE_VISUAL_OFFSET)
+				"south":
+					return Vector2(0.0, EDGE_VISUAL_OFFSET)
+				"west":
+					return Vector2(-EDGE_VISUAL_OFFSET, 0.0)
+				"east":
+					return Vector2(EDGE_VISUAL_OFFSET, 0.0)
+				_:
+					return Vector2.ZERO
+		"fixture":
+			match orientation:
+				"north":
+					return Vector2(0.0, -FIXTURE_VISUAL_OFFSET)
+				"south":
+					return Vector2(0.0, FIXTURE_VISUAL_OFFSET)
+				"west":
+					return Vector2(-FIXTURE_VISUAL_OFFSET, 0.0)
+				"east":
+					return Vector2(FIXTURE_VISUAL_OFFSET, 0.0)
+				_:
+					# A fixture always has an orientation ("" resolves to
+					# north when it is placed); default to the north face.
+					return Vector2(0.0, -FIXTURE_VISUAL_OFFSET)
 		_:
 			return Vector2.ZERO
 
@@ -449,42 +495,77 @@ func _render_band() -> int:
 	var story_band := clampi(story, 0, BuildingRecord.MAX_STORIES - 1) * BuildingRecord.STORY_Z_STRIDE
 	return story_band + int(BuildingRecord.LAYER_Z.get(layer, 2))
 
-## Top-down cutaway policy. The focus story is location-aware in normal play
-## (the BuildingManager chooses it: the level the player is on inside an
-## enclosed room, the structure's topmost layer outdoors) and the selected
-## construction story in build mode.
-##   focus story: full colour (in the interior cutaway, overheads on that
-##                story fade so interiors read; in the exterior view the
-##                topmost layer is the view itself and stays at full colour;
-##                the sandbox roof toggle can hide them completely)
-##   below focus: ~25% ghost — orientation only, never a second floor
-##   above focus: hidden while moving; a faint blueprint in build mode
-## All stories stay aligned in X/Y — no screen-position skew.
-func set_presentation(focus_story: int, build_mode: bool, roofs_visible: bool = true, exterior: bool = false) -> void:
-	var delta := story - focus_story
-	if delta > 0:
-		if build_mode:
+## Reposition the visual children around their setup-time base positions by
+## `offset`. Only the exterior presentation passes a non-zero value (one
+## EXTERIOR_STORY_OFFSET step per story — up-left, a cheap "viewed from the
+## southeast" stack); interior and build views pass zero. The node position
+## and collision never move, so movement rules are untouched.
+func set_visual_offset(offset: Vector2) -> void:
+	visual_offset = offset
+	for child in _visual_base:
+		if child is Node2D and is_instance_valid(child):
+			(child as Node2D).position = Vector2(_visual_base[child]) + offset
+
+## Presentation policy, applied by the BuildingManager after every placement,
+## removal, story change, and doorway crossing. The manager chooses a MODE;
+## this node only applies it:
+##   "build":    the construction story in full colour, ~14% blueprints
+##                above it, ~25% ghosts below it (the placement preview).
+##   "interior": the cutaway for the level the player is on: that story in
+##                full colour (overheads on it fade so the room reads),
+##                every OTHER story hidden — standing on a floor, the level
+##                below is not a ghost floor, it is simply gone from view.
+##   "exterior": the building seen from outside: the shell — exterior-facing
+##                walls/doors/windows/fixtures and every roof — renders at
+##                full colour on ALL stories so a multi-storey build reads
+##                as mass, while interior parts ghost at ~25% (orientation
+##                only). Each story's visuals shift by one
+##                EXTERIOR_STORY_OFFSET step per story; node position and
+##                collision stay grid-anchored in every mode.
+func set_presentation(mode: String, focus_story: int, roofs_visible: bool = true, shell_part: bool = false) -> void:
+	set_visual_offset(EXTERIOR_STORY_OFFSET * story if mode == "exterior" else Vector2.ZERO)
+	match mode:
+		"build":
+			var delta := story - focus_story
+			if delta > 0:
+				visible = true
+				modulate = Color(0.75, 0.85, 1.0, 0.14) # blueprint hint
+				return
 			visible = true
-			modulate = Color(0.75, 0.85, 1.0, 0.14) # blueprint hint
-		else:
-			visible = false
-		return
-	visible = true
-	if delta < 0:
-		modulate = Color(1.0, 1.0, 1.0, 0.25)
-		return
-	if layer == "overhead":
-		if exterior:
-			# Exterior view: the topmost layer is the view itself, so the
-			# roof stays at full colour (the F5 toggle still hides it).
-			modulate = Color(1.0, 1.0, 1.0, 1.0 if roofs_visible else 0.0)
-			visible = roofs_visible
-			return
-		# Interior cutaway: the room reads through its own overhead.
-		modulate = Color(1.0, 1.0, 1.0, 0.4 if roofs_visible else 0.0)
-		visible = roofs_visible
-		return
-	modulate = Color(1.0, 1.0, 1.0, 1.0)
+			if delta < 0:
+				modulate = Color(1.0, 1.0, 1.0, 0.25)
+				return
+			if layer == "overhead":
+				# The roof stays on the construction story unless the F5
+				# toggle hides it.
+				modulate = Color(1.0, 1.0, 1.0, 1.0 if roofs_visible else 0.0)
+				visible = roofs_visible
+				return
+			modulate = Color(1.0, 1.0, 1.0, 1.0)
+		"interior":
+			if story != focus_story:
+				visible = false
+				return
+			visible = true
+			if layer == "overhead":
+				# The room reads through its own overhead.
+				modulate = Color(1.0, 1.0, 1.0, 0.4 if roofs_visible else 0.0)
+				visible = roofs_visible
+				return
+			modulate = Color(1.0, 1.0, 1.0, 1.0)
+		"exterior":
+			if shell_part:
+				if layer == "overhead":
+					# The roof is the view itself; the F5 toggle still hides it.
+					modulate = Color(1.0, 1.0, 1.0, 1.0 if roofs_visible else 0.0)
+					visible = roofs_visible
+					return
+				visible = true
+				modulate = Color(1.0, 1.0, 1.0, 1.0)
+				return
+			# Interior parts seen from outside: orientation only.
+			visible = true
+			modulate = Color(1.0, 1.0, 1.0, 0.25)
 
 func take_damage(amount: float) -> bool:
 	if amount <= 0 or health <= 0:

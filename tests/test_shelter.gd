@@ -285,7 +285,7 @@ func _run() -> void:
 
 	# --- Sandbox exemption: in survival, an upper story without a floor
 	# underfoot snaps the active story back to the ground, and the outdoor
-	# view shows each structure's topmost layer. The sandbox exempts both:
+	# view shows each structure's full exterior shell. The sandbox exempts both:
 	# its [ / ] keys deliberately park the active story as a viewing tool,
 	# and the presentation follows that story (the interior cutaway), never
 	# the topmost layer. The player is on the outdoor tile from the HUD leg
@@ -307,8 +307,8 @@ func _run() -> void:
 				"Sandbox exemption: an upper story without a floor underfoot is not reset to the ground")
 		_check(roof_b.visible and absf(roof_b.modulate.a - 0.4) < 0.001,
 				"Sandbox presentation follows the viewed story (cutaway fade), not the exterior topmost layer")
-		_check(floor_b.visible and absf(floor_b.modulate.a - 0.25) < 0.001,
-				"Sandbox presentation ghosts the story below the viewed story")
+		_check(not floor_b.visible,
+				"Sandbox presentation hides the story below the viewed story — the cutaway is a hide, not a ghost")
 		buildings.set_active_story(0)
 	_finish()
 

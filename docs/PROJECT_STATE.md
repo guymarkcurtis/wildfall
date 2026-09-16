@@ -111,19 +111,21 @@ remain only as a fallback when an art file is missing), and added the
 two new atlases to the texture-pack export. All requests in
 `docs/ART_REQUESTS.md` are DONE.
 
-## CURRENT TEST RESULTS (2026-09-15)
+## CURRENT TEST RESULTS (2026-09-16)
 
 Automated headless run of the real main scene — **445 passed, 1 failed,
 0 script errors** (the one failure is the pre-existing mission-journal
 centering check; it fails identically on a clean HEAD with all local
-changes stashed — see TEST_RESULTS.md):
+changes stashed — see TEST_RESULTS.md; two chunk-unload ObjectDB checks
+can additionally fail on some seeds — a pre-existing seed-dependent
+flake):
 
 | Test | Status |
 |------|--------|
 | Scene loading + 9 required nodes | PASS (9/9) |
 | World generation (chunk data, 4× pixel/chunk coordinate math, biome variety) | PASS (4 biomes sampled) |
 | Terrain rendering (12,544 tiles) + resource spawn | PASS |
-| Item database (121 items, 98 recipes — incl. stone/iron handheld lantern tiers) | PASS |
+| Item database (123 items, 100 recipes — incl. stone/iron handheld lantern tiers and the new wall torch/lantern fixtures) | PASS |
 | Crafting + stations + research (scrollable recipe list, nearby station gates, starting recipes, paid research unlocks) | PASS |
 | Camera follow (target set, lerp converges) | PASS |
 | Seed input (T opens, pre-fill, Escape cancels) | PASS |
@@ -133,7 +135,7 @@ changes stashed — see TEST_RESULTS.md):
 | Live input: 1050 px walk keeps the chunk loaded + terrain rendered under the player | PASS |
 | Explored map: nearby-chunk POIs only, marker save/load, centred panel | PASS |
 | Inventory (persistent quick bar, expandable storage, uniform slot spacing, click/drag transfers) | PASS |
-| Building (palette selection, station placement, HUD click pass-through, 4-story support, location-aware presentation: topmost layer outside / the level the player is on inside / ground-story reset on exit with the stair-connector exemption / roofless decks read as outdoors) | PASS |
+| Building (palette selection, station placement, HUD click pass-through, 4-story support, location-aware presentation: full exterior shell outside — roofs and exterior-facing walls at every story in full colour, interior mass ghosted at 25% — / cutaway inside scoped to the player's own structure, level the player is on in full colour, every other story hidden / wall fixtures (torch, lantern) on exterior wall faces / ground-story reset on exit with the stair-connector exemption / roofless decks read as outdoors) | PASS |
 | Resource accessibility (water rejected; rocky ground walkable) | PASS |
 | Technology (U panel, costs, prerequisite gating, recipe/build access, save/load) | PASS |
 | Texture packs (full-resolution world art, stock-card export, station atlas + structured metadata, explicit Apply + preview, editable pack creation, live switch, fallback) | PASS |
@@ -158,7 +160,7 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - **Player Movement**: World-relative WASD (W north, A west, S south, D east) + Sprint and a short aimed Space-bar jump. Faces the pointer, which controls tool and ranged aim. Rocky ground is walkable; water retains terrain collision.
 - **Camera**: Smooth follow; `,`/`.` snap-rotate, middle-mouse free rotate, Home resets north-up.
 - **Ranged combat**: Face the cursor; LMB fires the wooden bow (consumes arrows).
-- **Buildings**: B opens the grouped build palette. Select an owned part, LMB places it, wheel cycles parts, F demolishes, and [ or ] selects one of four construction stories (these are the keys the help text names — the old "[ / ]" text pointed at an unbound slash and has been corrected; no action uses `/`). R/Q rotate an orientable preview; floors, objects, edges, roofs, and connectors share a layered tile model. The player moves between active stories through stairs; Building Sandbox additionally offers F5 roof visibility and [ or ] active-story recovery outside build mode. An enclosed room on the active story — a floor underfoot, a perimeter of walls/doors/windows sealing all four directions, and a roof one story up — counts as indoors and is marked "Sheltered" in the HUD. Presentation follows the player's location: outside, every structure column shows its topmost story in full colour (usually the top roof — a roofless deck shows its own floor) with the interior below ghosted; inside, the view cuts away to the level the player stands on (the roof above hides, the room's own overhead fades, lower stories ghost, and the HUD names the floor); leaving a building from an upper story returns the active story to the ground unless the player is still on a stair connector, and an unroofed indoor spot (open deck/balcony) reads as outdoors — the roof shows again — while the floor underfoot keeps the player on their story.
+- **Buildings**: B opens the grouped build palette. Select an owned part, LMB places it, wheel cycles parts, F demolishes, and [ or ] selects one of four construction stories (these are the keys the help text names — the old "[ / ]" text pointed at an unbound slash and has been corrected; no action uses `/`). R/Q rotate an orientable preview; floors, objects, edges, roofs, and connectors share a layered tile model. The player moves between active stories through stairs; Building Sandbox additionally offers F5 roof visibility and [ or ] active-story recovery outside build mode. An enclosed room on the active story — a floor underfoot, a perimeter of walls/doors/windows sealing all four directions, and a roof one story up — counts as indoors and is marked "Sheltered" in the HUD. Presentation follows the player's location: outside, every structure shows its full exterior shell — the roofs and the exterior-facing walls of every story at full colour (a 3-story house reads as a 3-story house from the yard), each story's visuals offset so the stories stack as one building, with interior mass (floors, foundations, interior partitions) ghosted at 25%; inside, the cutaway is scoped to the building the player is in — only its level the player stands on shows (the roof above hides, the room's own overhead fades, every other story is hidden outright, and the HUD names the floor) — while every other building keeps its full exterior shell; leaving a building from an upper story returns the active story to the ground unless the player is still on a stair connector, and an unroofed indoor spot (open deck/balcony) reads as outdoors — the roof shows again — while the floor underfoot keeps the player on their story. Wall fixtures (torch, lantern) mount on the outside face of exterior walls, doors, and windows with their own light, and are removed with a refund when their host wall is demolished.
 - **World clock / weather / statuses**: DayNightCycle + WeatherSystem + StatusEffectSystem, shown on the HUD. Being indoors (see Buildings) outranks every cold source: snow-weather chill and the arctic-night biome chill do not apply inside an enclosed room, any slow/frozen statuses already present are cleared, and the player's movement speed ignores the weather multiplier there.
 - **World Generation**: Deterministic seed-based generation using 3 FastNoiseLite layers
 - **Chunk System**: 16×16 tile chunks, radius-3 (7×7) viewport streaming; reloads are deterministic (B3)
@@ -175,7 +177,7 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - **Event Bus**: Centralized signal-based communication (plain node, no autoload)
 - **Inventory System**: Stack-based with weight limits, `inventory_full`, persistent 1–9 quick bar, and expandable click/drag inventory UI
 - **Technology System**: U opens research. Free Wood Construction leads to paid Stone Construction (20 wood, 30 stone), then Metalworking; unlocks gate recipes and building placement and persist in saves.
-- **Crafting System**: 98 recipes; hand recipes stay on C while station recipes open from E-interaction with the authored station profile. Inputs, outputs, fuel, on/off state, and local lights are profile-driven and persist in v8 building state.
+- **Crafting System**: 100 recipes; hand recipes stay on C while station recipes open from E-interaction with the authored station profile. Inputs, outputs, fuel, on/off state, and local lights are profile-driven and persist in v8 building state.
 - **Lighting**: all local lights are round, additive halos sharing one centred radial geometry. Placed-object strength scales with building tier in data (wood 80 px / 1.0 → stone 112 px / 1.35 → metal 144 px / 1.7 profiles in `data/interactables/`; primitives pinned), and handheld lights scale with item rarity (common torch 200 px / 1.25 → uncommon stone lantern 264 px / 1.6 → rare iron lantern 336 px / 2.0), which the player's held light follows on equip/unequip.
 - **Creature System (Phase 3)**: per-chunk deterministic spawning (7 creature types, biome-gated; fish only in water), IDLE/PATROL/FLEE AI, E-to-kill with per-creature loot tables (meat, fish, hide, feather, bone)
 - **Title screen**: New Game (Survival / Creative, locked per world), Load Game, Options, Quit. Esc pause in-game.
@@ -328,6 +330,81 @@ A 30-second headless run of the actual game also completed with 0 errors,
   mission checks, plus the reworked durability/mission blocks), 0
   failures, 0 script errors — green on two consecutive runs.
 
+## RECENTLY COMPLETED (2026-09-16 round, exterior shell, wall fixtures, scoped cutaway)
+
+Four reported exterior/interior presentation gaps are closed. Outside a
+structure the view now shows the building's full exterior shell — its
+roofs and the exterior-facing walls of every story at full colour, so a
+3-story house reads as a 3-story house from the yard — while interior
+mass (floors, foundations, partitions) ghosts at 25%; inside, the
+cutaway reveals only the level the player stands on (every other story
+hidden outright, not ghosted) and is scoped to the building the player
+is actually in, so neighbouring buildings keep their full exterior
+shell; and wall fixtures (torches, outdoor lanterns) now mount on the
+outside face of exterior walls and carry their own light.
+
+- **Mode-driven `Building.set_presentation(mode, focus_story,
+  roofs_visible, shell_part)`**: "build" (0.14 blueprint above the
+  selected story, 0.25 below it, the selected story at 1.0 or hidden
+  depending on roof visibility), "interior" (the focus story at full
+  colour with its own overhead at 0.4, every other story
+  `visible = false`), "exterior" (shell parts at 1.0 — overhead
+  parts gated by roof visibility — non-shell mass at 0.25, everything
+  visible). In exterior mode each story's visuals are offset by
+  `EXTERIOR_STORY_OFFSET * story` (Vector2(-6, -9)) so stacked
+  stories read as one building; node positions and collision stay
+  grid-anchored.
+- **Per-story shell classification**: the manager keeps per-story
+  occupied-cell sets from tile-layer footprints (edge/fixture records
+  excluded). Overhead records (roofs) are always shell; an edge or
+  fixture record is shell when at least one tile it spans is
+  unoccupied at that story — i.e. that face looks outside. A
+  freestanding wall is shell on both faces; an interior partition
+  (both spanned tiles built up) is not. The classification rebuilds
+  whenever the record set changes, and `_apply_presentation` then
+  routes: build mode → "build" for everything, sandbox → "interior"
+  for everything, otherwise "interior" for the player's own
+  structure and "exterior" for the rest.
+- **Player-structure scoping**: while sheltered, the manager
+  BFS-seeds the structure from the player's tile on the active story
+  — same-story adjacency is a shared or touching built cell, a
+  one-story step needs a shared cell — and the cutaway applies only
+  to that structure's records. Two real bugs found by the new
+  coverage and fixed: edge/fixture records now bind only the
+  spanned cells that are actually built up (before, both spanned
+  tiles counted, so two structures across a yard gap merged through
+  the gap), and the structure signature is written by the compute
+  step, never pre-written by the sync (the pre-write poisoned the
+  cache so walking from one building to another never re-keyed the
+  cutaway).
+- **Wall fixtures**: new `wall_torch` and `wall_lantern` items
+  (data-defined, borrowing the shared torch/yard-lantern pickup
+  icons until dedicated art ships) in a dedicated non-blocking
+  "fixture" layer. A fixture mounts on the outside face of an
+  exterior wall/door/window edge (±12 px past the wall face) and
+  carries its own light profile; placement is rejected when the edge
+  has no wall or when both spanned tiles are built up (that wall
+  faces inside); demolishing the host edge removes the mounted
+  fixture with a refund.
+- **Coverage**: `tests/test_presentation.gd` grown to **80 checks**
+  (was 47) across five scenarios — full exterior shell outdoors
+  (per-story visual offsets, pavilion vs house classification),
+  inside the house on two stories (cutaway scoped to the house, the
+  pavilion keeps its shell), upper-story exit reset, the roofless
+  deck, and fixture placement / rejection / cascade — green on three
+  consecutive fresh seeds. `test_game.gd`'s outdoor cutaway block
+  now asserts the shell contract (exterior walls full colour,
+  floors/foundation ghosted at 25%), `test_shelter.gd` asserts the
+  hide-not-ghost cutaway, and `test_building_stairs.gd`'s policy
+  block moved to the mode API (BUILDINGS_COUNT 68 → 70). Full
+  harness: test_game **445 passed / 1 failed** (journal-only
+  failure; the two chunk-unload ObjectDB checks are a pre-existing
+  seed-dependent flake), presentation **80/80**, shelter 49,
+  stairs 40, sandbox 80, placement 88, content 111, art 701,
+  station 42, router 42, harvesting 94, ground_pack 140, equipment
+  39, light_tiers 37; `--headless --editor --quit` exited 0 (see
+  TEST_RESULTS.md).
+
 ## RECENTLY COMPLETED (2026-09-15 round, location-aware presentation)
 
 Building presentation now follows where the player is, fixing four
@@ -368,7 +445,10 @@ again.
   Full harness: test_game **445 passed / 1 failed** (only the
   pre-existing mission-journal centred-in-viewport check), everything
   else green (see TEST_RESULTS.md); `--headless --editor --quit`
-  exited 0.
+  exited 0. Superseded by the 2026-09-16 round above: the
+  topmost-layer focus became the full exterior shell, the 0.25
+  lower-story ghost inside became a hard hide, and the cutaway is
+  now scoped to the player's own structure.
 
 ## RECENTLY COMPLETED (2026-09-15 round, tier-scaled local lights)
 
@@ -611,11 +691,12 @@ buildings/interactables deployment plan (layered multilevel building system +
 interaction, storage, stations, fuel, and lighting). It supersedes the
 schedules of `TOP_DOWN_MULTILEVEL_BUILDING_PLAN.md` and
 `INTERACTABLES_STORAGE_AND_LIGHTING_PLAN.md`, which remain as design
-references. M0–M10 are complete: 68 data-defined building parts across the
-timber/stone/metal tiers, persistent storage, station crafting, profile-driven
-fuel/local lighting, the 16-sheet M9 art pack, and release verification of
-mixed multi-story stateful saves. The plan remains the historical evidence and
-authoring reference for this completed pass.
+references. M0–M10 are complete: 70 data-defined building parts across the
+timber/stone/metal tiers (the 68 from the plan plus the 2 wall fixtures
+from the 2026-09-16 round), persistent storage, station crafting,
+profile-driven fuel/local lighting, the 16-sheet M9 art pack, and release
+verification of mixed multi-story stateful saves. The plan remains the
+historical evidence and authoring reference for this completed pass.
 
 Queued after the active build:
 

@@ -8,8 +8,14 @@
 ## Key formats (canonical, save-safe):
 ##   tile layers:  "<x>:<y>:<story>:<layer>"
 ##   edge layer:   "<x>:<y>:<story>:edge:<n|w>"  — always normalized to the
-##                 NORTH edge (horizontal) or WEST edge (vertical) of a tile,
+##                 NORTH edge (horizontal) or WEST edge (vertical) of the tile,
 ##                 so E of (x,y) == W of (x+1,y) and S of (x,y) == N of (x,y+1).
+##   fixture layer: "<x>:<y>:<story>:fixture:<n|w>" — wall-mounted parts
+##                 (torches, exterior lights) that attach to a physical edge.
+##                 Same north/west normalization as edges, but a SEPARATE
+##                 namespace so a fixture and the wall it mounts on never
+##                 collide, and a wall can be replaced (door, window) without
+##                 disturbing the fixture on its edge.
 class_name BuildingRecord
 extends RefCounted
 
@@ -24,7 +30,7 @@ const STORY_Z_STRIDE := 20
 const STORY_COLLISION_BASE := 16
 
 ## Within-band z offsets by placement layer.
-const LAYER_Z := {"ground": 0, "floor": 1, "object": 2, "connector": 3, "edge": 4, "overhead": 5}
+const LAYER_Z := {"ground": 0, "floor": 1, "object": 2, "connector": 3, "edge": 4, "fixture": 6, "overhead": 5}
 
 var definition: BuildingDefinition = null
 var item_id: String = ""
@@ -200,22 +206,59 @@ static func canonical_edge_key(tile: Vector2i, story: int, orientation: String) 
 		_:
 			return "%d:%d:%d:edge:n" % [tile.x, tile.y, story]
 
+## Wall fixtures (torches, exterior lights) attach to a physical edge exactly
+## like a wall does — the fixture on the north edge of (x,y) is
+## "<x>:<y>:<story>:fixture:n" no matter which side of the wall the player
+## mounts it from — but in their own key namespace (see canonical_edge_key),
+## so a fixture and the wall it mounts on never collide and a wall can be
+## replaced (door, window) without disturbing the fixture on its edge.
+static func canonical_fixture_key(tile: Vector2i, story: int, orientation: String) -> String:
+	match orientation:
+		"north":
+			return "%d:%d:%d:fixture:n" % [tile.x, tile.y, story]
+		"south":
+			return "%d:%d:%d:fixture:n" % [tile.x, tile.y + 1, story]
+		"west":
+			return "%d:%d:%d:fixture:w" % [tile.x, tile.y, story]
+		"east":
+			return "%d:%d:%d:fixture:w" % [tile.x + 1, tile.y, story]
+		_:
+			return "%d:%d:%d:fixture:n" % [tile.x, tile.y, story]
+
+## The two tiles a physical edge separates: [the anchored tile, the tile on
+## the other side of the edge]. Symmetric in the placement side — the north
+## edge of (x,y) and the south edge of (x,y-1) report the same pair — so a
+## caller can ask "what is on the far side of this edge?" no matter which
+## side the record was placed from.
+static func edge_span_tiles(tile: Vector2i, orientation: String) -> Array[Vector2i]:
+	match orientation:
+		"south":
+			return [tile, tile + Vector2i(0, 1)]
+		"west":
+			return [tile, tile + Vector2i(-1, 0)]
+		"east":
+			return [tile, tile + Vector2i(1, 0)]
+		"north", _:
+			return [tile, tile + Vector2i(0, -1)]
+
 static func tile_key(tile: Vector2i, story: int, layer: String) -> String:
 	return "%d:%d:%d:%s" % [tile.x, tile.y, story, layer]
 
 ## True when the record occupies the tile cells of its footprint; false for
-## edge records, which live between tiles (they still anchor on `tile`).
+## edge and fixture records, which live between tiles (they still anchor on
+## `tile` and never count as floor or wall coverage).
 func occupies_tiles() -> bool:
-	return layer != "edge"
+	return layer != "edge" and layer != "fixture"
 
 ## Every canonical key this record reserves. Multi-tile footprints reserve
-## one key per covered cell; edge records reserve exactly one edge key;
-## connectors with a stairwell also reserve the floor slot above (the
-## opening), so no floor can later block the hole.
+## one key per covered cell; edge and fixture records reserve exactly one
+## key on their physical edge; connectors with a stairwell also reserve the
+## floor slot above (the opening), so no floor can later block the hole.
 func reserved_keys() -> Array[String]:
 	var keys: Array[String] = []
-	if layer == "edge":
-		keys.append(canonical_edge_key(tile, story, orientation))
+	if layer == "edge" or layer == "fixture":
+		keys.append(canonical_edge_key(tile, story, orientation) if layer == "edge" \
+				else canonical_fixture_key(tile, story, orientation))
 		return keys
 	for dx in range(footprint.x):
 		for dy in range(footprint.y):
@@ -228,14 +271,16 @@ func reserved_keys() -> Array[String]:
 ## Per-key descriptions of every reservation, for presentation (the build
 ## ghost): the canonical key (the occupancy source of truth), the tile the
 ## marker anchors on, the story it lives in, its placement layer, and — for
-## edge records — the physical side of the anchor tile the part occupies.
-## Ghost drawing must render this list, never re-derive reservations.
+## edge and fixture records — the physical side of the anchor tile the part
+## occupies. Ghost drawing must render this list, never re-derive
+## reservations.
 func reserved_key_descriptions() -> Array:
 	var entries: Array = []
-	if layer == "edge":
+	if layer == "edge" or layer == "fixture":
 		entries.append({
-			"key": canonical_edge_key(tile, story, orientation),
-			"tile": tile, "story": story, "layer": "edge",
+			"key": canonical_edge_key(tile, story, orientation) if layer == "edge" \
+					else canonical_fixture_key(tile, story, orientation),
+			"tile": tile, "story": story, "layer": layer,
 			"side": orientation if orientation != "" else "north",
 		})
 		return entries
@@ -256,10 +301,12 @@ func reserved_key_descriptions() -> Array:
 	return entries
 
 ## Stable identity for UI ownership and save `state` (extends the M1
-## x:y:story key with the layer; edges append the normalized edge side).
+## x:y:story key with the layer; edge and fixture records append the raw
+## side — "edge:..." sorts before "fixture:..." for the same edge, which is
+## what lets the F key take the wall first and cascade to its fixtures).
 func placement_key() -> String:
-	if layer == "edge":
-		return "%d:%d:%d:edge:%s" % [tile.x, tile.y, story, orientation]
+	if layer == "edge" or layer == "fixture":
+		return "%d:%d:%d:%s:%s" % [tile.x, tile.y, story, layer, orientation]
 	return "%d:%d:%d:%s" % [tile.x, tile.y, story, layer]
 
 func display_name() -> String:

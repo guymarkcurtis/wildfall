@@ -1,6 +1,58 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **Full exterior shell, wall fixtures, and a scoped cutaway (2026-09-16):**
+  makes the outside of a house look like what the player built. Outside,
+  every story's exterior-facing walls and all roofs render in full colour
+  (a three-storey house reads as three storeys from the yard, including
+  unfinished walls), while interior mass — floors, foundations, partitions
+  — ghosts at 25%; wall fixtures (new `wall_torch` / `wall_lantern`
+  definitions) mount on wall faces that point outside, are rejected on
+  interior partitions and in open air, and cascade-remove with a refund
+  when their host wall is demolished; inside, the cutaway now HIDES every
+  story other than the player's level (the level below is gone from view,
+  not a 0.25 ghost) and is scoped to the structure the player stands in —
+  other buildings keep their full exterior shell. Code:
+  `Building.set_presentation` is mode-driven (`"build"` / `"interior"` /
+  `"exterior"` + focus story + roof toggle + shell flag; exterior shifts
+  each story's visuals by `EXTERIOR_STORY_OFFSET`, position and collision
+  stay grid-anchored). The manager's per-column topmost-story cache is
+  replaced by a per-story exterior-shell classification (`_rebuild_exterior_
+  classification`: every `overhead` is shell; an `edge`/`fixture` is shell
+  iff one of the two tiles it spans is NOT occupied at that story) plus a
+  BFS of the player's structure from their tile — sheltered players cut
+  away only that structure, everything else stays exterior. Two real bugs
+  fell out of the new tests: (1) the BFS bound edge/fixture records
+  through BOTH spanned tiles, so two structures across a yard gap merged
+  through the gap (their facing exterior walls' far tiles sit adjacent) —
+  spans now bind only the built-up side (both sides for an interior
+  partition, none for a freestanding wall); (2) the per-frame presentation
+  sync wrote the new structure signature BEFORE asking
+  `_compute_player_structure` for the structure, so its cache check always
+  hit and the cutaway never re-keyed when the player walked from one
+  building to another — the compute step now owns that write. The two new
+  items ride the shared pickup icons (torch / yard lantern) until
+  dedicated art ships; the item database is at 123 items / 100 recipes.
+  Tests: `test_presentation` 47 → **80/80 green on three consecutive
+  seeds** (new fixture scenario — mount, reject-on-partition,
+  reject-in-open-air, cascade demolish — and the interior scenarios now
+  assert the separate pavilion keeps its shell while the player is inside
+  the house, plus the hide-not-ghost rule); `test_game` **446 checks** —
+  the two outdoor cutaway checks flipped to the shell contract (floor /
+  foundation read as mass at 25%, not skin at 1.0); 445/1 = the pre-existing
+  mission-journal-centred check on representative seeds (a seed-dependent
+  chunk-unload ObjectDB flake can add two more on some seeds — pre-
+  existing, unrelated to buildings); `test_shelter` **49/49** (sandbox
+  leg now asserts the story below the viewed story is hidden, not
+  ghosted); `test_building_stairs` **40/40** (its policy block migrated
+  to the mode-based API with the same assertions plus the hide-not-ghost
+  flip); `test_building_content` **111/111** (was 102 — the two fixtures);
+  `test_building_art` **701/701** (`BUILDINGS_COUNT` 68 → 70);
+  `test_building_placement` 88/88, `test_building_sandbox` 80/80,
+  `test_station_crafting` 42/42, `test_interaction_router` 42/42,
+  `test_harvesting` 94/94, `test_ground_pack` 140/140,
+  `test_equipment` 39/39, `test_light_tiers` 37/37;
+  `--headless --editor --quit` exited 0.
 - **Location-aware building presentation (2026-09-15):** fixes four
   presentation bugs the user reported from live play: (1) outside a house
   the view must show the structure's topmost layer (usually a roof —
@@ -11,7 +63,9 @@
   roof again, i.e. read as outdoors. Source: `Building.set_presentation`
   takes four args (focus story, build mode, roofs visible, exterior) and
   the BuildingManager now owns a per-column topmost-story cache
-  (`_top_story_by_column`, rebuilt at every record mutation).
+  (`_top_story_by_column`, rebuilt at every record mutation — since
+  replaced by the per-story exterior-shell classification and the
+  player-structure-scoped cutaway of the 2026-09-16 entry below).
   `_apply_presentation` picks the focus per location: inside an enclosed
   room the active story is the focus (roof above hides, the room's own
   overhead fades to 0.4, the player's level renders at full colour, lower

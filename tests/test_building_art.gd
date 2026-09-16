@@ -20,7 +20,7 @@
 extends SceneTree
 
 const CELL := 32
-const BUILDINGS_COUNT := 68
+const BUILDINGS_COUNT := 70
 
 ## Contracted canvas sizes for the sheets that have a family map resource
 ## (doc section 2.2 inventory: 3 structural 8x8, 3 boundaries 8x4,

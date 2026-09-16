@@ -2294,23 +2294,24 @@ func _run_checks() -> void:
 			"One map tile can hold structural parts on separate stories")
 		_check(not buildings.place_building_item("wooden_floor", Vector2i(9, 9), player_ent.inventory, 1),
 			"Upper-story placement needs structure directly below it")
-		# Task F: the normal-play cutaway now shows the level the player is
-		# on in full colour (and ghosts the stories below it), instead of the
-		# old rule that hid that level and showed the story beneath.
+		# Task G: outside a structure the view is the building's full
+		# exterior shell — exterior-facing walls and every roof in full
+		# colour on all stories — while interior mass (floors, foundations)
+		# ghosts at 25%: seen from outside, mass is not skin.
 		buildings.set_selected_story(1)
 		_check(buildings.get_building_at(structure_tile, 1).visible
-				and buildings.get_building_at(structure_tile, 1).modulate.a == 1.0,
-			"Cutaway shows the level the player is on in full colour during normal play")
+				and absf(buildings.get_building_at(structure_tile, 1).modulate.a - 0.25) < 0.001,
+			"From outside, a floor is mass, not skin — the upper story ghosts at 25%")
 		_check(buildings.get_building_at(structure_tile, 0).visible
 				and absf(buildings.get_building_at(structure_tile, 0).modulate.a - 0.25) < 0.001,
-			"Cutaway ghosts the support story below the level the player is on, so the level reads at a glance")
+			"From outside, the ground story's foundation also ghosts — mass, not shell")
 		buildings.set_build_mode(true)
 		_check(buildings.get_building_at(structure_tile, 1).visible and buildings.get_building_at(structure_tile, 0).visible,
 			"Cutaway keeps the selected story and its support visible in build mode")
 		buildings.set_build_mode(false)
 		_check(buildings.get_building_at(structure_tile, 1).visible
-				and buildings.get_building_at(structure_tile, 1).modulate.a == 1.0,
-			"Leaving build mode restores the level-the-player-is-on cutaway")
+				and absf(buildings.get_building_at(structure_tile, 1).modulate.a - 0.25) < 0.001,
+			"Leaving build mode restores the full exterior shell (mass ghosts at 25%)")
 		buildings.set_selected_story(0)
 		player_ent.global_position = Vector2.ZERO
 		var cooked_meat: RecipeDefinition = item_database.get_recipe("cooked_meat")

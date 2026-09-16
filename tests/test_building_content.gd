@@ -8,9 +8,9 @@ const BUILDINGS := ["wooden_foundation", "wooden_floor", "wooden_wall", "wooden_
 	"wooden_door", "wooden_roof", "wooden_stairs", "wooden_ramp", "wooden_pillar",
 	"stone_foundation", "stone_floor", "stone_wall", "stone_window", "stone_door",
 	"stone_roof", "stone_stairs", "stone_ramp", "stone_pillar",
-	"torch", "campfire", "furnace", "workbench", "anvil", "chest", "bed", "farm_soil", "fence",
+	"torch", "wall_torch", "campfire", "furnace", "workbench", "anvil", "chest", "bed", "farm_soil", "fence",
 	"fence_gate", "wooden_railing", "wooden_porch", "wooden_deck", "wooden_path", "planter_box",
-	"wooden_table", "yard_lantern", "stone_gate", "stone_railing", "stone_patio", "stone_path",
+	"wooden_table", "yard_lantern", "wall_lantern", "stone_gate", "stone_railing", "stone_patio", "stone_path",
 	"stone_planter", "reinforced_floor", "reinforced_wall", "metal_roof", "metal_gate", "metal_railing",
 	"metal_grate", "chair", "shelf", "rug", "wardrobe", "steps", "awning", "corner_post",
 	"hearth", "cabinet", "bookcase", "well", "brazier", "shuttered_window", "metal_stair",
@@ -26,6 +26,7 @@ func _initialize() -> void:
 	_test_capability_profiles()
 	_test_placement_metadata()
 	_test_build_groups()
+	_test_wall_fixture_definitions()
 	_test_registry_validation_failures()
 	_test_item_tags()
 	_test_inventory_storage()
@@ -50,8 +51,8 @@ func _test_registry_discovery() -> void:
 	registry.discover()
 	_check(not registry.has_validation_errors(),
 			"Shipped building content validates with zero errors" + _first_error(registry))
-	_check(registry.definitions.size() == 68,
-			"Registry discovers all 68 building definitions (got %d)" % registry.definitions.size())
+	_check(registry.definitions.size() == 70,
+			"Registry discovers all 70 building definitions (got %d)" % registry.definitions.size())
 	var ids := registry.definitions.keys()
 	ids.sort()
 	var expected := BUILDINGS.duplicate()
@@ -178,7 +179,40 @@ func _test_build_groups() -> void:
 	_check(int(counts['furniture']) == 14, "Furniture group holds 14 parts (got %d)" % int(counts['furniture']))
 	_check(int(counts['stations']) == 4, "Stations group holds 4 parts (got %d)" % int(counts['stations']))
 	_check(int(counts['boundaries']) == 5, "Boundaries group holds 5 parts (got %d)" % int(counts['boundaries']))
-	_check(int(counts['exterior']) == 13, "Exterior group holds 13 parts (got %d)" % int(counts['exterior']))
+	_check(int(counts['exterior']) == 15, "Exterior group holds 15 parts (got %d)" % int(counts['exterior']))
+
+## M10 wall fixtures: the two new exterior light fixtures are data-defined on
+## their own "fixture" placement layer (never replacing the wall they mount
+## on), oriented to all four wall faces, and gated by tier like the other
+## exterior lights. Code defines the fixture system; this pins the data.
+func _test_wall_fixture_definitions() -> void:
+	var registry := BuildingContentRegistry.new()
+	registry.discover()
+	var wall_torch := registry.get_definition("wall_torch")
+	_check(wall_torch != null and wall_torch.part_type == "fixture"
+			and wall_torch.effective_placement_layer() == "fixture"
+			and wall_torch.build_group == "exterior",
+			"wall torch is data-defined as an exterior fixture on its own placement layer")
+	_check(wall_torch != null and wall_torch.tier == "primitive" and wall_torch.technology_id == ""
+			and wall_torch.requires_lower_support == false and wall_torch.max_health == 50,
+			"wall torch is an ungated primitive that never needs lower support")
+	_check(wall_torch != null and wall_torch.allowed_orientations == PackedStringArray(["north", "east", "south", "west"]),
+			"wall torch can mount on all four wall orientations")
+	_check(wall_torch != null and wall_torch.fuel_profile != null and wall_torch.light_profile != null
+			and wall_torch.occupancy_replacement == "none",
+			"wall torch carries fuel + light capabilities and never replaces its wall")
+	var wall_lantern := registry.get_definition("wall_lantern")
+	_check(wall_lantern != null and wall_lantern.part_type == "fixture"
+			and wall_lantern.effective_placement_layer() == "fixture"
+			and wall_lantern.build_group == "exterior",
+			"wall lantern is data-defined as an exterior fixture on its own placement layer")
+	_check(wall_lantern != null and wall_lantern.tier == "wood" and wall_lantern.technology_id == "wood_building"
+			and wall_lantern.max_health == 55,
+			"wall lantern is wood-tier and gated behind wood research")
+	_check(wall_lantern != null and wall_lantern.build_cost.size() == 2
+			and str(wall_lantern.build_cost[0]["item_id"]) == "plank" and int(wall_lantern.build_cost[0]["quantity"]) == 2
+			and str(wall_lantern.build_cost[1]["item_id"]) == "charcoal" and int(wall_lantern.build_cost[1]["quantity"]) == 1,
+			"wall lantern keeps the yard lantern's plank + charcoal build cost")
 
 func _test_registry_validation_failures() -> void:
 	var registry := BuildingContentRegistry.new()
@@ -210,10 +244,13 @@ func _test_item_tags() -> void:
 			and tagged[2] == "wood",
 			"get_items_with_tag is a sorted data query")
 	for building_id in ["fence_gate", "wooden_railing", "wooden_porch", "wooden_deck",
-			"wooden_path", "planter_box", "wooden_table", "yard_lantern"]:
+			"wooden_path", "planter_box", "wooden_table", "yard_lantern", "wall_lantern"]:
 		_check(database.get_item(building_id) != null and database.get_recipe(building_id) != null
 				and database.get_recipe(building_id).technology_id == "wood_building",
 				"%s has a placeable item, reachable recipe, and wood research gate" % building_id)
+	_check(database.get_item("wall_torch") != null and database.get_recipe("wall_torch") != null
+			and database.get_recipe("wall_torch").technology_id == "",
+			"wall torch is a placeable item with a reachable, ungated primitive recipe")
 	for building_id in ["stone_gate", "stone_railing", "stone_patio", "stone_path", "stone_planter"]:
 		_check(database.get_item(building_id) != null and database.get_recipe(building_id) != null
 				and database.get_recipe(building_id).technology_id == "stone_building",

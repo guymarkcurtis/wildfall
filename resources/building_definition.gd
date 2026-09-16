@@ -26,7 +26,7 @@ const BUILD_GROUPS := [
 
 ## Structural role. Parts share a grid cell only across different stories;
 ## this makes a floor plan easy to read in Wildfall's top-down cutaway view.
-@export_enum("foundation", "floor", "wall", "window", "door", "roof", "stair", "ramp", "pillar", "utility") var part_type: String = "utility"
+@export_enum("foundation", "floor", "wall", "window", "door", "roof", "stair", "ramp", "pillar", "fixture", "utility") var part_type: String = "utility"
 
 ## Progression tier and future technology gate. The building system already
 ## reads this metadata; the technology-tree UI will enforce the gate next.
@@ -139,6 +139,11 @@ func effective_placement_layer() -> String:
 			return "floor"
 		"wall", "window", "door":
 			return "edge"
+		"fixture":
+			# Wall-mounted parts (torches, exterior lights): they attach to a
+			# physical edge like a wall, but in the fixture namespace, so a wall and the
+			# fixture on it never collide.
+			return "fixture"
 		"roof":
 			return "overhead"
 		"stair", "ramp":
@@ -164,7 +169,7 @@ func validate() -> Array[String]:
 		errors.append("footprint %dx%d must be positive on both axes" % [width, height])
 	if max_health <= 0:
 		errors.append("max_health (%d) must be positive" % max_health)
-	if not placement_layer.is_empty() and placement_layer not in ["ground", "floor", "edge", "object", "overhead", "connector"]:
+	if not placement_layer.is_empty() and placement_layer not in ["ground", "floor", "edge", "fixture", "object", "overhead", "connector"]:
 		errors.append("placement_layer '%s' is not a supported layer" % placement_layer)
 	if not atlas_cells.is_empty() and atlas_path.is_empty():
 		errors.append("atlas_cells is set but atlas_path is empty")
