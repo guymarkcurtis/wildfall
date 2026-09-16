@@ -19,6 +19,7 @@ const APPLY_ORDER: PackedStringArray = [
 ]
 
 static var _autosave_enabled: bool = true
+static var _ignore_environment_effects: bool = false
 static var _settings_loaded: bool = false
 
 signal game_saved(path: String)
@@ -225,6 +226,17 @@ static func set_autosave_enabled(enabled: bool) -> void:
 	_settings_loaded = true
 	_write_settings()
 
+static func is_ignore_environment_effects() -> bool:
+	load_settings()
+	return _ignore_environment_effects
+
+## When true, weather and biome cold never slow or chill the player (the
+## options "Ignore environmental effects" toggle).
+static func set_ignore_environment_effects(enabled: bool) -> void:
+	_ignore_environment_effects = enabled
+	_settings_loaded = true
+	_write_settings()
+
 static func load_settings() -> void:
 	if _settings_loaded:
 		return
@@ -241,12 +253,16 @@ static func load_settings() -> void:
 		return
 	var data: Dictionary = parsed
 	_autosave_enabled = bool(data.get("autosave_enabled", true))
+	_ignore_environment_effects = bool(data.get("ignore_environment_effects", false))
 
 static func _write_settings() -> void:
 	var file := FileAccess.open(SETTINGS_PATH, FileAccess.WRITE)
 	if file == null:
 		return
-	file.store_string(JSON.stringify({"autosave_enabled": _autosave_enabled}, "\t"))
+	file.store_string(JSON.stringify({
+			"autosave_enabled": _autosave_enabled,
+			"ignore_environment_effects": _ignore_environment_effects,
+	}, "\t"))
 	file.close()
 
 func delete_save(path: String = SAVE_PATH) -> bool:

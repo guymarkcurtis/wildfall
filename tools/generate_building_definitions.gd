@@ -165,6 +165,12 @@ func _write_profiles() -> void:
 	_save_profile("light_campfire.tres", _profile(LightProfile, {"radius_px": 96.0, "color": Color(1.0, 0.72, 0.42), "energy": 1.1, "flicker": true, "daylight_policy": "night_only", "requires_power": true}))
 	_save_profile("light_furnace.tres", _profile(LightProfile, {"radius_px": 64.0, "color": Color(1.0, 0.62, 0.35), "energy": 0.9, "flicker": false, "daylight_policy": "night_only", "requires_power": true}))
 	_save_profile("light_torch.tres", _profile(LightProfile, {"radius_px": 80.0, "color": Color(1.0, 0.8, 0.5), "energy": 1.0, "flicker": true, "daylight_policy": "night_only", "requires_power": true}))
+	# Tier-scaled lantern/furniture lights: stone tier casts a wider,
+	# stronger flame than the wood-tier torch baseline; the metal tier is the
+	# strongest shipped. Strength is data, not code — hearth and brazier
+	# (stone family) re-point to light_stone, metal_lantern to light_metal.
+	_save_profile("light_stone.tres", _profile(LightProfile, {"radius_px": 112.0, "color": Color(1.0, 0.72, 0.42), "energy": 1.35, "flicker": true, "daylight_policy": "night_only", "requires_power": true}))
+	_save_profile("light_metal.tres", _profile(LightProfile, {"radius_px": 144.0, "color": Color(1.0, 0.85, 0.6), "energy": 1.7, "flicker": true, "daylight_policy": "night_only", "requires_power": true}))
 
 func _profile(script: GDScript, values: Dictionary) -> Resource:
 	var resource: Resource = script.new()

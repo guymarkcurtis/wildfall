@@ -2,7 +2,7 @@
 
 [ext_resource type="Resource" path="res://data/interactables/fuel_burnable.tres" id="1_fuel"]
 [ext_resource type="Resource" path="res://data/interactables/interaction_use.tres" id="2_interaction"]
-[ext_resource type="Resource" path="res://data/interactables/light_torch.tres" id="3_light"]
+[ext_resource type="Resource" path="res://data/interactables/light_metal.tres" id="3_light"]
 [ext_resource type="Resource" path="res://data/interactables/fuelled_appearance.tres" id="4_appearance"]
 [ext_resource type="Script" path="res://resources/building_definition.gd" id="5_def"]
 

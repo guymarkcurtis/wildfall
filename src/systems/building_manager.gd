@@ -35,6 +35,34 @@ var active_story := 0
 ## repointed at building rotation by M9 box 5).
 var roofs_visible := true
 
+## Shelter is an enclosed room: a floor underfoot on the active story, a
+## perimeter edge fixture (wall, door, or window) in all four cardinal
+## directions before the floor ends, and a roof overhead one story up.
+## The seal walk is bounded — a floor run longer than this is an open
+## deck, which counts as outdoors. Record lookups only: code defines the
+## system, data defines the parts.
+const SHELTER_SEAL_DEPTH := 16
+
+## The shelter answer is cached per (tile, story) and recomputed when the
+## player steps to a new tile/story or the record set changes, so the
+## per-frame player speed path never scans the building index.
+var _shelter_cache_key := ""
+var _shelter_cache_value := false
+var _shelter_dirty := true
+
+## Per-column topmost occupied story: tile column "<x>:<y>" -> highest
+## story any record reaches there. This is the exterior presentation's
+## focus — the layer the player sees when standing outside (usually the
+## roof, whatever the topmost layer is), keyed per column so each
+## structure shows its own top, not the world's highest.
+var _top_story_by_column: Dictionary = {}
+var _top_stories_dirty := true
+
+## The presentation mode the building nodes were last republished in, so a
+## doorway crossing (sheltered <-> not) republishes without waiting for a
+## placement.
+var _presentation_sheltered := false
+
 var _connector_under_player: BuildingRecord = null
 
 var player: Player = null
@@ -77,6 +105,8 @@ signal demolition_blocked(record: BuildingRecord, reason: String)
 
 func _physics_process(delta: float) -> void:
 	_update_connector_traversal()
+	_update_outdoor_story_reset()
+	_sync_sheltered_presentation()
 	if item_database != null:
 		for record in _record_list:
 			FuelConsumer.tick(record, delta, item_database)
@@ -123,6 +153,41 @@ func _update_connector_traversal() -> void:
 		elif active_story == landing:
 			set_active_story(found.story)
 	_connector_under_player = found
+
+## Leaving a building: there is no "upper story outside" state. When the
+## player is no longer standing on a floor of the active story and is not
+## crossing a connector (traversal owns the story during the crossing), the
+## active story returns to the ground — so leaving a house from an upper
+## floor lands the view back on the ground level. Unroofed decks and open
+## porches keep their floor underfoot, so a balcony stays on its story and
+## only reads as outdoors. The sandbox is exempt: its [ / ] keys deliberately
+## park the active story as a viewing tool.
+func _update_outdoor_story_reset() -> void:
+	if player == null or not is_instance_valid(player):
+		return
+	if GameSession.is_building_sandbox():
+		return
+	if active_story <= 0 or _connector_under_player != null:
+		return
+	var tile := Vector2i(
+			int(floor(player.global_position.x / float(TILE_SIZE))),
+			int(floor(player.global_position.y / float(TILE_SIZE))))
+	if has_layer_covering(tile, active_story, "floor"):
+		return
+	set_active_story(0)
+
+## Presentation follows the shelter state, not only the story: the moment
+## the player crosses a doorway — or a roof is built or removed — the
+## cutaway switches between the interior view (the level the player is on)
+## and the exterior view (each structure's topmost layer) without waiting
+## for the next placement.
+func _sync_sheltered_presentation() -> void:
+	if player == null or not is_instance_valid(player):
+		return
+	var sheltered := is_player_sheltered()
+	if sheltered != _presentation_sheltered:
+		_presentation_sheltered = sheltered
+		_apply_presentation()
 
 ## The connector record whose landing zone contains `world_position` on the
 ## given story (a stair record spans its own story and its landing story,
@@ -205,7 +270,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_demolish_at_mouse()
 		get_viewport().set_input_as_handled()
 		return
-	# Building Sandbox debug controls: the [ / ] keys move the ACTIVE story
+	# Building Sandbox debug controls: the [ and ] keys move the ACTIVE story
 	# when the build palette is closed, and F5 toggles roof visibility.
 	# Never available in survival — a normal player must not phase through
 	# floors. (R/Q became building-rotation controls in M9 box 5.)
@@ -453,6 +518,121 @@ func get_record_for_building(building: Building) -> BuildingRecord:
 			return record
 	return null
 
+# --- Shelter queries ---
+
+## True when some record on `story` with the given layer has a footprint that
+## covers the tile. Footprint-aware, so multi-tile floors and roofs cover
+## whole rooms through the same lookup.
+func has_layer_covering(tile: Vector2i, story: int, layer: String) -> bool:
+	for record in _record_list:
+		if record.layer != layer or record.story != story or not record.occupies_tiles():
+			continue
+		if tile.x >= record.tile.x and tile.x < record.tile.x + record.footprint.x \
+				and tile.y >= record.tile.y and tile.y < record.tile.y + record.footprint.y:
+			return true
+	return false
+
+## True when walking from `tile` on `story` toward `orientation`, an edge
+## fixture (wall, door, or window) is met before the floor ends. Hitting a
+## fixture on the starting tile counts as sealed; stepping off the floor
+## counts as open; a run longer than SHELTER_SEAL_DEPTH is an open deck.
+func _sealed_in_direction(tile: Vector2i, story: int, orientation: String) -> bool:
+	var delta := Vector2i(0, 0)
+	match orientation:
+		"north":
+			delta = Vector2i(0, -1)
+		"south":
+			delta = Vector2i(0, 1)
+		"west":
+			delta = Vector2i(-1, 0)
+		"east":
+			delta = Vector2i(1, 0)
+	var current := tile
+	for _step in range(SHELTER_SEAL_DEPTH):
+		if get_record_at(current, story, "edge", orientation) != null:
+			return true
+		if not has_layer_covering(current, story, "floor"):
+			return false
+		current += delta
+	return false
+
+## True when the player stands inside an enclosed room: a floor underfoot on the
+## active story, a perimeter edge fixture in all four directions, and a
+## roof overhead one story up (the room's ceiling). Open decks, half-built
+## shelters, and natural ground never count — story-0 terrain has no floor
+## records, so a room only exists where the player placed one.
+func is_player_sheltered() -> bool:
+	if player == null or not is_instance_valid(player):
+		return false
+	var tile := Vector2i(
+			int(floor(player.global_position.x / float(TILE_SIZE))),
+			int(floor(player.global_position.y / float(TILE_SIZE))))
+	var story := active_story
+	var cache_key := "%d:%d:%d" % [tile.x, tile.y, story]
+	if _shelter_dirty or cache_key != _shelter_cache_key:
+		_shelter_cache_value = _compute_shelter(tile, story)
+		_shelter_cache_key = cache_key
+		_shelter_dirty = false
+	return _shelter_cache_value
+
+func _compute_shelter(tile: Vector2i, story: int) -> bool:
+	if not has_layer_covering(tile, story, "floor"):
+		return false
+	for orientation in ["north", "south", "west", "east"]:
+		if not _sealed_in_direction(tile, story, str(orientation)):
+			return false
+	return has_layer_covering(tile, story + 1, "overhead")
+
+## Rebuild the per-column topmost-story table from the live record list.
+## Tile parts contribute their story to every footprint cell; edge parts
+## contribute to their (normalised) anchor column. Cheap: placement-sized
+## data, rebuilt only when the record set changes.
+func _rebuild_column_top_stories() -> void:
+	_top_story_by_column.clear()
+	for record in _record_list:
+		if record.layer == "edge":
+			var key := "%d:%d" % [record.tile.x, record.tile.y]
+			if not _top_story_by_column.has(key):
+				_top_story_by_column[key] = record.story
+			else:
+				_top_story_by_column[key] = maxi(int(_top_story_by_column[key]), record.story)
+		elif record.occupies_tiles():
+			for dx in range(record.footprint.x):
+				for dy in range(record.footprint.y):
+					var cell := record.tile + Vector2i(dx, dy)
+					var key := "%d:%d" % [cell.x, cell.y]
+					if not _top_story_by_column.has(key):
+						_top_story_by_column[key] = record.story
+					else:
+						_top_story_by_column[key] = maxi(int(_top_story_by_column[key]), record.story)
+	_top_stories_dirty = false
+
+## The exterior focus for one placed part: the highest story its footprint
+## reaches (its anchor column for an edge part). A structure that only ever
+## touches the ground reports 0, so its parts stay at full colour from
+## outside — the topmost layer shown is whatever the structure actually has.
+func top_story_for(record: BuildingRecord) -> int:
+	if _top_stories_dirty:
+		_rebuild_column_top_stories()
+	var best := -1
+	if record.layer == "edge":
+		best = maxi(best, int(_top_story_by_column.get("%d:%d" % [record.tile.x, record.tile.y], 0)))
+	elif record.occupies_tiles():
+		for dx in range(record.footprint.x):
+			for dy in range(record.footprint.y):
+				var cell := record.tile + Vector2i(dx, dy)
+				best = maxi(best, int(_top_story_by_column.get("%d:%d" % [cell.x, cell.y], 0)))
+	else:
+		best = record.story
+	return best
+
+## Record changes invalidate the per-tile shelter answer AND the per-column
+## topmost-story cache, so a standing player is re-evaluated the moment a
+## wall, door, or roof is built or demolished.
+func _invalidate_record_caches() -> void:
+	_shelter_dirty = true
+	_top_stories_dirty = true
+
 # --- Placement ---
 
 func can_place(tile: Vector2i, story: int = selected_story) -> bool:
@@ -503,6 +683,7 @@ func place_record(item_id: String, tile: Vector2i, inventory: InventoryComponent
 	for key in keys:
 		records[key] = record
 	_record_list.append(record)
+	_invalidate_record_caches()
 	if inv != null:
 		inv.remove_item(item_id, 1)
 	if replaced != null:
@@ -589,6 +770,7 @@ func restore_building(item_id: String, tile: Vector2i, health: int = 50, story: 
 	for key in keys:
 		records[key] = record
 	_record_list.append(record)
+	_invalidate_record_caches()
 	_spawn_node(record)
 	_apply_presentation()
 	building_placed.emit(item_id, tile)
@@ -600,6 +782,7 @@ func clear_all() -> void:
 			record.node.queue_free()
 	records.clear()
 	_record_list.clear()
+	_invalidate_record_caches()
 	_connector_under_player = null
 	set_build_mode(false)
 
@@ -799,6 +982,7 @@ func _remove_record(record: BuildingRecord, refund: bool, refund_to: InventoryCo
 		if records.get(key) == record:
 			records.erase(key)
 	_record_list.erase(record)
+	_invalidate_record_caches()
 	var target := refund_to
 	if target == null and player != null:
 		target = player.inventory
@@ -945,13 +1129,32 @@ func _orientation_for_mouse(tile: Vector2i) -> String:
 		return "east" if center_offset.x > 0.0 else "west"
 	return "south" if center_offset.y > 0.0 else "north"
 
-## Republish the cutaway policy: build mode focuses the construction story
-## (blueprints above), normal play focuses the player's active story.
+## Republish the cutaway policy to every placed node. Build mode focuses the
+## construction story (blueprints above). Normal play is location-aware:
+## inside an enclosed room the focus is the level the player is on (the
+## cutaway — the roof above hides so the interior reads), otherwise each
+## structure presents its own topmost layer (the exterior view — standing
+## outside a house shows its roof, not its rooms). The sandbox keeps the
+## plain active-story focus: its [ / ] keys are an explicit viewing tool, so
+## the location-aware focus and the outdoor reset both stand down there.
 func _apply_presentation() -> void:
-	var focus := selected_story if build_mode else active_story
+	if build_mode:
+		var focus := selected_story
+		for record in _record_list:
+			if record.node != null and is_instance_valid(record.node):
+				record.node.set_presentation(focus, true, roofs_visible)
+		return
+	var sheltered := is_player_sheltered()
+	var exterior := not sheltered and not GameSession.is_building_sandbox()
+	if exterior:
+		_rebuild_column_top_stories()
 	for record in _record_list:
-		if record.node != null and is_instance_valid(record.node):
-			record.node.set_presentation(focus, build_mode, roofs_visible)
+		if record.node == null or not is_instance_valid(record.node):
+			continue
+		var focus := active_story
+		if exterior:
+			focus = top_story_for(record)
+		record.node.set_presentation(focus, false, roofs_visible, exterior)
 
 func _mouse_tile() -> Vector2i:
 	var world := player.get_global_mouse_position() if player != null else Vector2.ZERO

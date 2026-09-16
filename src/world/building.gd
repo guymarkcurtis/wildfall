@@ -181,8 +181,17 @@ func _setup_light() -> void:
 		_shared_light_texture.width = 128
 		_shared_light_texture.height = 128
 		_shared_light_texture.fill = GradientTexture2D.FILL_RADIAL
+		# Anchor the radial fill at the texture centre (half-height above
+		# bottom) — exactly the geometry the player's held light uses. Without
+		# explicit from/to vectors Godot defaults to a corner-anchored fill,
+		# which renders every placed light as an off-centre quarter disc.
+		_shared_light_texture.fill_from = Vector2(0.5, 0.5)
+		_shared_light_texture.fill_to = Vector2(0.5, 0.0)
 	_light = PointLight2D.new()
 	_light.texture = _shared_light_texture
+	# Same additive blend as the player's held light, so placed lights and
+	# the carried one read as the same effect at any tier.
+	_light.blend_mode = Light2D.BLEND_MODE_ADD
 	_light.position = Vector2(TILE_SIZE, TILE_SIZE) * 0.5
 	_light.color = profile.color
 	_light.energy = profile.energy
@@ -440,14 +449,18 @@ func _render_band() -> int:
 	var story_band := clampi(story, 0, BuildingRecord.MAX_STORIES - 1) * BuildingRecord.STORY_Z_STRIDE
 	return story_band + int(BuildingRecord.LAYER_Z.get(layer, 2))
 
-## Top-down cutaway policy. The focus story is the player's active story in
-## normal play and the selected construction story in build mode.
-##   focus story: full colour (roofs/overheads fade so interiors read; the
-##                sandbox roof toggle can hide them completely)
+## Top-down cutaway policy. The focus story is location-aware in normal play
+## (the BuildingManager chooses it: the level the player is on inside an
+## enclosed room, the structure's topmost layer outdoors) and the selected
+## construction story in build mode.
+##   focus story: full colour (in the interior cutaway, overheads on that
+##                story fade so interiors read; in the exterior view the
+##                topmost layer is the view itself and stays at full colour;
+##                the sandbox roof toggle can hide them completely)
 ##   below focus: ~25% ghost — orientation only, never a second floor
 ##   above focus: hidden while moving; a faint blueprint in build mode
 ## All stories stay aligned in X/Y — no screen-position skew.
-func set_presentation(focus_story: int, build_mode: bool, roofs_visible: bool = true) -> void:
+func set_presentation(focus_story: int, build_mode: bool, roofs_visible: bool = true, exterior: bool = false) -> void:
 	var delta := story - focus_story
 	if delta > 0:
 		if build_mode:
@@ -461,6 +474,13 @@ func set_presentation(focus_story: int, build_mode: bool, roofs_visible: bool = 
 		modulate = Color(1.0, 1.0, 1.0, 0.25)
 		return
 	if layer == "overhead":
+		if exterior:
+			# Exterior view: the topmost layer is the view itself, so the
+			# roof stays at full colour (the F5 toggle still hides it).
+			modulate = Color(1.0, 1.0, 1.0, 1.0 if roofs_visible else 0.0)
+			visible = roofs_visible
+			return
+		# Interior cutaway: the room reads through its own overhead.
 		modulate = Color(1.0, 1.0, 1.0, 0.4 if roofs_visible else 0.0)
 		visible = roofs_visible
 		return

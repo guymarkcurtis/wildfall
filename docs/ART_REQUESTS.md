@@ -133,3 +133,37 @@ pixels only when the file is missing.
    share a column, parts atlas 64×288 with all 18 cells drawn,
    utilities atlas 160×32 with all 5 cells drawn, all 4 station
    cells drawn) — 239/239 passing.
+
+## Request 5 — Handheld lantern pickup icons [PENDING]
+
+The round tier-scaled light pass added two handheld light items
+(`ItemDefinition` `light_source` items, carried in the equipment light
+slot and rendered by the player's held light). Until dedicated art
+ships they deliberately **borrow** existing pickup icons:
+`stone_lantern` reuses `yard_lantern.png` and `iron_lantern` reuses
+`metal_lantern.png` (the same precedent as the down-stairs items
+reusing the up-stairs icon). These are distinct items in the
+inventory — two lanterns sharing one icon is a polish gap.
+
+- **Output**:
+  - `assets/items/pickups/stone_lantern.png`
+  - `assets/items/pickups/iron_lantern.png`
+- **Layout**: standalone **32×32 px** transparent PNGs, one per item
+  (no sheet — pickup icons are consumed one file per item). The
+  subject fills roughly 80–90% of the cell, centered.
+- **Style**: match the existing 32×32 pickup sprites
+  (`assets/items/pickups/` — see `yard_lantern.png` /
+  `metal_lantern.png` for the lantern family and `torch.png` for the
+  handheld-light read). A stone lantern should read as a hung
+  stone-cased lantern (stone-tier palette); an iron lantern as a
+  metal-cased lantern with a brighter, cleaner glow (metal-tier
+  palette). The two must be distinguishable from each other and from
+  the wooden yard lantern at 32 px.
+- **Reference**: `assets/concepts/frontier-explorer-bases-walk-concept.png`
+  plus the shipped lantern pickup icons.
+- **Consumed by**: `ItemDefinition.texture_path` in
+  `src/systems/item_database.gd` — the wiring pass flips
+  `stone_lantern.texture_path` and `iron_lantern.texture_path` to the
+  new files (today they point at the borrowed icons) and
+  `tests/test_light_tiers.gd` already checks both `texture_path`
+  values resolve to existing assets, so the swap is harness-covered.

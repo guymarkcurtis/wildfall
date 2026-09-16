@@ -36,7 +36,7 @@ gameplay code. The runtime reads the profile and behaves generically.
 | A container (storage) profile | `chest_container.tres` | `data/interactables/` |
 | A station profile (recipes) | `workbench_station.tres` | `data/interactables/` |
 | A fuel profile | `fuelled.tres` | `data/interactables/` |
-| A light profile | `local_light.tres` | `data/interactables/` |
+| A light profile | `light_torch.tres` (the wood-tier baseline) | `data/interactables/` — **generator-owned**: shared profiles are written by `tools/generate_building_definitions.gd`, which re-runs idempotently and touches only its own files |
 | An appearance/state‑sheet profile | `chest_appearance.tres` | `data/interactables/` |
 
 ## The data‑driven rule (final)
@@ -153,6 +153,22 @@ Phase 1; authored instances from Phase 3 on):
 | `LightProfile` | radius, colour, energy, texture, flicker, daytime policy, requires‑powered |
 | `AppearanceProfile` | sprite path, grid layout, named states, frame rate, open/close and idle sequences |
 
+**Light tiers (data, not code).** Light strength scales with building tier
+through the profile values each `BuildingDefinition` references — there are
+no tier branches in runtime code. The shipped ladder: wood tier
+`light_torch` (80 px / energy 1.0) → stone tier `light_stone`
+(112 px / 1.35) → metal tier `light_metal` (144 px / 1.7). The primitive
+profiles are pinned separately (`light_campfire` 96 px / 1.1,
+`light_furnace` 64 px / 0.9) and are not part of the tier ladder. To move a
+building to a different tier, re-point its `BuildingDefinition`'s
+`light_profile` reference in `data/buildings/*.tres`; to change a whole tier,
+edit the profile values in the generator and re-run it. All placed lights
+share one centred radial mask — an explicit `FILL_RADIAL` on the 128×128
+texture with `fill_from (0.5, 0.5)` → `fill_to (0.5, 0.0)` (a bare
+`FILL_RADIAL` defaults to a corner-anchored quarter disc) — with the
+player's held light, so tiers read as the same round halo at different
+strengths.
+
 Invalid references in any of these fail **at startup** with actionable resource
 paths, using the existing content‑validation style (see the world‑content
 registry).
@@ -262,3 +278,24 @@ capability design must not preclude any of these later.
       player, and nothing can be dropped back in. Opening any device panel
       closes the standalone inventory window (the panel already hosts the
       player's inventory grid).
+- [x] **Round, tier-scaled local lights** — every placed-object light
+      (campfire, furnace, torch, hearth, brazier, yard/metal lanterns) now
+      renders the same centred round halo as the player's held light, and
+      light strength scales with tier in data. `Building._setup_light()`
+      anchors the shared 128×128 radial mask at the texture centre
+      (`fill_from (0.5,0.5)` → `fill_to (0.5,0.0)`) and uses
+      `BLEND_MODE_ADD`, matching the player light exactly (a bare
+      `FILL_RADIAL` was corner-anchored and drew an off-centre quarter
+      disc). The generator now owns the tier ladder — wood `light_torch`
+      (80 px / 1.0), stone `light_stone` (112 px / 1.35), metal
+      `light_metal` (144 px / 1.7) — with the primitives pinned
+      (`light_campfire` 96 / 1.1,
+      `light_furnace` 64 / 0.9). Re-pointing a building to a tier is a
+      one-line `light_profile` edit in its `data/buildings/*.tres`
+      (hearth + brazier → stone, metal_lantern → metal; yard_lantern +
+      torch keep the wood baseline). The handheld lanterns follow the same
+      tier scaling through their `ItemDefinition` light fields (common
+      torch 200 / 1.25, uncommon stone_lantern 264 / 1.6, rare
+      iron_lantern 336 / 2.0), which the player's held light already
+      reads — no per-tier code. Covered by `tests/test_light_tiers.gd`
+      (37/37).

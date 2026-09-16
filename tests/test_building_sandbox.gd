@@ -4,6 +4,10 @@ extends SceneTree
 
 var _main: Node = null
 var _failures := 0
+## M10 placement failures are counted here, not in the smoke test's lambda:
+## GDScript 4 lambdas capture locals by value, so a lambda-local counter
+## could never trip its own check.
+var _m10_place_failures := 0
 
 func _initialize() -> void:
 	GameSession.request_new_game(GameSession.MODE_BUILDING_SANDBOX)
@@ -194,7 +198,44 @@ func _run() -> void:
 	_release_key("toggle_roofs")
 	await process_frame
 	_check(buildings.roofs_visible, "F5 shows the roof layer again")
+	# M11: [ and ] are the keys the help text names for story editing
+	# (the old text promised a slash that no action uses). With the palette
+	# open they move the palette's selected story; with it closed they move
+	# the player's active story.
+	buildings.set_selected_story(0)
+	_press_key("build_level_up")
+	for _frame in range(20):
+		await process_frame
+		if buildings.selected_story == 1:
+			break
+	_release_key("build_level_up")
+	await process_frame
+	_check(buildings.selected_story == 1, "] moves the palette's selected story up in build mode")
+	_press_key("build_level_down")
+	for _frame in range(20):
+		await process_frame
+		if buildings.selected_story == 0:
+			break
+	_release_key("build_level_down")
+	await process_frame
+	_check(buildings.selected_story == 0, "[ moves the palette's selected story back down")
 	buildings.set_build_mode(false)
+	_press_key("build_level_up")
+	for _frame in range(20):
+		await process_frame
+		if buildings.active_story == 1:
+			break
+	_release_key("build_level_up")
+	await process_frame
+	_check(buildings.active_story == 1, "] moves the player up a story outside build mode")
+	_press_key("build_level_down")
+	for _frame in range(20):
+		await process_frame
+		if buildings.active_story == 0:
+			break
+	_release_key("build_level_down")
+	await process_frame
+	_check(buildings.active_story == 0, "[ brings the player back to the ground story")
 	# M10 release playtest: construct each promised sandbox layout through the
 	# same data-driven placement API used by the player. This is deliberately a
 	# compact structural smoke rather than a second catalogue list: it proves
@@ -323,10 +364,11 @@ func _test_m10_layout_smoke(buildings: BuildingManager, player: Player) -> void:
 	}
 	for item_id in supplies:
 		player.inventory.add_item(str(item_id), int(supplies[item_id]))
-	var failures := 0
+	_m10_place_failures = 0
 	var place := func(item_id: String, tile: Vector2i, story: int = 0, orientation: String = "") -> void:
 		if not buildings.place_record(item_id, tile, player.inventory, story, orientation):
-			failures += 1
+			_m10_place_failures += 1
+			printerr("  M10 placement failed: %s at (%d, %d) story %d %s" % [item_id, tile.x, tile.y, story, orientation])
 	# Cabin: timber foundation, edges, roof, and furniture.
 	var cabin := Vector2i(10, 6)
 	for offset in [Vector2i.ZERO, Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
@@ -366,7 +408,7 @@ func _test_m10_layout_smoke(buildings: BuildingManager, player: Player) -> void:
 		place.call("wooden_floor", tower + offset, 1)
 		place.call("wooden_floor", tower + offset, 2)
 	place.call("wooden_wall", tower, 2, "north")
-	_check(failures == 0, "M10 sandbox playtest builds cabin, cottage, yard, workshop, and three-story layout")
+	_check(_m10_place_failures == 0, "M10 sandbox playtest builds cabin, cottage, yard, workshop, and three-story layout")
 
 func _check(condition: bool, label: String) -> void:
 	if condition:

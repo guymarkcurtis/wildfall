@@ -5,6 +5,7 @@ extends ColorRect
 signal closed
 
 var _checkbox: CheckButton = null
+var _environment_checkbox: CheckButton = null
 var _pack_picker: OptionButton = null
 var _apply_pack_button: Button = null
 var _texture_status: Label = null
@@ -24,14 +25,27 @@ func open() -> void:
 	visible = true
 	if _checkbox:
 		_checkbox.set_pressed_no_signal(SaveSystem.is_autosave_enabled())
+	if _environment_checkbox:
+		_environment_checkbox.set_pressed_no_signal(SaveSystem.is_ignore_environment_effects())
 	_refresh_texture_packs()
 
 func _build() -> void:
+	# The panel is taller than the 720 px base viewport, so the overlay is a
+	# full-rect scroll area around it: the menu scrolls to reach every row
+	# instead of clipping the Back button. The scroll sizes its child to the
+	# child's minimum, so the centre container pins its width to the project
+	# viewport (canvas_items stretch keeps the layout at this resolution no
+	# matter how the window is resized) — that is what keeps the panel
+	# horizontally centred.
+	var scroll := ScrollContainer.new()
+	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	scroll.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	scroll.grow_vertical = Control.GROW_DIRECTION_BOTH
+	add_child(scroll)
+
 	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	center.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	center.grow_vertical = Control.GROW_DIRECTION_BOTH
-	add_child(center)
+	center.custom_minimum_size.x = float(ProjectSettings.get_setting("display/window/size/viewport_width", 1280))
+	scroll.add_child(center)
 
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(520.0, 620.0)
@@ -62,6 +76,18 @@ func _build() -> void:
 	box.add_child(_checkbox)
 
 	box.add_child(MenuStyle.make_label("Keeps the last 2 autosaves. Manual saves are unlimited.", 13, MenuStyle.MUTED))
+
+	_environment_checkbox = CheckButton.new()
+	_environment_checkbox.text = "Ignore environmental effects"
+	_environment_checkbox.add_theme_color_override("font_color", MenuStyle.TITLE)
+	_environment_checkbox.button_pressed = SaveSystem.is_ignore_environment_effects()
+	_environment_checkbox.toggled.connect(_on_ignore_environment_toggled)
+	box.add_child(_environment_checkbox)
+	var env_note := MenuStyle.make_label(
+			"The character always moves normally: weather speed penalties and cold status "
+			+ "effects (rain, snow, storms, arctic nights) are switched off.", 13, MenuStyle.MUTED)
+	env_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(env_note)
 
 	var divider := HSeparator.new()
 	box.add_child(divider)
@@ -108,6 +134,9 @@ func _build() -> void:
 
 func _on_autosave_toggled(enabled: bool) -> void:
 	SaveSystem.set_autosave_enabled(enabled)
+
+func _on_ignore_environment_toggled(enabled: bool) -> void:
+	SaveSystem.set_ignore_environment_effects(enabled)
 
 func _refresh_texture_packs() -> void:
 	if _pack_picker == null:

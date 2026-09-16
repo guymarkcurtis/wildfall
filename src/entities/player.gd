@@ -649,9 +649,23 @@ func _speed_multiplier() -> float:
 	if status_effects != null:
 		mult *= clampf(1.0 + status_effects.get_speed_bonus() * 0.08, 0.35, 1.6)
 	var weather := get_parent().get_node_or_null("WeatherSystem") as WeatherSystem
-	if weather != null:
+	# An enclosed room is indoors: the weather's speed penalty does not
+	# reach the player (BuildingManager's cached shelter query — the
+	# per-frame path never scans the building index). The options "Ignore
+	# environmental effects" toggle grants the same immunity everywhere
+	# (the settings read is static-memory after first load, so the
+	# per-frame cost is a single bool).
+	if weather != null and not _is_sheltered() \
+			and not SaveSystem.is_ignore_environment_effects():
 		mult *= weather.get_speed_multiplier()
 	return mult
+
+## True when the player stands in an enclosed room (floor + perimeter +
+## roof on the active story), per BuildingManager's data-driven shelter
+## query. No building manager (or no player wiring) means outdoors.
+func _is_sheltered() -> bool:
+	var buildings := get_parent().get_node_or_null("BuildingManager") as BuildingManager
+	return buildings != null and buildings.is_player_sheltered()
 
 func _ui_blocks_world_input() -> bool:
 	var parent := get_parent()

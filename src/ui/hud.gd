@@ -113,10 +113,16 @@ func _bar_label(initial_text: String) -> Label:
 func _build_navigation_ribbon() -> void:
 	var ribbon := PanelContainer.new()
 	ribbon.name = "NavigationRibbon"
-	ribbon.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	ribbon.offset_left = -430.0
+	# Right-justified so the shortcut ribbon never collides with the
+	# health/hunger bars at the top-left (they span x 8..416 at the
+	# 1280x720 design resolution). The box is content-width: the label
+	# measures ~451 px at 11 px font, so 480 px leaves ~14 px of padding
+	# per side, and an 8 px right margin puts the left edge at x 792 —
+	# 376 px clear of the hunger bar.
+	ribbon.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	ribbon.offset_left = -(480.0 + 8.0)
 	ribbon.offset_top = 8.0
-	ribbon.offset_right = 430.0
+	ribbon.offset_right = -8.0
 	ribbon.offset_bottom = 34.0
 	ribbon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()

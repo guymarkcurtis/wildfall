@@ -1,6 +1,192 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **Location-aware building presentation (2026-09-15):** fixes four
+  presentation bugs the user reported from live play: (1) outside a house
+  the view must show the structure's topmost layer (usually a roof —
+  whatever it is), not a cut into the interior; (2) inside a house the
+  view must show the level the player is on; (3) leaving a house from an
+  upper story must return the active story to the ground; (4) an indoor
+  spot with no roof above (balcony/courtyard/open deck) must show the
+  roof again, i.e. read as outdoors. Source: `Building.set_presentation`
+  takes four args (focus story, build mode, roofs visible, exterior) and
+  the BuildingManager now owns a per-column topmost-story cache
+  (`_top_story_by_column`, rebuilt at every record mutation).
+  `_apply_presentation` picks the focus per location: inside an enclosed
+  room the active story is the focus (roof above hides, the room's own
+  overhead fades to 0.4, the player's level renders at full colour, lower
+  stories ghost at 0.25); outside, each structure column independently
+  presents its topmost story at full colour and ghosts everything below —
+  so a roofless deck shows its own floor while the neighbouring house
+  shows its top roof, never a global max. The building sandbox stays
+  exempt from both hooks. New `_update_outdoor_story_reset` drops the
+  active story back to 0 when the player leaves a building with no floor
+  underfoot and no stair connector underfoot — the connector exemption
+  keeps the traversal owning the story while the player is mid-stair, so
+  stepping off an upper story into the yard lands on the ground but
+  crossing a stairwell never snaps to the ground mid-crossing. The
+  sheltered-state presentation sync now re-applies only when the
+  sheltered boolean flips, not every physics frame. Tests: new
+  `tests/test_presentation.gd` (**47/47**, survival mode — the sandbox is
+  exempt, so only a survival boot can prove these rules): a spiral
+  search finds a 6×5 land block using the manager's own pixel-centred
+  foundation water predicate (so search and placement can never
+  disagree), places a 42-part fixture — a 2×2 three-story house with a
+  reserved stairwell opening plus a 1×1 roofed pavilion room and a 1×1
+  roofless open deck — then teleports the player through four scenarios
+  (open yard → upper room cutaway → exit from the upper story, including
+  the stairwell crossing exemption → unroofed deck). Every scenario
+  awaits its settles: an unaawaited scenario coroutine suspends at its
+  first frame await and its remaining checks race the next scenario's
+  player moves (this interleaving was the cause of a 9-failure
+  misdiagnosis during development). `tests/test_game.gd`: two cutaway
+  checks still asserted the pre-change rule (the active story's own level
+  hidden during normal play) and were updated to the new contract — the
+  level the player is on renders in full colour and its support stories
+  ghost (the check count goes 445 → 446). Full harness, fresh seeds:
+  presentation **47/47** (green on three consecutive boots), `test_game`
+  **445 passed / 1 failed** (only the pre-existing mission-journal
+  centred-in-viewport check), `test_building_stairs` **40/40**,
+  `test_shelter` **49/49**, `test_building_sandbox` **80/80**,
+  `test_building_placement` **88/88**, `test_building_content`
+  **102/102**, `test_building_art` **701/701**, `test_station_crafting`
+  **42/42**, `test_interaction_router` **42/42**, `test_harvesting`
+  **94/94**, `test_ground_pack` **140/140**, `test_equipment` **39/39**,
+  `test_light_tiers` **37/37**; `--headless --editor --quit` exited 0.
+- **Ignore environmental effects option (2026-09-15):** new Options-menu
+  toggle (title and pause) that makes the character always move normally
+  regardless of weather or biome cold. `SaveSystem` stores it as a second
+  setting next to autosave in `user://settings.json`
+  (`ignore_environment_effects`, default off; same load/write pattern,
+  static-memory after first read). `Main._update_world_presentation` now
+  computes `immune = sheltered or option on` — the immune branch cancels
+  every cold source (snow, storms, arctic-night biome chill) and clears
+  slow/frozen statuses already applied, so enabling the toggle mid-snowfall
+  warms the player up immediately; the HUD's "Sheltered" label stays tied
+  to a real enclosed room, which is what earned it. `Player._speed_multiplier`
+  likewise skips the weather speed penalty while the option is on (one
+  static-bool read per frame). The panel now outgrew the 720 px base
+  viewport (776 px of content), so its `_build()` wraps the existing
+  CentreContainer in a full-rect `ScrollContainer` whose width is pinned to
+  the project viewport width (canvas_items stretch keeps the layout at
+  1280×720): the menu scrolls to reach every row instead of clipping the
+  Back button, and the panel stays horizontally centred — a layout probe
+  confirmed panel 520×776 at x=380 in the 1280×720 overlay. `tests/
+  test_shelter.gd` grows a live options leg (six checks: baseline snow
+  chill + speed penalty with the option off; toggling it on mid-snowfall
+  clears the freeze, the immunity persists on further ticks, and the speed
+  multiplier is back to 1.0; toggling it off re-applies the chill) and
+  restores the setting before the arctic leg so that leg still covers the
+  option-off behaviour — **44/44**. Full harness: `test_game` **444 passed
+  / 1 failed** (only the pre-existing mission-journal centred-in-viewport
+  check), `test_building_sandbox` **80/80**, zero failures elsewhere;
+  `--headless --editor --quit` exited 0.
+- **Sheltered rooms and the [ ] story keys (2026-09-15):** two fixes.
+  (1) The help text promised "[ / ]" for story editing, but no action is bound
+  to `/` — the bound keys are `[` (code 91) → `build_level_down` and
+  `]` (code 93) → `build_level_up`; the misleading strings are
+  corrected (`src/main.gd` ghost help, `src/ui/build_palette.gd`
+  instructions, both docs) and `project.godot` is untouched. (2)
+  Multi-story rooms are now shelters: `BuildingManager.is_player_
+  sheltered()` (record lookups only — data-driven, no name branches)
+  is true when the player's tile on the active story has a floor
+  footprint underfoot, all four directions are sealed by an edge
+  fixture (wall/door/window) before the floor ends (capped at
+  `SHELTER_SEAL_DEPTH = 16`, so an open deck counts as outdoors),
+  and a roof footprint covers the tile one story up; the answer is
+  cached per (tile, story) and invalidated at all four record
+  mutation points. `Main._update_world_presentation` now skips every
+  cold source indoors (snow weather and the arctic-night biome chill)
+  and clears any slow/frozen statuses already present, and
+  `Player._speed_multiplier` ignores the weather speed modifier while
+  sheltered; the HUD info line appends "Sheltered". New focused
+  suite `tests/test_shelter.gd` **39/39**: key-binding regression
+  (the bracket keys are bound; no action is bound to `/`), enclosure
+  rules across five built rooms (a 2×2 enclosed room shelters at
+  both corners; a roofless walled room is false and flips true when
+  the roof is placed while the player stands inside; a north-open
+  room is false; four doors seal; stacked foundations without a floor
+  do not; natural story-0 ground under a room's footprint is not
+  indoors; demolishing the north wall while inside breaks the
+  shelter), live integration with the snow and storm sources (cleared
+  indoors, re-applied outdoors, and a storm does not thaw a leftover
+  snow freeze until indoors), and the arctic-night source through a
+  `WorldGenerator` stand-in — the sandbox yard data never yields
+  arctic tiles at the random per-boot seed, so the stand-in is a
+  generator subclass whose data answers "arctic" everywhere; only
+  main's per-frame night branch consumes the swapped member (the
+  generator has no `_ready`/`_process`, and the chunk/weather/
+  building systems hold their own references). `tests/
+  test_building_sandbox.gd` grows four live key checks (`]`/`[` move
+  the palette's selected story in build mode, and the player's
+  active story outside it) to **80/80**, and its M10 smoke counter
+  is now a class member: a probe confirmed GDScript 4 lambdas
+  capture locals by value, so the old lambda-local `failures`
+  counter could never have tripped its own check. Full harness:
+  `test_game` **444 passed / 1 failed** (only the pre-existing
+  mission-journal centred-in-viewport check), and zero failures
+  elsewhere — building sandbox 80, stairs 37, placement 88, content
+  102, light tiers 37, station 42, router 42, harvesting 94, ground
+  pack 140, art 701, equipment 39. `--headless --editor --quit`
+  exited 0.
+- **Right-justified navigation ribbon (2026-09-15):** the HUD menu-shortcut
+  ribbon ("I INVENTORY … M MAP") was centred at the top
+  (`PRESET_CENTER_TOP`, an 860 px box spanning ±430 px), which overlaps the
+  top-left survival bars (health x 8–208, hunger x 216–416) at the
+  1280×720 design resolution. `HUD._build_navigation_ribbon()` now anchors
+  `PRESET_TOP_RIGHT` with an 8 px right margin and a 480 px content-width
+  box (the label measures 451 px at the 11 px font, leaving ~14 px padding
+  per side); the box spans x 792–1272, leaving 376 px of clearance over the
+  hunger bar and matching the bars' 8 px edge margin on the right. Two new
+  `test_game` checks cover it (ribbon left edge clears the hunger bar's
+  right edge; ribbon right edge sits within a small margin of the viewport
+  edge), taking `test_game` to **444 passed / 1 failed** — the single
+  failure remains the pre-existing mission-journal centring check recorded
+  below. `--headless --editor --quit` exited 0. The windowed
+  `docs/ui_baseline/` panel images (full-window captures made on a display
+  machine — see the macOS `OUT_DIR` in `tools/capture_interactable_panels.gd`)
+  still show the old centred ribbon; a windowed re-capture refreshes them.
+- **Round, tier-scaled local lights (2026-09-15):** every placed-object
+  light (campfire, furnace, torch, hearth, brazier, yard/metal lanterns) now
+  renders the same round halo as the player's held light. The shared building
+  light mask in `Building._setup_light()` was a bare `FILL_RADIAL`
+  `GradientTexture2D`, which Godot defaults to a corner-anchored fill — an
+  off-centre quarter disc. It now sets `fill_from = Vector2(0.5, 0.5)` /
+  `fill_to = Vector2(0.5, 0.0)` on the same 128×128 texture and
+  `BLEND_MODE_ADD` as the player light. Light strength now scales with
+  building tier in **data**: the generator gained `light_stone.tres`
+  (112 px / 1.35) and `light_metal.tres` (144 px / 1.7) beside the existing
+  wood-tier `light_torch` baseline (80 px / 1.0) and the pinned primitives
+  (campfire 96 / 1.1, furnace 64 / 0.9); hearth and brazier (stone tier)
+  re-point to `light_stone`, metal_lantern (metal tier) to `light_metal`,
+  while yard_lantern (wood tier) and torch keep the wood baseline. Handheld
+  lights scale with item rarity: new `stone_lantern` (uncommon, 264 px /
+  1.6) and `iron_lantern` (rare, 336 px / 2.0) join the pinned common torch
+  (200 px / 1.25), each with a workbench recipe gated behind
+  `stone_building` / `metalworking` research; the player's held light already
+  reads these data fields, so no per-tier code branches were added. New
+  focused suite `tests/test_light_tiers.gd` **37/37 checks** (centred radial
+  geometry shared by building + player masks, building tier ladder
+  metal > stone > wood with pinned primitives untouched, handheld tier
+  ladder rare > uncommon > common with tag/recipe/icon discipline, and the
+  live player light following the equipped tier across equip/unequip/swap
+  with the L-toggle state persisting). All other suites re-run on the
+  current HEAD at their recorded baselines: `test_game` **442 passed /
+  1 failed** — the single failure is the same pre-existing mission-journal
+  centred-in-viewport check already recorded as failing on a stashed clean
+  tree above (re-verified failing with this pass stashed), content
+  **102/102**, placement **88/88**, sandbox **76/76**, stairs **37/37**,
+  interaction router **42/42**, station **42/42**, harvesting **94/94**,
+  ground pack **140/140** (exit 0), art **701/701** (exit 0), and the
+  previously-unrecorded `test_equipment.gd` (arrived in the M10 pull) now
+  runs **39/39** — it was unparseable before only because the project's
+  gitignored `.godot/global_script_class_cache.cfg` pre-dated the pull, so
+  the new `class_name` scripts (`EquipmentComponent`, `CharacterPanel`, …)
+  were unknown and the scripts referencing them failed to compile; a
+  `--headless --import` rebuilt the cache and fixed it. `--headless --editor
+  --quit` exited 0. No sandbox/UI baseline images were re-captured; the
+  placed-light halos are a deliberate visual change (round, tier-scaled)
+  that the sandbox baselines under `docs/sandbox_baseline/` pre-date.
 - **Interaction UI overhaul + timed crafting (2026-09-15):** rebuilt the
   shared `InteractablePanel` (inventory-style icon slots, device column +
   player inventory in one window, recipe cards, per-recipe filtered

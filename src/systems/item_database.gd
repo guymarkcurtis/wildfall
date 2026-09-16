@@ -111,6 +111,11 @@ func _load_items() -> void:
 	items["planter_box"] = _create_item("planter_box", "Planter Box", "building", 16, 2.0)
 	items["wooden_table"] = _create_item("wooden_table", "Wood Table", "building", 8, 3.0)
 	items["yard_lantern"] = _create_item("yard_lantern", "Yard Lantern", "building", 8, 1.5)
+	# Handheld light tiers (the placed yard/metal lanterns stay building
+	# items). Light strength and rarity scale with tier in data; consumers
+	# query the light_source tag generically.
+	items["stone_lantern"] = _create_item("stone_lantern", "Stone Lantern", "tool", 8, 2.0)
+	items["iron_lantern"] = _create_item("iron_lantern", "Iron Lantern", "tool", 8, 2.0)
 	items["stone_gate"] = _create_item("stone_gate", "Stone Gate", "building", 16, 3.0)
 	items["stone_railing"] = _create_item("stone_railing", "Stone Railing", "building", 32, 2.5)
 	items["stone_patio"] = _create_item("stone_patio", "Stone Patio", "building", 32, 3.0)
@@ -166,14 +171,37 @@ func _load_items() -> void:
 		var fuel_item := get_item(fuel_item_id)
 		if fuel_item != null:
 			fuel_item.tags = PackedStringArray(["fuel"])
-	# The wooden torch is the shipped light source; its glow presentation
-	# lives here in data so future lanterns need no new code.
+	# Handheld light sources: glow presentation lives here in data, tier
+	# scaled — common torch, uncommon stone lantern, rare iron lantern — so
+	# future lanterns need no new code. Rarities are the item tiers the
+	# strength ladder is keyed to.
 	var torch_item := get_item("torch")
 	if torch_item != null:
 		torch_item.tags.append("light_source")
 		torch_item.light_color = Color(1.0, 0.82, 0.55)
 		torch_item.light_energy = 1.25
 		torch_item.light_radius_px = 200.0
+	var stone_lantern_item := get_item("stone_lantern")
+	if stone_lantern_item != null:
+		stone_lantern_item.tags = PackedStringArray(["light_source"])
+		stone_lantern_item.rarity = "uncommon"
+		stone_lantern_item.light_color = Color(1.0, 0.78, 0.5)
+		stone_lantern_item.light_energy = 1.6
+		stone_lantern_item.light_radius_px = 264.0
+		# Until dedicated pickup art ships, the stone lantern borrows the
+		# yard lantern icon (a lantern silhouette reads at 32 px); same
+		# deliberate decision the down-stairs make with the stair icon.
+		stone_lantern_item.texture_path = "res://assets/items/pickups/yard_lantern.png"
+	var iron_lantern_item := get_item("iron_lantern")
+	if iron_lantern_item != null:
+		iron_lantern_item.tags = PackedStringArray(["light_source"])
+		iron_lantern_item.rarity = "rare"
+		iron_lantern_item.light_color = Color(1.0, 0.88, 0.62)
+		iron_lantern_item.light_energy = 2.0
+		iron_lantern_item.light_radius_px = 336.0
+		# The iron lantern borrows the metal lantern building icon until its
+		# dedicated pickup art ships (see the stone lantern note above).
+		iron_lantern_item.texture_path = "res://assets/items/pickups/metal_lantern.png"
 
 ## Load all recipe definitions.
 func _load_recipes() -> void:
@@ -291,6 +319,19 @@ func _load_recipes() -> void:
 		"charcoal": 1,
 		"fibre": 1
 	})
+	# Handheld light tiers: the stone lantern is a workbench craft gated by
+	# stone research, the iron lantern by metalworking. Craft times scale
+	# with tier, matching the furnace/food convention above.
+	recipes["stone_lantern"] = _create_recipe("stone_lantern", "stone_lantern", 1, "workbench", {
+		"stone_brick": 2,
+		"plank": 1,
+		"charcoal": 1
+	}, 8.0)
+	recipes["iron_lantern"] = _create_recipe("iron_lantern", "iron_lantern", 1, "workbench", {
+		"iron_ingot": 2,
+		"plank": 1,
+		"charcoal": 1
+	}, 12.0)
 	recipes["wooden_wall"] = _create_recipe("wooden_wall", "wooden_wall", 1, "", {
 		"plank": 5
 	})
@@ -493,14 +534,14 @@ func _load_recipes() -> void:
 		"stone_foundation", "stone_floor", "stone_wall", "stone_window", "stone_door",
 		"stone_roof", "stone_stairs", "stone_stairs_down", "stone_ramp", "stone_pillar", "furnace", "workbench",
 		"stone_gate", "stone_railing", "stone_patio", "stone_path", "stone_planter",
-		"hearth", "cabinet", "bookcase", "well", "brazier"
+		"hearth", "cabinet", "bookcase", "well", "brazier", "stone_lantern"
 	], "stone_building")
 	_set_recipe_technology([
 		"iron_ingot", "copper_ingot", "bronze_ingot", "iron_axe", "iron_pickaxe",
 		"iron_sword", "anvil", "reinforced_floor", "reinforced_wall", "metal_roof",
 		"metal_gate", "metal_railing", "metal_grate",
 		"shuttered_window", "metal_stair", "metal_stair_down", "metal_fence", "signal_pole",
-		"metal_lantern", "workshop_cabinet", "metal_locker"
+		"metal_lantern", "workshop_cabinet", "metal_locker", "iron_lantern"
 	], "metalworking")
 
 ## Create a basic item.

@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="LightProfile" format=3]
+
+[ext_resource type="Script" path="res://resources/light_profile.gd" id="1_fctr1"]
+
+[resource]
+resource_name = "light_stone"
+script = ExtResource("1_fctr1")
+radius_px = 112.0
+color = Color(1, 0.72, 0.42, 1)
+energy = 1.35
+flicker = true

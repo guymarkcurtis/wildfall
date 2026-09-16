@@ -2168,6 +2168,15 @@ func _run_checks() -> void:
 	_check(InputMap.has_action("toggle_build"), "toggle_build input action exists")
 	_check(hud.get_node_or_null("Overlay/NavigationRibbon") != null,
 			"HUD exposes a consistent navigation ribbon for the main gameplay screens")
+	var ribbon: Control = hud.get_node_or_null("Overlay/NavigationRibbon")
+	var hunger_bar: Control = hud.get_node_or_null("Overlay/HungerBar")
+	_check(ribbon != null and hunger_bar != null
+			and ribbon.get_rect().position.x >= hunger_bar.get_rect().end.x,
+			"Navigation ribbon is right-justified clear of the top-left survival bars")
+	_check(ribbon != null
+			and absf(hud.get_node("Overlay").get_rect().end.x
+					- ribbon.get_rect().end.x) < 24.0,
+			"Navigation ribbon is right-justified at the viewport edge (small margin)")
 	var camera: CameraController = camera_controller as CameraController
 	var player_ent: Player = player as Player
 	player_ent.clear_aim_lock()
@@ -2285,15 +2294,23 @@ func _run_checks() -> void:
 			"One map tile can hold structural parts on separate stories")
 		_check(not buildings.place_building_item("wooden_floor", Vector2i(9, 9), player_ent.inventory, 1),
 			"Upper-story placement needs structure directly below it")
+		# Task F: the normal-play cutaway now shows the level the player is
+		# on in full colour (and ghosts the stories below it), instead of the
+		# old rule that hid that level and showed the story beneath.
 		buildings.set_selected_story(1)
-		_check(not buildings.get_building_at(structure_tile, 1).visible,
-			"Cutaway hides the story above the active story during normal play")
+		_check(buildings.get_building_at(structure_tile, 1).visible
+				and buildings.get_building_at(structure_tile, 1).modulate.a == 1.0,
+			"Cutaway shows the level the player is on in full colour during normal play")
+		_check(buildings.get_building_at(structure_tile, 0).visible
+				and absf(buildings.get_building_at(structure_tile, 0).modulate.a - 0.25) < 0.001,
+			"Cutaway ghosts the support story below the level the player is on, so the level reads at a glance")
 		buildings.set_build_mode(true)
 		_check(buildings.get_building_at(structure_tile, 1).visible and buildings.get_building_at(structure_tile, 0).visible,
 			"Cutaway keeps the selected story and its support visible in build mode")
 		buildings.set_build_mode(false)
-		_check(not buildings.get_building_at(structure_tile, 1).visible,
-			"Leaving build mode restores the active-story cutaway")
+		_check(buildings.get_building_at(structure_tile, 1).visible
+				and buildings.get_building_at(structure_tile, 1).modulate.a == 1.0,
+			"Leaving build mode restores the level-the-player-is-on cutaway")
 		buildings.set_selected_story(0)
 		player_ent.global_position = Vector2.ZERO
 		var cooked_meat: RecipeDefinition = item_database.get_recipe("cooked_meat")

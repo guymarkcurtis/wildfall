@@ -210,6 +210,16 @@ func _test_presentation_policy() -> void:
 	roof_node.set_presentation(0, true, true)
 	_check(roof_node.visible and absf(roof_node.modulate.a - 0.14) < 0.01,
 			"Build mode shows the story above as a faint blueprint")
+	# Exterior view (the player is outside): the topmost layer renders in
+	# full colour; stories below it ghost. The roof toggle still wins.
+	floor_node.set_presentation(1, false, true, true)
+	roof_node.set_presentation(1, false, true, true)
+	_check(roof_node.visible and roof_node.modulate.a == 1.0,
+			"Exterior view: the topmost layer (the roof) renders in full colour")
+	_check(floor_node.visible and absf(floor_node.modulate.a - 0.25) < 0.001,
+			"Exterior view: stories below the topmost layer ghost out")
+	roof_node.set_presentation(1, false, false, true)
+	_check(not roof_node.visible, "Exterior view: the roof toggle still hides the topmost layer's roof")
 	manager.queue_free()
 
 # --- Two-floor house ---

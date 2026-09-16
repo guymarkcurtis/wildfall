@@ -27,7 +27,9 @@ list with a searchable, five-discipline workbench whose material counts and
 station requirements are readable at a glance. Technology is now presented as
 a connected horizontal research tree rather than another list. The journal,
 survival meters, and global screen-navigation ribbon share the same field-kit
-palette, and the authored jump now has a small visual lift and contact shadow.
+palette — the ribbon is right-justified at the top-right edge with an 8 px
+margin, so it never overlaps the top-left survival bars — and the authored
+jump now has a small visual lift and contact shadow.
 The PixelLab inventory was audited: both Trailblazers already ship complete
 eight-direction walk, axe, pickaxe, sword, bow, and jump art. Hammer and hoe
 remain south-only and are intentionally deferred until those gameplay systems
@@ -111,15 +113,17 @@ two new atlases to the texture-pack export. All requests in
 
 ## CURRENT TEST RESULTS (2026-09-15)
 
-Automated headless run of the real main scene — **440/440 checks passed,
-0 failures, 0 script errors**:
+Automated headless run of the real main scene — **445 passed, 1 failed,
+0 script errors** (the one failure is the pre-existing mission-journal
+centering check; it fails identically on a clean HEAD with all local
+changes stashed — see TEST_RESULTS.md):
 
 | Test | Status |
 |------|--------|
 | Scene loading + 9 required nodes | PASS (9/9) |
 | World generation (chunk data, 4× pixel/chunk coordinate math, biome variety) | PASS (4 biomes sampled) |
 | Terrain rendering (12,544 tiles) + resource spawn | PASS |
-| Item database (119 items, 96 recipes) | PASS |
+| Item database (121 items, 98 recipes — incl. stone/iron handheld lantern tiers) | PASS |
 | Crafting + stations + research (scrollable recipe list, nearby station gates, starting recipes, paid research unlocks) | PASS |
 | Camera follow (target set, lerp converges) | PASS |
 | Seed input (T opens, pre-fill, Escape cancels) | PASS |
@@ -129,7 +133,7 @@ Automated headless run of the real main scene — **440/440 checks passed,
 | Live input: 1050 px walk keeps the chunk loaded + terrain rendered under the player | PASS |
 | Explored map: nearby-chunk POIs only, marker save/load, centred panel | PASS |
 | Inventory (persistent quick bar, expandable storage, uniform slot spacing, click/drag transfers) | PASS |
-| Building (palette selection, station placement, HUD click pass-through, 4-story support/cutaway) | PASS |
+| Building (palette selection, station placement, HUD click pass-through, 4-story support, location-aware presentation: topmost layer outside / the level the player is on inside / ground-story reset on exit with the stair-connector exemption / roofless decks read as outdoors) | PASS |
 | Resource accessibility (water rejected; rocky ground walkable) | PASS |
 | Technology (U panel, costs, prerequisite gating, recipe/build access, save/load) | PASS |
 | Texture packs (full-resolution world art, stock-card export, station atlas + structured metadata, explicit Apply + preview, editable pack creation, live switch, fallback) | PASS |
@@ -142,6 +146,11 @@ A 30-second headless run of the actual game also completed with 0 errors,
 
 ### Known Issues (remaining)
 1. Some future-phase scripts remain intentionally unwired; see the inventory in `docs/ARCHITECTURE.md`.
+2. Pre-existing at the current HEAD (2026-09-15 pull): the mission-journal
+   "centred in the viewport" check in `test_game.gd` fails
+   (position (0.0, 0.0) vs (640.0, 360.0)) — verified failing on a clean
+   tree with all local changes stashed; it is part of the in-flight M10 /
+   equipment-UI work, not a regression from the lighting pass.
 
 ## CURRENTLY WORKING (all verified by the test run above)
 
@@ -149,8 +158,8 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - **Player Movement**: World-relative WASD (W north, A west, S south, D east) + Sprint and a short aimed Space-bar jump. Faces the pointer, which controls tool and ranged aim. Rocky ground is walkable; water retains terrain collision.
 - **Camera**: Smooth follow; `,`/`.` snap-rotate, middle-mouse free rotate, Home resets north-up.
 - **Ranged combat**: Face the cursor; LMB fires the wooden bow (consumes arrows).
-- **Buildings**: B opens the grouped build palette. Select an owned part, LMB places it, wheel cycles parts, F demolishes, and [ / ] selects one of four construction stories. R/Q rotate an orientable preview; floors, objects, edges, roofs, and connectors share a layered tile model. The player moves between active stories through stairs; Building Sandbox additionally offers F5 roof visibility and [ / ] active-story recovery outside build mode.
-- **World clock / weather / statuses**: DayNightCycle + WeatherSystem + StatusEffectSystem, shown on the HUD.
+- **Buildings**: B opens the grouped build palette. Select an owned part, LMB places it, wheel cycles parts, F demolishes, and [ or ] selects one of four construction stories (these are the keys the help text names — the old "[ / ]" text pointed at an unbound slash and has been corrected; no action uses `/`). R/Q rotate an orientable preview; floors, objects, edges, roofs, and connectors share a layered tile model. The player moves between active stories through stairs; Building Sandbox additionally offers F5 roof visibility and [ or ] active-story recovery outside build mode. An enclosed room on the active story — a floor underfoot, a perimeter of walls/doors/windows sealing all four directions, and a roof one story up — counts as indoors and is marked "Sheltered" in the HUD. Presentation follows the player's location: outside, every structure column shows its topmost story in full colour (usually the top roof — a roofless deck shows its own floor) with the interior below ghosted; inside, the view cuts away to the level the player stands on (the roof above hides, the room's own overhead fades, lower stories ghost, and the HUD names the floor); leaving a building from an upper story returns the active story to the ground unless the player is still on a stair connector, and an unroofed indoor spot (open deck/balcony) reads as outdoors — the roof shows again — while the floor underfoot keeps the player on their story.
+- **World clock / weather / statuses**: DayNightCycle + WeatherSystem + StatusEffectSystem, shown on the HUD. Being indoors (see Buildings) outranks every cold source: snow-weather chill and the arctic-night biome chill do not apply inside an enclosed room, any slow/frozen statuses already present are cleared, and the player's movement speed ignores the weather multiplier there.
 - **World Generation**: Deterministic seed-based generation using 3 FastNoiseLite layers
 - **Chunk System**: 16×16 tile chunks, radius-3 (7×7) viewport streaming; reloads are deterministic (B3)
 - **Terrain Rendering**: TileMapLayer, 8 terrain types (water, sand, grass, forest, dirt, stone, snow, mud) with per-biome ground colors and per-tile biome lookup
@@ -161,11 +170,13 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - **Debug Overlay**: FPS, position, chunk, seed, biome, noise values
 - **Seed Input**: T opens the editor (buffer pre-filled), Enter confirms + full world regeneration, Escape cancels; seed 0–999999
 - **HUD**: Health bar, hunger bar, seed label (all wired to real nodes)
+- **Options**: Title and Pause → Options. Autosave (every 5 min, keep last 2) and **Ignore environmental effects** — on, the character always moves normally: weather speed penalties and cold status effects (rain slow, snow freeze, storm slow, arctic-night biome chill) are never applied and any already applied is cleared immediately, with or without a shelter; the HUD's "Sheltered" label still marks only real enclosed rooms. Both settings persist in `user://settings.json` (default: effects on) and apply live from the pause menu. The panel outgrew the 720 px base viewport, so the overlay scrolls (width pinned to the 1280 px project viewport) instead of clipping.
 - **Texture Packs**: Options and Pause → Options export stock art/contact cards plus a JSON image manifest, create editable override packs, and refresh terrain, world entities, placed buildings, and their state sheets live. The stock contract includes the M9 building/interactable pack: 10 building atlas sheets and six state sheets, all at documented 32px cell/frame geometry.
 - **Event Bus**: Centralized signal-based communication (plain node, no autoload)
 - **Inventory System**: Stack-based with weight limits, `inventory_full`, persistent 1–9 quick bar, and expandable click/drag inventory UI
 - **Technology System**: U opens research. Free Wood Construction leads to paid Stone Construction (20 wood, 30 stone), then Metalworking; unlocks gate recipes and building placement and persist in saves.
-- **Crafting System**: 96 recipes; hand recipes stay on C while station recipes open from E-interaction with the authored station profile. Inputs, outputs, fuel, on/off state, and local lights are profile-driven and persist in v8 building state.
+- **Crafting System**: 98 recipes; hand recipes stay on C while station recipes open from E-interaction with the authored station profile. Inputs, outputs, fuel, on/off state, and local lights are profile-driven and persist in v8 building state.
+- **Lighting**: all local lights are round, additive halos sharing one centred radial geometry. Placed-object strength scales with building tier in data (wood 80 px / 1.0 → stone 112 px / 1.35 → metal 144 px / 1.7 profiles in `data/interactables/`; primitives pinned), and handheld lights scale with item rarity (common torch 200 px / 1.25 → uncommon stone lantern 264 px / 1.6 → rare iron lantern 336 px / 2.0), which the player's held light follows on equip/unequip.
 - **Creature System (Phase 3)**: per-chunk deterministic spawning (7 creature types, biome-gated; fish only in water), IDLE/PATROL/FLEE AI, E-to-kill with per-creature loot tables (meat, fish, hide, feather, bone)
 - **Title screen**: New Game (Survival / Creative, locked per world), Load Game, Options, Quit. Esc pause in-game.
 - **Save System**: Versioned module JSON under `user://saves/` — unlimited timestamped manual saves plus rotating autosaves (last 2). v8 stores layered building records, orientation, connector reservations, and only non-default container/fuel/station state while retaining deterministic world regeneration.
@@ -180,7 +191,7 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - `src/systems/` — SaveSystem, ItemDatabase, BuildingManager, TechnologySystem, TexturePackManager, CreatureSpawner, MissionManager (Phase 4)
 - `resources/` — ItemDefinition, RecipeDefinition, BiomeDefinition, CreatureDefinition, BuildingDefinition, TechnologyDefinition (wired)
 - `scenes/` — `main.tscn` is the only wired scene (see dead-code inventory in ARCHITECTURE.md)
-- `tests/` — `test_game.gd` headless harness (440 checks), plus focused content/placement/sandbox/stairs/interaction/station/art suites
+- `tests/` — `test_game.gd` headless harness (446 checks), plus focused content/placement/sandbox/stairs/interaction/station/art/presentation suites
 - `docs/` — Project documentation
 
 ## RECENTLY COMPLETED (2026-09-10 review)
@@ -316,6 +327,79 @@ A 30-second headless run of the actual game also completed with 0 errors,
 - Expanded the harness to **230 passing checks** (22 durability + 32
   mission checks, plus the reworked durability/mission blocks), 0
   failures, 0 script errors — green on two consecutive runs.
+
+## RECENTLY COMPLETED (2026-09-15 round, location-aware presentation)
+
+Building presentation now follows where the player is, fixing four
+reported view bugs: outside a house the view shows the structure's
+topmost layer (usually a roof — whatever it is) instead of cutting into
+the interior; entering a house shows the level the player is on;
+leaving from an upper story returns to the ground level; and an indoor
+spot with no roof overhead (balcony/courtyard/open deck) shows the roof
+again.
+
+- **Per-column topmost focus**: the BuildingManager keeps a
+  per-tile-column topmost-story cache rebuilt at every record mutation;
+  `Building.set_presentation` takes four args (focus story, build mode,
+  roofs visible, exterior). Outside, each column independently presents
+  its topmost story at full colour and ghosts everything below — a
+  roofless deck shows its own floor while the house beside it shows its
+  top roof. Inside, the active story is the focus: the roof above hides,
+  the room's own overhead fades to 0.4, the level underfoot renders at
+  full colour, lower stories ghost at 0.25, and the HUD names the floor.
+  The building sandbox stays exempt from both hooks.
+- **Outdoor story reset**: the active story drops back to 0 when the
+  player leaves a building with no floor underfoot — except while a
+  stair connector is underfoot, where the traversal owns the story, so a
+  stairwell crossing never snaps to the ground mid-step. The
+  sheltered-state presentation sync re-applies only when the sheltered
+  boolean flips, not every physics frame.
+- **Coverage**: new `tests/test_presentation.gd` — **47/47** on three
+  consecutive fresh seeds (survival mode; the sandbox is exempt). It
+  spiral-searches a 6×5 land block against the manager's own pixel-
+  centred foundation predicate and places a 42-part fixture (a 2×2
+  three-story house with a reserved stairwell opening, a 1×1 roofed
+  pavilion room, and a 1×1 roofless open deck), then teleports the
+  player through four scenarios covering the four bugs above.
+  `test_game.gd`: two cutaway checks still asserted the pre-change rule
+  (active story's own level hidden in normal play) and were updated to
+  the new contract — the level the player is on renders in full colour
+  and its support stories ghost — bringing the harness to 446 checks.
+  Full harness: test_game **445 passed / 1 failed** (only the
+  pre-existing mission-journal centred-in-viewport check), everything
+  else green (see TEST_RESULTS.md); `--headless --editor --quit`
+  exited 0.
+
+## RECENTLY COMPLETED (2026-09-15 round, tier-scaled local lights)
+
+Every local light now renders as a round halo identical to the player's
+held light, and light strength scales with tier in data (no per-tier code
+branches, per the data-drives-content rule).
+
+- **Round geometry fix**: the shared building light mask in
+  `Building._setup_light()` was a bare `FILL_RADIAL` `GradientTexture2D`;
+  without explicit `fill_from`/`fill_to` Godot anchors the radial fill at a
+  texture corner, rendering every placed light as an off-centre quarter
+  disc. It now anchors the fill at the texture centre
+  (`fill_from (0.5, 0.5)` → `fill_to (0.5, 0.0)`) and uses the same
+  additive blend the player light uses, so placed and carried lights read
+  as one effect.
+- **Building tiers (profiles in `data/interactables/`, generator-owned)**:
+  wood-tier `light_torch` stays the 80 px / 1.0 baseline (torch,
+  yard_lantern); new `light_stone` (112 px / 1.35) now drives hearth and
+  brazier; new `light_metal` (144 px / 1.7) drives metal_lantern. The
+  pinned primitive profiles (campfire 96 / 1.1, furnace 64 / 0.9) are
+  untouched. `tools/generate_building_definitions.gd` owns the shared
+  profiles — re-running it wrote only the two new files.
+- **Handheld tiers (ItemDefinition fields)**: common torch 200 px / 1.25
+  (pinned), new uncommon `stone_lantern` 264 px / 1.6, new rare
+  `iron_lantern` 336 px / 2.0. Both craft at the workbench behind
+  `stone_building` / `metalworking` research. Until dedicated pickup art
+  ships (ART_REQUESTS.md, request 5) they borrow the yard/metal lantern
+  pickup icons. The player's held light already reads item data fields, so
+  equip/unequip/swap follow the tier with the L-toggle persisting.
+- **Coverage**: new `tests/test_light_tiers.gd` — 37/37 checks; full
+  harness re-run at baselines (see TEST_RESULTS.md).
 
 ## RECENTLY COMPLETED (2026-09-13 rivers and streams — WG-06)
 

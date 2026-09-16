@@ -927,16 +927,30 @@ func _toggle_player_light() -> void:
 			hud.show_toast("Equip a light source first (K)")
 
 func _update_world_presentation(_delta: float) -> void:
+	var sheltered := building_manager != null and building_manager.is_player_sheltered()
+	# The options "Ignore environmental effects" toggle grants the same
+	# immunity everywhere; only a real room earns the HUD's "Sheltered".
+	var immune := sheltered or SaveSystem.is_ignore_environment_effects()
 	if weather_system != null and status_effects != null:
-		if weather_system.is_wet() and not status_effects.has_effect("slow"):
-			status_effects.apply_effect("slow")
-		if weather_system.is_cold_weather() and not status_effects.has_effect("frozen"):
-			status_effects.apply_effect("frozen")
-		if day_night != null and day_night.is_nighttime():
-			var tile := Vector2i(int(floor(player.global_position.x / 32.0)), int(floor(player.global_position.y / 32.0)))
-			var biome: String = world_generator.get_biome_at_world(tile.x, tile.y)
-			if biome == "arctic" and not status_effects.has_effect("frozen"):
+		if immune:
+			# An enclosed room (or the options toggle) is immune: no weather
+			# or biome chill reaches the player, and whatever cold the
+			# weather already applied is cleared — this is the "warm up" the
+			# shelter promises.
+			if status_effects.has_effect("slow"):
+				status_effects.remove_effect("slow")
+			if status_effects.has_effect("frozen"):
+				status_effects.remove_effect("frozen")
+		else:
+			if weather_system.is_wet() and not status_effects.has_effect("slow"):
+				status_effects.apply_effect("slow")
+			if weather_system.is_cold_weather() and not status_effects.has_effect("frozen"):
 				status_effects.apply_effect("frozen")
+			if day_night != null and day_night.is_nighttime():
+				var tile := Vector2i(int(floor(player.global_position.x / 32.0)), int(floor(player.global_position.y / 32.0)))
+				var biome: String = world_generator.get_biome_at_world(tile.x, tile.y)
+				if biome == "arctic" and not status_effects.has_effect("frozen"):
+					status_effects.apply_effect("frozen")
 	if hud != null and day_night != null and weather_system != null:
 		var extra: String = ""
 		if building_manager != null:
@@ -945,7 +959,9 @@ func _update_world_presentation(_delta: float) -> void:
 			if building_manager.active_story > 0:
 				extra += "   Floor L%d" % (building_manager.active_story + 1)
 			if building_manager.build_mode:
-				extra += "   Build L%d: %s  (LMB place, wheel cycle, [ / ] story, F demolish, B exit)" % [building_manager.selected_story + 1, building_manager.selected_item_id]
+				extra += "   Build L%d: %s  (LMB place, wheel cycle, [ or ] story, F demolish, B exit)" % [building_manager.selected_story + 1, building_manager.selected_item_id]
+			if sheltered:
+				extra += "   Sheltered"
 		hud.set_world_info(day_night.get_time_of_day(), weather_system.get_weather_name(),
 				status_effects.get_effect_names() if status_effects else PackedStringArray(),
 				extra, GameSession.mode_label())

@@ -136,7 +136,7 @@ definition rather than hard-coded per stair item.
    Preserve world X/Y proximity, clear velocity, prevent instant bounce-back
    with a short directional/exit lock, and set `active_story` before the next
    physics query.
-4. The existing `[ / ]` controls remain **construction-level selection**. Add
+4. The existing `[` / `]` controls remain **construction-level selection**. Add
    an explicit debug/sandbox story selector only if needed for rapid testing;
    it must not silently move a normal survival player through solid floors.
 5. First release: stairs only. Data must make later ladders, hatches, elevator
@@ -308,7 +308,12 @@ not a named `if`/`match` branch in `BuildingManager` or `Building`.
 
 **Exit:** a floor, four edge walls, a roof, and furniture can form one usable
 room without overlapping collisions or duplicate edge walls; all failures leave
-inventory and occupancy untouched.
+inventory and occupancy untouched. Enclosure is decided by record lookups
+alone (data-driven, no name branches): a room with a floor underfoot on the
+active story, a perimeter edge fixture (wall/door/window) sealing all four
+directions before the floor ends, and a roof one story up counts as indoors —
+the HUD marks it "Sheltered", the room cancels snow-weather and arctic-night
+chill, clears any slow/frozen statuses, and skips the weather speed multiplier.
 
 ### Phase 3 — Active story and playable stairs
 
