@@ -193,13 +193,17 @@ walls outdoors only).
 
 - **Output**: `assets/tiles/wildfall-building-facades.png`
 - **Layout**: a single transparent sheet of **32×32 px cells**, 9
-  columns × 1 row (288×32): columns 0–2 wood tier (wall, door,
-  window), columns 3–5 stone tier (wall, door, window), columns 6–8
-  metal tier (wall, door, window). Column 7 (metal door) is authored
-  ahead of a future metal door part.
+  columns × 2 rows (288×64). Row 0: wood wall, wood door, wood
+  window, stone wall, stone door, stone window, metal wall, metal
+  door, metal window. Row 1 (boundary parts, added 2026-09-16 with
+  eight more PixelLab cells so EVERY edge part has a front elevation):
+  wood railing, wood fence, wood gate, stone railing, stone gate,
+  (empty — no stone fence exists), metal railing, metal fence, metal
+  gate. Column 7 row 0 (metal door) is authored ahead of a future
+  metal door part.
 - **Style**: matched `assets/tiles/wildfall-building-parts.png` (the
   PixelLab building atlas) palette; drawn as ELEVATION art — the front
-  of the wall seen from the yard.
+  of the part seen from the yard.
 - **Consumer**: `BuildingDefinition.facade_atlas_path` +
   `facade_atlas_cell` → `Building._definition_facade_atlas()` →
   `_facade_sprite` (visibility in `set_presentation`); texture-pack

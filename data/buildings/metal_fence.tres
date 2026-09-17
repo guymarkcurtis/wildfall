@@ -22,3 +22,5 @@ visual_family_id = "metal"
 atlas_path = "res://assets/tiles/building/boundaries_metal.png"
 atlas_cell = Vector2i(0, 0)
 atlas_cells = {"north": Vector2i(0, 0), "east": Vector2i(1, 0), "south": Vector2i(2, 0), "west": Vector2i(3, 0)}
+facade_atlas_path = "res://assets/tiles/wildfall-building-facades.png"
+facade_atlas_cell = Vector2i(7, 1)

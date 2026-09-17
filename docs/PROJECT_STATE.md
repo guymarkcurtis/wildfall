@@ -408,6 +408,12 @@ cap. Parts without facade data keep their top-down cell; texture packs
 can override the new sheet (added to `PACK_ASSETS` and the stock
 manifest). Coverage: `test_building_art` +20 facade checks (721 total),
 `test_presentation` +3 (83 total); full harness re-ran green.
+**Extended the same day**: the boundary parts got their front
+elevations too — eight more PixelLab cells (wood/stone/metal railings,
+wood/metal fences, wood/stone/metal gates) in sheet row 1, so every
+edge-layer part in the game now ships facade art (16 of 16; fixtures
+hang over the face with their own art). Art suite 721 → **737
+checks**.
 
 ## RECENTLY COMPLETED (2026-09-16 round, billboard exterior projection)
 

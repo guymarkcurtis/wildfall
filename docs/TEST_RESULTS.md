@@ -1,6 +1,13 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **Boundary facade cells (2026-09-16, facade round follow-up):** the
+  eight edge parts without facade art — railings, fences, and gates
+  across the three tiers — got front-elevation cells (eight more
+  PixelLab generations) in a second sheet row; the facade atlas is now
+  288×64 and every edge-layer part ships a front elevation. Tests:
+  `test_building_art` 721 → **737 checks, 0 failures**; content 111/0,
+  presentation 83/0, shelter/sandbox/stairs/game all green.
 - **Facade art installed (2026-09-16):** the billboard projection's
   south wall rows now render authored front-elevation cells: nine
   32×32 PixelLab generations (wood/stone/metal × wall/door/window) on

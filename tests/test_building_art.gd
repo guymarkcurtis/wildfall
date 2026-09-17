@@ -93,17 +93,26 @@ func _test_facade_sheet() -> void:
 	_check(img != null, "The facade atlas loads")
 	if img == null:
 		return
-	_check(img.get_width() == 32 * 9 and img.get_height() == 32,
-			"The facade atlas is exactly 9 x 1 cells of 32 px (288 x 32)")
+	_check(img.get_width() == 32 * 9 and img.get_height() == 32 * 2,
+			"The facade atlas is exactly 9 x 2 cells of 32 px (288 x 64)")
 	var order := ["wood_wall", "wood_door", "wood_window", "stone_wall", "stone_door", "stone_window", "metal_wall", "metal_door", "metal_window"]
+	var boundary := ["wood_railing", "wood_fence", "wood_gate", "stone_railing", "stone_gate", "", "metal_railing", "metal_fence", "metal_gate"]
 	for index in range(order.size()):
 		var ink := _cell_ink(img, Vector2i(index * 32, 0), Vector2i(32, 32))
 		_check(ink >= 400, "Facade cell %d (%s) carries artwork (%d px ink)" % [index, order[index], ink])
+	for index in range(boundary.size()):
+		if boundary[index].is_empty():
+			continue # no stone fence exists; the cell stays transparent
+		var ink := _cell_ink(img, Vector2i(index * 32, 32), Vector2i(32, 32))
+		_check(ink >= 300, "Facade boundary cell (%d, 1) (%s) carries artwork (%d px ink)" % [index, boundary[index], ink])
 	# Every shipped facade reference points into this sheet at the right cell.
 	var expectations := {
 		"wooden_wall": Vector2i(0, 0), "wooden_door": Vector2i(1, 0), "wooden_window": Vector2i(2, 0),
 		"stone_wall": Vector2i(3, 0), "stone_door": Vector2i(4, 0), "stone_window": Vector2i(5, 0),
 		"reinforced_wall": Vector2i(6, 0), "shuttered_window": Vector2i(8, 0),
+		"wooden_railing": Vector2i(0, 1), "fence": Vector2i(1, 1), "fence_gate": Vector2i(2, 1),
+		"stone_railing": Vector2i(3, 1), "stone_gate": Vector2i(4, 1),
+		"metal_railing": Vector2i(6, 1), "metal_fence": Vector2i(7, 1), "metal_gate": Vector2i(8, 1),
 	}
 	for item_id in expectations:
 		var def: BuildingDefinition = _registry.definitions.get(item_id)
