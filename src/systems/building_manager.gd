@@ -37,7 +37,8 @@ var roofs_visible := true
 
 ## Shelter is an enclosed room: a floor underfoot on the active story, a
 ## perimeter edge fixture (wall, door, or window) in all four cardinal
-## directions before the floor ends, and a roof overhead one story up.
+## directions before the floor ends, and a ceiling one story up — the
+## storey above's floor or a roof.
 ## The seal walk is bounded — a floor run longer than this is an open
 ## deck, which counts as outdoors. Record lookups only: code defines the
 ## system, data defines the parts.
@@ -591,7 +592,8 @@ func _has_built_surface_covering(tile: Vector2i, story: int) -> bool:
 
 ## True when the player stands inside an enclosed room: a built surface
 ## underfoot on the active story, a perimeter edge fixture in all four
-## directions, and a roof overhead one story up (the room's ceiling). Open
+## directions, and a ceiling one story up — the storey above's floor (a
+## lower floor of a multi-storey building) or a roof. Open
 ## decks, half-built shelters, and natural ground never count — story-0
 ## terrain has no floor records, so a room only exists where the player
 ## placed one.
@@ -615,7 +617,10 @@ func _compute_shelter(tile: Vector2i, story: int) -> bool:
 	for orientation in ["north", "south", "west", "east"]:
 		if not _sealed_in_direction(tile, story, str(orientation)):
 			return false
-	return has_layer_covering(tile, story + 1, "overhead")
+	# The room's ceiling is either a roof or the storey above's floor; a
+	# stairwell opening reserves the floor slot above, so it stays open sky.
+	return has_layer_covering(tile, story + 1, "overhead") \
+			or has_layer_covering(tile, story + 1, "floor")
 
 ## Rebuild the two tables the exterior presentation reads: per-story
 ## tile-cell occupancy, and the shell classification. A record is part of

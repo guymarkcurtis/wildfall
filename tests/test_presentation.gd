@@ -15,7 +15,10 @@
 ##    own overhead faded), every other story of that structure HIDDEN — the
 ##    level below is not a semi-transparent ghost, it is simply not shown.
 ##    Every OTHER structure keeps its exterior shell: standing inside the
-##    house still shows the pavilion's walls and roof, not its rooms.
+##    house still shows the pavilion's walls and roof, not its rooms. A
+##    ground floor's ceiling is the storey above's FLOOR, which must count
+##    for shelter the same way a roof does — a lower room of a multi-storey
+##    build shows only its own level, no ghost of the storey above.
 ## 3. Leaving a structure from an upper story returns the active story to the
 ##    ground — except while crossing a stair connector, where the traversal
 ##    owns the story and the outdoor reset must stand down.
@@ -146,10 +149,10 @@ func _run() -> void:
 	_day_night.set_time(9.0)
 	_weather.set_weather(WeatherSystem.WeatherType.CLEAR)
 	_player.inventory.set_max_weight(1000.0)
-	_player.inventory.add_item("wooden_foundation", 6)
-	_player.inventory.add_item("wooden_floor", 8)
+	_player.inventory.add_item("wooden_foundation", 10)
+	_player.inventory.add_item("wooden_floor", 16)
 	_player.inventory.add_item("wooden_stairs", 2)
-	_player.inventory.add_item("wooden_wall", 20)
+	_player.inventory.add_item("wooden_wall", 28)
 	_player.inventory.add_item("wooden_roof", 7)
 	_player.inventory.add_item("wall_torch", 3)
 	_player.inventory.add_item("wall_lantern", 1)
@@ -185,6 +188,7 @@ func _run() -> void:
 	await _test_upper_story_exit()
 	await _test_unroofed_deck()
 	await _test_wall_fixtures()
+	await _test_multi_storey_ground_floor()
 	_finish()
 
 
@@ -565,6 +569,49 @@ func _test_wall_fixtures() -> void:
 			"Demolishing the wall cascades: the torch mounted on it is removed with it")
 	_check(_buildings.get_record_at(_origin, 2, "fixture", "north") != null,
 			"The unrelated upper-story torch on the house's north wall survives the story-1 demolition")
+
+
+func _test_multi_storey_ground_floor() -> void:
+	# The ground floor of a multi-storey building has no roof one story up —
+	# its ceiling is the storey above's FLOOR. The shelter check must read
+	# that floor as a ceiling, or the manager falls back to the exterior
+	# shell and the upper storey ghosts through the room the player stands
+	# in (the bug this scenario pins: semi-transparent level-2 floors seen
+	# from inside level 1).
+	var duplex := Vector2i(2, 2) # diagonal to the house, so the structures stay separate
+	for offset in [Vector2i.ZERO, Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+		_place("wooden_foundation", _origin + duplex + offset)
+		_place("wooden_floor", _origin + duplex + offset, 1)
+		_place("wooden_floor", _origin + duplex + offset, 2)
+	_place("wooden_wall", _origin + duplex, 1, "north")
+	_place("wooden_wall", _origin + duplex + Vector2i(1, 0), 1, "north")
+	_place("wooden_wall", _origin + duplex + Vector2i(0, 1), 1, "south")
+	_place("wooden_wall", _origin + duplex + Vector2i(1, 1), 1, "south")
+	_place("wooden_wall", _origin + duplex, 1, "west")
+	_place("wooden_wall", _origin + duplex + Vector2i(0, 1), 1, "west")
+	_place("wooden_wall", _origin + duplex + Vector2i(1, 0), 1, "east")
+	_place("wooden_wall", _origin + duplex + Vector2i(1, 1), 1, "east")
+	_check(_place_failures == 0, "The two-storey duplex fixture places on its support chains")
+	var duplex_floor_s1: BuildingRecord = _buildings.get_record_at(_origin + duplex, 1, "floor")
+	var duplex_floor_s2: BuildingRecord = _buildings.get_record_at(_origin + duplex, 2, "floor")
+	var duplex_foundation: BuildingRecord = _buildings.get_record_at(_origin + duplex, 0, "ground")
+	_go(_origin + duplex, 1)
+	await _settle(1)
+	_main._update_world_presentation(0.2)
+	_check(_buildings.is_player_sheltered(),
+			"Inside the duplex's ground floor the player is sheltered — the storey above's floor is a ceiling")
+	_check(duplex_floor_s1 != null and duplex_floor_s1.node.modulate.a == 1.0,
+			"The ground floor the player stands on renders in full colour")
+	_check(duplex_floor_s2 != null and not duplex_floor_s2.node.visible,
+			"The level-2 floor above is HIDDEN — not a semi-transparent ghost through the ground-floor room")
+	_check(duplex_foundation != null and not duplex_foundation.node.visible,
+			"The story below (the foundation) is hidden too — no ghost from below")
+	_check(_roof_top.node.visible and _roof_top.node.modulate.a == 1.0,
+			"The separate house still keeps its exterior shell (the structures did not merge)")
+	var info_label: Label = _hud.get("_info_label")
+	_check(info_label != null and str(info_label.text).contains("Sheltered")
+			and str(info_label.text).contains("Floor L2"),
+			"Inside the ground floor, the HUD shows Sheltered and names Floor L2")
 
 
 func _finish() -> void:

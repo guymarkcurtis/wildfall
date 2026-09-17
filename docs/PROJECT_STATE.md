@@ -337,6 +337,31 @@ A 30-second headless run of the actual game also completed with 0 errors,
   mission checks, plus the reworked durability/mission blocks), 0
   failures, 0 script errors — green on two consecutive runs.
 
+## RECENTLY COMPLETED (2026-09-17 round, multi-storey ground-floor cutaway)
+
+- **Ground floor shows only the ground floor**: standing inside the
+  ground level of a multi-storey build rendered the storey above's
+  floors as a 25% ghost. Root cause: `_compute_shelter` accepted only a
+  roof overhead one story up, but a lower room's ceiling is the storey
+  above's FLOOR (layer `floor`, not `overhead`) — the shelter check
+  failed indoors and `_apply_presentation` fell back to the exterior
+  shell, ghosting all the mass above. The ceiling check now accepts the
+  storey above's floor the same as a roof; stairwell openings keep
+  working because the stair reserves the floor slot above (no floor
+  record there means the hole stays open sky), and the four-direction
+  seal walk still keeps open-sided decks outdoors. Inside any level the
+  cutaway is exactly that level; outside still shows the billboard
+  facade + roof shell.
+- **Tests**: `test_presentation` 83 → **90 checks, 0 failures** — the
+  new `_test_multi_storey_ground_floor` builds a two-storey duplex with
+  no roofs at all and pins: sheltered on level 1 via the floor ceiling,
+  the level-2 floor hidden (not a ghost), the foundation below hidden,
+  and no structure merge with the diagonally adjacent house. Shelter
+  58/0, placement 88/0, stairs 40/40, sandbox/content/art/router/
+  station/light/harvesting/ground_pack/equipment all green. `test_game`
+  WG-05 live-world biome check is flaky on BOTH trees (passes/fails
+  across runs either way) — pre-existing, tracked separately.
+
 ## RECENTLY COMPLETED (2026-09-16 round, zoom toggle)
 
 - **Zoom toggle on backslash**: the view now has two levels — the

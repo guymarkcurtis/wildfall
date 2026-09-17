@@ -1,6 +1,22 @@
 # Wildfall Test Results
 
 ## Test Run Summary
+- **Multi-storey ground-floor cutaway (2026-09-17):** standing inside the
+  ground floor of a multi-storey build showed the storey above's floors
+  as a 25% ghost. `_compute_shelter` demanded a roof one story up, but
+  a lower room's ceiling is the storey above's FLOOR — the shelter
+  check failed and the manager fell back to the exterior shell. The
+  ceiling check now accepts the storey above's floor too (stairwell
+  openings reserve the floor slot above, so they stay open sky; the
+  four-direction seal still rules out open-sided geometry). Tests:
+  `test_presentation` 83 → **90 checks, 0 failures** (new
+  `_test_multi_storey_ground_floor` pins sheltered-on-level-1, hidden
+  floor above, hidden foundation below, and no structure merge with the
+  diagonal neighbour); shelter 58/0, placement 88/0, stairs 40/40,
+  sandbox/content/art/router/station/light/harvesting/ground_pack/
+  equipment all green. `test_game`'s WG-05 live-world biome check
+  flakes both with and without this change (fails ~half of runs on
+  either tree) — pre-existing, not this round.
 - **Boundary facade cells (2026-09-16, facade round follow-up):** the
   eight edge parts without facade art — railings, fences, and gates
   across the three tiers — got front-elevation cells (eight more
